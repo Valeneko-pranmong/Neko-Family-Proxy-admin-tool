@@ -23,6 +23,10 @@
 
 5. เปิด `http://127.0.0.1:8787`
 
+ถ้าต้องการเปิดเซิร์ฟเวอร์และเว็บด้วยคลิกเดียว ให้รัน `.\open-admin.ps1`
+หรือใช้ shortcut `Neko Control Room.lnk` บน Desktop หลังจากสร้าง shortcut แล้ว
+เมื่อต้องการปิดเซิร์ฟเวอร์ให้รัน `.\stop-admin.ps1`
+
 ระบบจะตรวจ Email/Password กับ Supabase Auth และอนุญาตเฉพาะผู้ใช้ที่มี `role = admin` เท่านั้น
 
 ## คำสั่งสำคัญ
