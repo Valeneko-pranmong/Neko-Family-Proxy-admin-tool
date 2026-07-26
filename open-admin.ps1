@@ -12,9 +12,14 @@ if (-not $portInUse) {
   }
 
   npm run build:standalone
-  Start-Process -FilePath "node.exe" `
-    -ArgumentList @("admin-api/src/server.mjs") `
-    -WorkingDirectory $PSScriptRoot `
+  $escapedRoot = $PSScriptRoot.Replace("'", "''")
+  Start-Process -FilePath "powershell.exe" `
+    -ArgumentList @(
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-WindowStyle", "Minimized",
+      "-Command", "Set-Location -LiteralPath '$escapedRoot'; node admin-api/src/server.mjs"
+    ) `
     -WindowStyle Minimized
 
   $ready = $false
