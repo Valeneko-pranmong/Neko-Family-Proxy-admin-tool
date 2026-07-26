@@ -4,11 +4,6 @@
 # test output
 /coverage/
 
-# local secrets
-.env*
-!.env.example
-!admin-api/.env.example
-
 # logs and temporary output
 npm-debug.log*
 *.devserver*.log
