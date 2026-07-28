@@ -1,4 +1,10 @@
 import * as api from "./api.js";
+import {
+  deleteCouponCodes,
+  getCouponCodes,
+  hasCouponCodes,
+  saveCouponCodes,
+} from "./coupon-archive.js";
 import { createSessionController } from "./session.js";
 import { createStore } from "./state.js";
 import { couponForm, renderSection } from "./sections/render.js";
@@ -21,7 +27,15 @@ function render() {
   } else if (store.state.error) {
     content.innerHTML = `<div class="panel"><div class="form-error">${store.state.error}</div></div>`;
   } else {
-    content.innerHTML = renderSection(store.state.active, store.state.data[store.state.active]);
+    const sectionData = store.state.data[store.state.active];
+    const renderedData =
+      store.state.active === "coupons" && Array.isArray(sectionData)
+        ? sectionData.map((row) => ({
+            ...row,
+            has_archived_codes: hasCouponCodes(row.id),
+          }))
+        : sectionData;
+    content.innerHTML = renderSection(store.state.active, renderedData);
     if (store.state.couponFormOpen) {
       const host = root.querySelector("#coupon-form-host");
       if (host) host.innerHTML = couponForm();
@@ -68,6 +82,7 @@ async function action(name, id) {
     revoke_installation: "เพิกถอนอุปกรณ์และเซสชันที่ยังใช้งานอยู่ทั้งหมดหรือไม่",
     revoke_session: "ยกเลิก session นี้หรือไม่",
     revoke_batch: "ยกเลิกคูปองทั้งชุดนี้หรือไม่",
+    delete_batch: "ลบชุดคูปองนี้ถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้",
   };
   if (!window.confirm(labels[name] || "ยืนยันคำสั่งนี้หรือไม่")) return;
   const payload = {
@@ -75,8 +90,12 @@ async function action(name, id) {
     revoke_installation: { action: name, installationId: id },
     revoke_session: { action: name, sessionId: id },
     revoke_batch: { action: name, batchId: id },
+    delete_batch: { action: name, batchId: id },
   }[name];
-  if (payload) await run(payload);
+  if (payload) {
+    const succeeded = await run(payload);
+    if (succeeded && name === "delete_batch") deleteCouponCodes(id);
+  }
 }
 
 async function run(payload) {
@@ -84,8 +103,25 @@ async function run(payload) {
     await api.runAction(payload);
     toast("ดำเนินการสำเร็จ", "success");
     await load();
+    return true;
   } catch (error) {
     toast(error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ", "error");
+    return false;
+  }
+}
+
+async function copyArchivedCoupons(batchId) {
+  const codes = getCouponCodes(batchId);
+  if (!codes.length) {
+    toast("ไม่มีรหัสคูปองของชุดนี้ในเบราว์เซอร์เครื่องนี้", "error");
+    return;
+  }
+  const text = codes.join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`คัดลอกรหัสคูปอง ${codes.length} รายการแล้ว`, "success");
+  } catch {
+    window.prompt("คัดลอกรหัสคูปอง", text);
   }
 }
 
@@ -100,9 +136,16 @@ async function submitCoupon(form) {
       note: formData.get("note") || null,
     });
     store.patch({ couponFormOpen: false });
+    const batchId = result.batch?.id;
+    const archived = saveCouponCodes(batchId, result.codes);
     toast(`สร้างคูปอง ${result.codes?.length || 0} รายการแล้ว`, "success");
     if (result.codes?.length) {
-      window.prompt("คัดลอกคูปองชุดนี้ เก็บไว้ครั้งเดียว", result.codes.join("\n"));
+      window.prompt(
+        archived
+          ? "คัดลอกคูปองชุดนี้ (บันทึกไว้ในเบราว์เซอร์นี้แล้ว)"
+          : "คัดลอกคูปองชุดนี้และเก็บไว้ รหัสไม่สามารถเรียกย้อนหลังได้",
+        result.codes.join("\n"),
+      );
     }
     await load("coupons");
   } catch (error) {
@@ -154,6 +197,10 @@ root.addEventListener("click", async (event) => {
   }
   if (name === "hide-coupon-form") {
     store.patch({ couponFormOpen: false });
+    return;
+  }
+  if (name === "copy_coupon_codes") {
+    await copyArchivedCoupons(target.dataset.id);
     return;
   }
   await action(name, target.dataset.id);

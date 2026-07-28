@@ -65,12 +65,22 @@ export function renderLicenses(rows = []) {
 }
 
 export function renderCoupons(rows = []) {
-  const body = rows.map(
-    (row) =>
-      `<tr>${cell(row.batch, "primary")}${cell(row.product)}${cell(row.product_code)}${cell(row.duration_days)}${cell(`${row.active_count}/${row.actual_quantity}`)}${cell(row.redeemed_count)}<td>${statusBadge(row.status)}</td>${dateCell(row.expires_at)}${dateCell(row.created_at)}<td class="actions">${row.status === "active" ? actionButton("revoke_batch", row.id, "ยกเลิกชุด", "button-danger") : ""}</td></tr>`,
-  );
+  const body = rows.map((row) => {
+    const actions = [
+      row.has_archived_codes
+        ? actionButton("copy_coupon_codes", row.id, "คัดลอกรหัส", "button-success")
+        : "",
+      row.status === "active"
+        ? actionButton("revoke_batch", row.id, "ยกเลิกชุด", "button-danger")
+        : "",
+      row.status === "revoked" && row.redeemed_count === 0
+        ? actionButton("delete_batch", row.id, "ลบ", "button-danger")
+        : "",
+    ].filter(Boolean).join(" ");
+    return `<tr>${cell(row.batch, "primary")}${cell(row.product)}${cell(row.product_code)}${cell(row.duration_days)}${cell(`${row.active_count}/${row.actual_quantity}`)}${cell(row.redeemed_count)}<td>${statusBadge(row.status)}</td>${dateCell(row.expires_at)}${dateCell(row.created_at)}<td class="actions">${actions}</td></tr>`;
+  });
   return `
-    ${heading("คูปอง", "สร้างและยกเลิกชุดคูปอง", `<button class="button button-primary" data-action="show-coupon-form">สร้างคูปอง</button>`)}
+    ${heading("คูปอง", "สร้าง ยกเลิก ลบ และคัดลอกรหัสที่บันทึกไว้ในเบราว์เซอร์นี้", `<button class="button button-primary" data-action="show-coupon-form">สร้างคูปอง</button>`)}
     <div id="coupon-form-host"></div>
     ${table(["ชุด", "สินค้า", "รหัสสินค้า", "วัน", "พร้อมใช้/ทั้งหมด", "ใช้แล้ว", "สถานะ", "หมดอายุ", "สร้างเมื่อ", "คำสั่ง"], body)}
   `;

@@ -3,6 +3,13 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
+import {
+  deleteCouponCodes,
+  getCouponCodes,
+  hasCouponCodes,
+  saveCouponCodes,
+} from "../standalone/src/coupon-archive.js";
+import { renderCoupons } from "../standalone/src/sections/render.js";
 
 const port = 8799;
 const supabasePort = 8800;
@@ -127,6 +134,28 @@ function createFakeSupabase() {
       }
       return;
     }
+    const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([^/]+)$/)?.[1];
+    if (request.method === "POST" && rpc) {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      const body = JSON.parse(text);
+      assert.equal(request.headers["content-profile"], "launcher");
+      assert.equal(body.p_actor_id, "admin-id");
+      response.writeHead(200, { "Content-Type": "application/json" });
+      if (rpc === "admin_generate_coupon_batch") {
+        response.end(JSON.stringify(
+          Array.from({ length: body.p_quantity }, (_, index) => ({
+            batch_id: "generated-batch-id",
+            code: `NEKO-TEST-${index + 1}`,
+          })),
+        ));
+        return;
+      }
+      if (rpc === "admin_revoke_coupon_batch" || rpc === "admin_delete_coupon_batch") {
+        response.end("true");
+        return;
+      }
+    }
     const emptyTables = new Set([
       "products",
       "licenses",
@@ -230,10 +259,96 @@ test("local admin API accepts Supabase credentials only for role admin", async (
       const payload = await response.json();
       assert.equal(payload.resource, resource);
     }
+
+    const generated = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "generate_coupons",
+        productCode: "neko-family-proxy",
+        durationDays: 30,
+        quantity: 2,
+      }),
+    });
+    assert.equal(generated.status, 200);
+    assert.deepEqual((await generated.json()).codes, ["NEKO-TEST-1", "NEKO-TEST-2"]);
+
+    const deleted = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_batch", batchId: "generated-batch-id" }),
+    });
+    assert.equal(deleted.status, 200);
   } finally {
     child.kill();
     await once(child, "close").catch(() => {});
     fakeSupabase.close();
     await once(fakeSupabase, "close").catch(() => {});
+  }
+});
+
+test("coupon rows expose safe management actions", () => {
+  const html = renderCoupons([
+    {
+      id: "active-batch",
+      batch: "active",
+      product: "Neko Family Proxy",
+      product_code: "neko-family-proxy",
+      duration_days: 30,
+      active_count: 1,
+      actual_quantity: 1,
+      redeemed_count: 0,
+      status: "active",
+      has_archived_codes: true,
+    },
+    {
+      id: "revoked-batch",
+      batch: "revoked",
+      product: "Neko Family Proxy",
+      product_code: "neko-family-proxy",
+      duration_days: 30,
+      active_count: 0,
+      actual_quantity: 1,
+      redeemed_count: 0,
+      status: "revoked",
+      has_archived_codes: false,
+    },
+    {
+      id: "used-batch",
+      batch: "used",
+      product: "Neko Family Proxy",
+      product_code: "neko-family-proxy",
+      duration_days: 30,
+      active_count: 0,
+      actual_quantity: 1,
+      redeemed_count: 1,
+      status: "revoked",
+      has_archived_codes: false,
+    },
+  ]);
+
+  assert.match(html, /data-action="copy_coupon_codes" data-id="active-batch"/);
+  assert.match(html, /data-action="revoke_batch" data-id="active-batch"/);
+  assert.match(html, /data-action="delete_batch" data-id="revoked-batch"/);
+  assert.doesNotMatch(html, /data-action="delete_batch" data-id="used-batch"/);
+});
+
+test("coupon codes can be archived and removed in browser storage", () => {
+  const values = new Map();
+  global.window = {
+    localStorage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    },
+  };
+  try {
+    assert.equal(saveCouponCodes("batch-1", ["NEKO-ONE", "NEKO-TWO"]), true);
+    assert.equal(hasCouponCodes("batch-1"), true);
+    assert.deepEqual(getCouponCodes("batch-1"), ["NEKO-ONE", "NEKO-TWO"]);
+    deleteCouponCodes("batch-1");
+    assert.deepEqual(getCouponCodes("batch-1"), []);
+  } finally {
+    delete global.window;
   }
 });

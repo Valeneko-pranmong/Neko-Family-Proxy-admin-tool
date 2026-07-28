@@ -386,6 +386,15 @@ export async function performAction(body, actor) {
     if (revoked !== true) throw new Error("Coupon batch not found");
     return {};
   }
+  if (action === "delete_batch") {
+    const batchId = String(body.batchId);
+    const deleted = await rpcPost("admin_delete_coupon_batch", {
+      p_actor_id: actor.userId,
+      p_batch_id: batchId,
+    });
+    if (deleted !== true) throw new Error("Coupon batch not found");
+    return {};
+  }
   if (action === "generate_coupons") return generateCoupons(body, actor);
   throw new Error("Unknown admin action");
 }
