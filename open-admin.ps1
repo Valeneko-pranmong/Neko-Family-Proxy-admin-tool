@@ -5,10 +5,10 @@ $url = "http://127.0.0.1:8787/"
 $portInUse = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
 
 if (-not $portInUse) {
-  if (-not (Test-Path ".env")) {
-    Copy-Item "admin-api/.env.example" ".env"
-    Start-Process "notepad.exe" (Join-Path $PSScriptRoot ".env")
-    throw "Created .env. Set Supabase values, then run the shortcut again."
+  if (-not (Test-Path ".env.local")) {
+    Copy-Item "admin-api/.env.example" ".env.local"
+    Start-Process "notepad.exe" (Join-Path $PSScriptRoot ".env.local")
+    throw "Created .env.local. Set Supabase values, then run the shortcut again."
   }
 
   npm run build:standalone

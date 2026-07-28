@@ -12,20 +12,50 @@ async function listAuthUsers() {
   return result.users ?? [];
 }
 
+function emailsByUser(authUsers) {
+  return new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
+}
+
+function requireUpdated(rows, message) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error(message);
+  return rows;
+}
+
+async function recordAudit(eventType, actor, metadata = {}) {
+  try {
+    await tablePost("audit_events", {
+      user_id: actor?.userId ?? null,
+      event_type: eventType,
+      metadata,
+    });
+  } catch (error) {
+    console.error(`Could not record ${eventType} audit event`, error);
+  }
+}
+
 async function getUsers() {
   const [profiles, authUsers] = await Promise.all([
     tableGet("profiles", {
-      select: "id,display_name,role,status,created_at",
+      select:
+        "id,display_name,username,role,status,created_at,updated_at",
       order: "created_at.desc",
-      limit: "200",
+      limit: "1000",
     }),
     listAuthUsers(),
   ]);
-  const emails = new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
+  const emails = emailsByUser(authUsers);
   return profiles.map((profile) => ({
     ...profile,
     email: emails.get(profile.id) ?? "—",
   }));
+}
+
+async function getProducts() {
+  return tableGet("products", {
+    select: "id,code,name,max_devices,is_active,created_at",
+    order: "name.asc",
+    limit: "200",
+  });
 }
 
 async function getLicenses() {
@@ -34,13 +64,13 @@ async function getLicenses() {
       select:
         "id,user_id,product_id,status,valid_from,valid_until,max_devices,created_at",
       order: "valid_until.desc",
-      limit: "200",
+      limit: "1000",
     }),
     tableGet("products", { select: "id,code,name", order: "name.asc" }),
     listAuthUsers(),
   ]);
   const productsById = new Map(products.map((product) => [product.id, product]));
-  const emails = new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
+  const emails = emailsByUser(authUsers);
   return licenses.map((license) => ({
     ...license,
     email: emails.get(license.user_id) ?? "—",
@@ -54,49 +84,112 @@ async function getCoupons() {
     tableGet("coupons", {
       select: "id,batch_id,status,redeemed_by,redeemed_at,created_at",
       order: "created_at.desc",
-      limit: "200",
+      limit: "5000",
     }),
     tableGet("coupon_batches", {
       select:
         "id,product_id,duration_days,quantity,expires_at,note,created_at,revoked_at",
       order: "created_at.desc",
-      limit: "100",
+      limit: "1000",
     }),
     tableGet("products", { select: "id,name,code" }),
     listAuthUsers(),
   ]);
-  const batchesById = new Map(batches.map((batch) => [batch.id, batch]));
   const productsById = new Map(products.map((product) => [product.id, product]));
-  const emails = new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
-  return coupons.map((coupon) => {
-    const batch = batchesById.get(coupon.batch_id);
+  const emails = emailsByUser(authUsers);
+  const couponsByBatch = new Map();
+  for (const coupon of coupons) {
+    const batchCoupons = couponsByBatch.get(coupon.batch_id) ?? [];
+    batchCoupons.push(coupon);
+    couponsByBatch.set(coupon.batch_id, batchCoupons);
+  }
+  return batches.map((batch) => {
+    const batchCoupons = couponsByBatch.get(batch.id) ?? [];
+    const counts = { active: 0, redeemed: 0, revoked: 0 };
+    for (const coupon of batchCoupons) {
+      if (coupon.status in counts) counts[coupon.status] += 1;
+    }
+    const latestRedemption = batchCoupons
+      .filter((coupon) => coupon.redeemed_at)
+      .sort((a, b) => String(b.redeemed_at).localeCompare(String(a.redeemed_at)))[0];
     return {
-      ...coupon,
-      batch: batch?.note || batch?.id?.slice(0, 8) || "—",
-      product: batch ? productsById.get(batch.product_id)?.name ?? "Unknown" : "—",
-      days: batch?.duration_days ?? 0,
-      used_by: coupon.redeemed_by
-        ? emails.get(coupon.redeemed_by) ?? coupon.redeemed_by
+      ...batch,
+      batch: batch.note || batch.id.slice(0, 8),
+      product: productsById.get(batch.product_id)?.name ?? "Unknown product",
+      product_code: productsById.get(batch.product_id)?.code ?? "unknown",
+      active_count: counts.active,
+      redeemed_count: counts.redeemed,
+      revoked_count: counts.revoked,
+      actual_quantity: batchCoupons.length,
+      last_redeemed_by: latestRedemption?.redeemed_by
+        ? emails.get(latestRedemption.redeemed_by) ?? latestRedemption.redeemed_by
         : "—",
+      status: batch.revoked_at ? "revoked" : "active",
     };
   });
+}
+
+async function getRedemptions() {
+  const [attempts, coupons, batches, products, authUsers] = await Promise.all([
+    tableGet("coupon_redemption_attempts", {
+      select: "id,user_id,coupon_id,succeeded,error_code,attempted_at",
+      order: "attempted_at.desc",
+      limit: "1000",
+    }),
+    tableGet("coupons", { select: "id,batch_id", limit: "5000" }),
+    tableGet("coupon_batches", { select: "id,product_id,note", limit: "1000" }),
+    tableGet("products", { select: "id,name,code", limit: "200" }),
+    listAuthUsers(),
+  ]);
+  const emails = emailsByUser(authUsers);
+  const couponsById = new Map(coupons.map((coupon) => [coupon.id, coupon]));
+  const batchesById = new Map(batches.map((batch) => [batch.id, batch]));
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  return attempts.map((attempt) => {
+    const coupon = couponsById.get(attempt.coupon_id);
+    const batch = batchesById.get(coupon?.batch_id);
+    const product = productsById.get(batch?.product_id);
+    return {
+      ...attempt,
+      email: emails.get(attempt.user_id) ?? "—",
+      batch: batch?.note || batch?.id?.slice(0, 8) || "—",
+      product: product?.name ?? "—",
+    };
+  });
+}
+
+async function getInstallations() {
+  const [installations, authUsers] = await Promise.all([
+    tableGet("installations", {
+      select: "id,user_id,display_name,last_seen_at,revoked_at,created_at",
+      order: "last_seen_at.desc",
+      limit: "1000",
+    }),
+    listAuthUsers(),
+  ]);
+  const emails = emailsByUser(authUsers);
+  return installations.map((installation) => ({
+    ...installation,
+    email: emails.get(installation.user_id) ?? "—",
+    status: installation.revoked_at ? "revoked" : "active",
+  }));
 }
 
 async function getSessions() {
   const [sessions, authUsers, installations] = await Promise.all([
     tableGet("launcher_sessions", {
       select:
-        "id,user_id,installation_id,created_at,last_seen_at,revoked_at",
+        "id,user_id,installation_id,license_id,created_at,last_seen_at,revoked_at",
       order: "last_seen_at.desc",
-      limit: "200",
+      limit: "1000",
     }),
     listAuthUsers(),
     tableGet("installations", {
       select: "id,display_name",
-      limit: "200",
+      limit: "1000",
     }),
   ]);
-  const emails = new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
+  const emails = emailsByUser(authUsers);
   const devices = new Map(
     installations.map((installation) => [
       installation.id,
@@ -111,10 +204,12 @@ async function getSessions() {
 }
 
 async function getOverview() {
-  const [users, activeLicenses, activeSessions, unusedCoupons, audit] =
+  const [users, products, activeLicenses, activeInstallations, activeSessions, unusedCoupons, audit] =
     await Promise.all([
       tableCount("profiles"),
+      tableCount("products", { is_active: "eq.true" }),
       tableCount("licenses", { status: "eq.active" }),
+      tableCount("installations", { revoked_at: "is.null" }),
       tableCount("launcher_sessions", { revoked_at: "is.null" }),
       tableCount("coupons", { status: "eq.active" }),
       tableGet("audit_events", {
@@ -124,7 +219,14 @@ async function getOverview() {
       }),
     ]);
   return {
-    stats: { users, activeLicenses, activeSessions, unusedCoupons },
+    stats: {
+      users,
+      products,
+      activeLicenses,
+      activeInstallations,
+      activeSessions,
+      unusedCoupons,
+    },
     trend: [],
     recent: audit.map((event) => ({
       id: String(event.id),
@@ -138,11 +240,19 @@ async function getOverview() {
 }
 
 async function getAudit() {
-  return tableGet("audit_events", {
-    select: "id,user_id,event_type,metadata,created_at",
-    order: "created_at.desc",
-    limit: "200",
-  });
+  const [events, authUsers] = await Promise.all([
+    tableGet("audit_events", {
+      select: "id,user_id,event_type,metadata,created_at",
+      order: "created_at.desc",
+      limit: "1000",
+    }),
+    listAuthUsers(),
+  ]);
+  const emails = emailsByUser(authUsers);
+  return events.map((event) => ({
+    ...event,
+    email: event.user_id ? emails.get(event.user_id) ?? event.user_id : "ระบบ",
+  }));
 }
 
 function randomHex(bytes = 16) {
@@ -197,13 +307,22 @@ async function generateCoupons(body, actor) {
     await tablePatch("coupon_batches", { id: `eq.${batch.id}` }, { revoked_at: new Date().toISOString() });
     throw error;
   }
+  await recordAudit("coupon_batch_created", actor, {
+    batch_id: batch.id,
+    product_id: product.id,
+    quantity,
+    duration_days: durationDays,
+  });
   return { batch, codes: codes.map((coupon) => coupon.code) };
 }
 
 export async function getResource(resource) {
   if (resource === "users") return getUsers();
+  if (resource === "products") return getProducts();
   if (resource === "licenses") return getLicenses();
   if (resource === "coupons") return getCoupons();
+  if (resource === "redemptions") return getRedemptions();
+  if (resource === "installations") return getInstallations();
   if (resource === "sessions") return getSessions();
   if (resource === "audit") return getAudit();
   return getOverview();
@@ -214,11 +333,27 @@ export async function performAction(body, actor) {
   if (action === "set_user_status") {
     const status = String(body.status);
     if (!["active", "suspended", "banned"].includes(status)) throw new Error("Invalid status");
-    await tablePatch("profiles", { id: `eq.${String(body.userId)}` }, { status });
+    const userId = String(body.userId);
+    if (userId === actor.userId && status !== "active") {
+      throw new Error("ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่");
+    }
+    requireUpdated(
+      await tablePatch("profiles", { id: `eq.${userId}` }, { status }),
+      "User not found",
+    );
+    await recordAudit("admin_user_status_changed", actor, {
+      target_user_id: userId,
+      status,
+    });
     return {};
   }
   if (action === "revoke_license") {
-    await tablePatch("licenses", { id: `eq.${String(body.licenseId)}` }, { status: "revoked" });
+    const licenseId = String(body.licenseId);
+    requireUpdated(
+      await tablePatch("licenses", { id: `eq.${licenseId}` }, { status: "revoked" }),
+      "License not found",
+    );
+    await recordAudit("admin_license_revoked", actor, { license_id: licenseId });
     return {};
   }
   if (action === "extend_license") {
@@ -233,29 +368,72 @@ export async function performAction(body, actor) {
     if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error("Invalid extension");
     const base = Math.max(Date.now(), Date.parse(current.valid_until));
     const validUntil = new Date(base + days * 86400000).toISOString();
-    await tablePatch(
-      "licenses",
-      { id: `eq.${String(body.licenseId)}` },
-      { valid_until: validUntil, status: "active" },
+    requireUpdated(
+      await tablePatch(
+        "licenses",
+        { id: `eq.${String(body.licenseId)}` },
+        { valid_until: validUntil, status: "active" },
+      ),
+      "License not found",
     );
+    await recordAudit("admin_license_extended", actor, {
+      license_id: String(body.licenseId),
+      days,
+      valid_until: validUntil,
+    });
     return { valid_until: validUntil };
   }
   if (action === "revoke_session") {
+    const sessionId = String(body.sessionId);
+    requireUpdated(
+      await tablePatch(
+        "launcher_sessions",
+        { id: `eq.${sessionId}` },
+        { revoked_at: new Date().toISOString() },
+      ),
+      "Session not found",
+    );
+    await recordAudit("admin_session_revoked", actor, { session_id: sessionId });
+    return {};
+  }
+  if (action === "revoke_installation") {
+    const installationId = String(body.installationId);
+    const revokedAt = new Date().toISOString();
+    requireUpdated(
+      await tablePatch(
+        "installations",
+        { id: `eq.${installationId}` },
+        { revoked_at: revokedAt },
+      ),
+      "Installation not found",
+    );
     await tablePatch(
       "launcher_sessions",
-      { id: `eq.${String(body.sessionId)}` },
-      { revoked_at: new Date().toISOString() },
+      { installation_id: `eq.${installationId}`, revoked_at: "is.null" },
+      { revoked_at: revokedAt },
     );
+    await recordAudit("admin_session_revoked", actor, {
+      installation_id: installationId,
+      scope: "installation",
+    });
     return {};
   }
   if (action === "revoke_batch") {
     const batchId = String(body.batchId);
-    await tablePatch("coupon_batches", { id: `eq.${batchId}` }, { revoked_at: new Date().toISOString() });
+    requireUpdated(
+      await tablePatch(
+        "coupon_batches",
+        { id: `eq.${batchId}` },
+        { revoked_at: new Date().toISOString() },
+      ),
+      "Coupon batch not found",
+    );
     await tablePatch(
       "coupons",
       { batch_id: `eq.${batchId}`, status: "eq.active" },
       { status: "revoked" },
     );
+    await recordAudit("coupon_batch_revoked", actor, { batch_id: batchId });
     return {};
   }
   if (action === "generate_coupons") return generateCoupons(body, actor);

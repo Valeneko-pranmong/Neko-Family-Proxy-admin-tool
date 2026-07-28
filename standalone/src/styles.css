@@ -49,12 +49,12 @@ input:focus { border-color: var(--pink); box-shadow: 0 0 0 3px #d83e801a; }
 .section-head, .panel-title-row { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 18px; }
 .section-head h2 { margin: 0; font-size: 24px; }
 .section-head p { margin: 6px 0 0; }
-.stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .stat-card, .panel { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 12px 32px #5c31530b; }
 .stat-card { padding: 20px; }
 .stat-card span { color: var(--muted); font-size: 13px; }
 .stat-card strong { display: block; margin-top: 10px; font-size: 34px; letter-spacing: -.04em; }
-.stat-users strong { color: #8b4eb1; }.stat-active strong { color: #2c8a67; }.stat-session strong { color: #3f76b7; }.stat-coupon strong { color: #cf7150; }
+.stat-users strong { color: #8b4eb1; }.stat-product strong { color: #b25c91; }.stat-active strong { color: #2c8a67; }.stat-device strong { color: #7a6bb3; }.stat-session strong { color: #3f76b7; }.stat-coupon strong { color: #cf7150; }
 .panel { padding: 20px; margin-bottom: 18px; }
 .panel h3 { margin: 0; font-size: 17px; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
@@ -66,7 +66,7 @@ tr:last-child td { border-bottom: 0; }
 .date-cell { white-space: nowrap; color: var(--muted); }
 .actions { white-space: nowrap; }
 .status { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: #f5f2f6; color: #766c7a; font-size: 11px; font-weight: 750; }
-.status-active { background: #effbf5; color: var(--success); }.status-redeemed, .status-revoked { background: #fff3f5; color: var(--danger); }.status-suspended { background: #fff8e7; color: #a46c1a; }
+.status-active, .status-success { background: #effbf5; color: var(--success); }.status-redeemed, .status-revoked, .status-rejected, .status-inactive { background: #fff3f5; color: var(--danger); }.status-suspended { background: #fff8e7; color: #a46c1a; }
 .empty { padding: 28px; color: var(--muted); text-align: center; }
 .inline-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
 .form-actions { display: flex; gap: 8px; }

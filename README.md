@@ -12,7 +12,7 @@
 
 ## เริ่มใช้งาน
 
-1. กำหนด `SUPABASE_URL` และ `SUPABASE_SECRET_KEY` ในไฟล์ `.env`
+1. กำหนด `SUPABASE_URL` และ `SUPABASE_SECRET_KEY` ในไฟล์ `.env.local`
 2. ตรวจว่าผู้ใช้มีบัญชี Email/Password ใน Supabase Auth
 3. ตรวจว่า `public.profiles` มีแถวที่ `id` ตรงกับผู้ใช้ และ `role` เป็น `admin`
 4. เปิด PowerShell ที่โฟลเดอร์ `admin-web` แล้วรัน:

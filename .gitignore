@@ -1,6 +1,12 @@
 # dependencies
 /node_modules/
 
+# local credentials
+/.env
+/.env.local
+/admin-api/.env
+/admin-api/.env.local
+
 # test output
 /coverage/
 
@@ -8,3 +14,5 @@
 npm-debug.log*
 *.devserver*.log
 /work/
+.vercel
+.env*

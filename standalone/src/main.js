@@ -65,12 +65,14 @@ async function action(name, id) {
   }
   const labels = {
     revoke_license: "ยกเลิก License นี้หรือไม่",
+    revoke_installation: "เพิกถอนอุปกรณ์และเซสชันที่ยังใช้งานอยู่ทั้งหมดหรือไม่",
     revoke_session: "ยกเลิก session นี้หรือไม่",
     revoke_batch: "ยกเลิกคูปองทั้งชุดนี้หรือไม่",
   };
   if (!window.confirm(labels[name] || "ยืนยันคำสั่งนี้หรือไม่")) return;
   const payload = {
     revoke_license: { action: name, licenseId: id },
+    revoke_installation: { action: name, installationId: id },
     revoke_session: { action: name, sessionId: id },
     revoke_batch: { action: name, batchId: id },
   }[name];

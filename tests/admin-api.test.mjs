@@ -33,7 +33,12 @@ function createFakeSupabase() {
         response.end(JSON.stringify({ code: "invalid_credentials", msg: "Invalid login credentials" }));
         return;
       }
-      const id = body.email === "admin@example.com" ? "admin-id" : "customer-id";
+      const id =
+        body.email === "admin@example.com"
+          ? "admin-id"
+          : body.email === "suspended@example.com"
+            ? "suspended-id"
+            : "customer-id";
       const now = new Date().toISOString();
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
@@ -57,14 +62,63 @@ function createFakeSupabase() {
       }));
       return;
     }
+    if (request.method === "GET" && url.pathname === "/auth/v1/admin/users") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({
+        users: [
+          { id: "admin-id", email: "admin@example.com" },
+          { id: "customer-id", email: "customer@example.com" },
+        ],
+      }));
+      return;
+    }
+    if (request.method === "HEAD" && url.pathname === "/rest/v1/profiles") {
+      response.writeHead(200, { "Content-Range": "0-0/1" });
+      response.end();
+      return;
+    }
     if (request.method === "GET" && url.pathname === "/rest/v1/profiles") {
       const id = (url.searchParams.get("id") || "").replace(/^eq\./, "");
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify([{
-        id,
-        display_name: id === "admin-id" ? "Test Admin" : "Test Customer",
-        role: id === "admin-id" ? "admin" : "customer",
-      }]));
+      if (id) {
+        response.end(JSON.stringify([{
+          id,
+          display_name: id === "admin-id" ? "Test Admin" : "Test Customer",
+          role: id === "admin-id" || id === "suspended-id" ? "admin" : "customer",
+          status: id === "suspended-id" ? "suspended" : "active",
+        }]));
+      } else {
+        response.end(JSON.stringify([{
+          id: "admin-id",
+          display_name: "Test Admin",
+          username: "test_admin",
+          role: "admin",
+          status: "active",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }]));
+      }
+      return;
+    }
+    const emptyTables = new Set([
+      "products",
+      "licenses",
+      "installations",
+      "launcher_sessions",
+      "audit_events",
+      "coupon_batches",
+      "coupons",
+      "coupon_redemption_attempts",
+    ]);
+    const table = url.pathname.match(/^\/rest\/v1\/([^/]+)$/)?.[1];
+    if (table && emptyTables.has(table) && request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end("[]");
+      return;
+    }
+    if (table && emptyTables.has(table) && request.method === "HEAD") {
+      response.writeHead(200, { "Content-Range": "0-0/0" });
+      response.end();
       return;
     }
     response.writeHead(404, { "Content-Type": "application/json" });
@@ -107,6 +161,13 @@ test("local admin API accepts Supabase credentials only for role admin", async (
     });
     assert.equal(customerLogin.status, 403);
 
+    const suspendedLogin = await fetch(`${base}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "suspended@example.com", password: "correct-pass" }),
+    });
+    assert.equal(suspendedLogin.status, 403);
+
     const unauthenticated = await fetch(`${base}/api/admin?resource=overview`);
     assert.equal(unauthenticated.status, 401);
 
@@ -119,7 +180,29 @@ test("local admin API accepts Supabase credentials only for role admin", async (
     assert.match(login.headers.get("set-cookie") || "", /admin_session=/);
     const loginBody = await login.json();
     assert.equal(loginBody.viewer.role, "admin");
+    assert.equal(loginBody.viewer.status, "active");
     assert.equal(loginBody.viewer.email, "admin@example.com");
+
+    const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
+    const resources = [
+      "overview",
+      "users",
+      "products",
+      "licenses",
+      "coupons",
+      "redemptions",
+      "installations",
+      "sessions",
+      "audit",
+    ];
+    for (const resource of resources) {
+      const response = await fetch(`${base}/api/admin?resource=${resource}`, {
+        headers: { Cookie: cookie },
+      });
+      assert.equal(response.status, 200, `${resource} should load`);
+      const payload = await response.json();
+      assert.equal(payload.resource, resource);
+    }
   } finally {
     child.kill();
     await once(child, "close").catch(() => {});

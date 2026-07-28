@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 
 function loadDotEnv() {
   const envPaths = [
+    new URL("../../.env.local", import.meta.url),
     new URL("../../.env", import.meta.url),
+    new URL("../.env.local", import.meta.url),
     new URL("../.env", import.meta.url),
   ];
   for (const envPath of envPaths) {
@@ -24,7 +26,7 @@ loadDotEnv();
 
 const required = (name) => {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing ${name} in admin-web/.env`);
+  if (!value) throw new Error(`Missing ${name} in .env.local`);
   return value;
 };
 

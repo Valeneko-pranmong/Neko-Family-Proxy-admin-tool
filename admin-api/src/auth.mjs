@@ -29,7 +29,7 @@ export async function authenticateAdmin(email, password) {
     throw authError("อีเมลหรือรหัสผ่านไม่ถูกต้อง", 401);
   }
   const profiles = await tableGet("profiles", {
-    select: "id,display_name,role",
+    select: "id,display_name,username,role,status",
     id: `eq.${result.data.user.id}`,
     limit: "1",
   });
@@ -37,11 +37,15 @@ export async function authenticateAdmin(email, password) {
   if (!profile || profile.role !== "admin") {
     throw authError("บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ", 403);
   }
+  if (profile.status !== "active") {
+    throw authError("บัญชีผู้ดูแลนี้ถูกระงับการใช้งาน", 403);
+  }
   return {
     userId: result.data.user.id,
     email: result.data.user.email || email,
-    name: profile.display_name || result.data.user.email || email,
+    name: profile.display_name || profile.username || result.data.user.email || email,
     role: profile.role,
+    status: profile.status,
   };
 }
 

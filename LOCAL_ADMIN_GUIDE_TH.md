@@ -7,7 +7,7 @@
 
 1. เปิด PowerShell ในโฟลเดอร์ `admin-web`
 2. รัน `.\start-admin.ps1` หนึ่งครั้ง
-3. เปิดไฟล์ `.env` ที่ถูกสร้างขึ้น
+3. เปิดไฟล์ `.env.local` ที่ถูกสร้างขึ้น
 4. ตั้งค่าอย่างน้อย:
 
 ```text
@@ -15,7 +15,7 @@ SUPABASE_URL=https://miikoutrnxsunbndecqh.supabase.co
 SUPABASE_SECRET_KEY=ใส่ Supabase Secret Key
 ```
 
-ห้ามส่งไฟล์ `.env` ให้ผู้อื่น และห้ามใส่ Secret Key ลงใน `neko-control.html`
+ห้ามส่งไฟล์ `.env.local` ให้ผู้อื่น และห้ามใส่ Secret Key ลงใน `neko-control.html`
 
 ## เริ่มใช้งาน
 

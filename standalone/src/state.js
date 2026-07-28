@@ -5,6 +5,7 @@ export function createStore() {
     loading: false,
     error: "",
     toast: "",
+    couponFormOpen: false,
   };
   const listeners = new Set();
   return {

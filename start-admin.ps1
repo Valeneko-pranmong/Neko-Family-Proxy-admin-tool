@@ -1,9 +1,9 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-if (-not (Test-Path ".env")) {
-  Copy-Item "admin-api/.env.example" ".env"
-  Write-Host "Created .env. Set SUPABASE_SECRET_KEY, then run this script again." -ForegroundColor Yellow
+if (-not (Test-Path ".env.local")) {
+  Copy-Item "admin-api/.env.example" ".env.local"
+  Write-Host "Created .env.local. Set SUPABASE_SECRET_KEY, then run this script again." -ForegroundColor Yellow
   exit 1
 }
 
