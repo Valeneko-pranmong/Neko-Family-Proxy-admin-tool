@@ -101,6 +101,10 @@ async function getCoupons() {
     for (const coupon of batchCoupons) {
       if (coupon.status in counts) counts[coupon.status] += 1;
     }
+    const redeemedCount = Math.max(
+      counts.redeemed,
+      Number(batch.quantity) - batchCoupons.length,
+    );
     const latestRedemption = batchCoupons
       .filter((coupon) => coupon.redeemed_at)
       .sort((a, b) => String(b.redeemed_at).localeCompare(String(a.redeemed_at)))[0];
@@ -110,9 +114,9 @@ async function getCoupons() {
       product: productsById.get(batch.product_id)?.name ?? "Unknown product",
       product_code: productsById.get(batch.product_id)?.code ?? "unknown",
       active_count: counts.active,
-      redeemed_count: counts.redeemed,
+      redeemed_count: redeemedCount,
       revoked_count: counts.revoked,
-      actual_quantity: batchCoupons.length,
+      actual_quantity: Number(batch.quantity),
       last_redeemed_by: latestRedemption?.redeemed_by
         ? usernames.get(latestRedemption.redeemed_by) ?? latestRedemption.redeemed_by
         : "—",
@@ -124,7 +128,7 @@ async function getCoupons() {
 async function getRedemptions() {
   const [attempts, coupons, batches, products, profiles] = await Promise.all([
     tableGet("coupon_redemption_attempts", {
-      select: "id,user_id,coupon_id,succeeded,error_code,attempted_at",
+      select: "id,user_id,coupon_id,batch_id,succeeded,error_code,attempted_at",
       order: "attempted_at.desc",
       limit: "1000",
     }),
@@ -139,7 +143,7 @@ async function getRedemptions() {
   const productsById = new Map(products.map((product) => [product.id, product]));
   return attempts.map((attempt) => {
     const coupon = couponsById.get(attempt.coupon_id);
-    const batch = batchesById.get(coupon?.batch_id);
+    const batch = batchesById.get(attempt.batch_id ?? coupon?.batch_id);
     const product = productsById.get(batch?.product_id);
     return {
       ...attempt,

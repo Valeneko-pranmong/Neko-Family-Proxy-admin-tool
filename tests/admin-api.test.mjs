@@ -134,6 +134,59 @@ function createFakeSupabase() {
       }
       return;
     }
+    if (request.method === "GET" && url.pathname === "/rest/v1/products") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([{
+        id: "product-id",
+        code: "neko-family-proxy",
+        name: "Neko Family Proxy",
+        max_devices: 1,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      }]));
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/rest/v1/coupon_batches") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([{
+        id: "batch-id",
+        product_id: "product-id",
+        duration_days: 30,
+        quantity: 2,
+        note: "Disposable batch",
+        created_at: new Date().toISOString(),
+        revoked_at: null,
+      }]));
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/rest/v1/coupons") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([{
+        id: "remaining-coupon-id",
+        batch_id: "batch-id",
+        status: "active",
+        redeemed_by: null,
+        redeemed_at: null,
+        created_at: new Date().toISOString(),
+      }]));
+      return;
+    }
+    if (
+      request.method === "GET"
+      && url.pathname === "/rest/v1/coupon_redemption_attempts"
+    ) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([{
+        id: 1,
+        user_id: "customer-id",
+        coupon_id: null,
+        batch_id: "batch-id",
+        succeeded: true,
+        error_code: null,
+        attempted_at: new Date().toISOString(),
+      }]));
+      return;
+    }
     const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([^/]+)$/)?.[1];
     if (request.method === "POST" && rpc) {
       let text = "";
@@ -258,6 +311,15 @@ test("local admin API accepts Supabase credentials only for role admin", async (
       assert.equal(response.status, 200, `${resource} should load`);
       const payload = await response.json();
       assert.equal(payload.resource, resource);
+      if (resource === "coupons") {
+        assert.equal(payload.data[0].active_count, 1);
+        assert.equal(payload.data[0].redeemed_count, 1);
+        assert.equal(payload.data[0].actual_quantity, 2);
+      }
+      if (resource === "redemptions") {
+        assert.equal(payload.data[0].batch, "Disposable batch");
+        assert.equal(payload.data[0].product, "Neko Family Proxy");
+      }
     }
 
     const generated = await fetch(`${base}/api/admin`, {
