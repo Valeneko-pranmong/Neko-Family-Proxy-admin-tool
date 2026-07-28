@@ -1,19 +1,20 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
-  authAdminGet,
   tableCount,
   tableGet,
   tablePatch,
   tablePost,
 } from "../supabase.mjs";
 
-async function listAuthUsers() {
-  const result = await authAdminGet("users", { page: "1", per_page: "1000" });
-  return result.users ?? [];
+async function listProfiles() {
+  return tableGet("profiles", {
+    select: "id,username",
+    limit: "1000",
+  });
 }
 
-function emailsByUser(authUsers) {
-  return new Map(authUsers.map((user) => [user.id, user.email ?? ""]));
+function usernamesByUser(profiles) {
+  return new Map(profiles.map((profile) => [profile.id, profile.username ?? ""]));
 }
 
 function requireUpdated(rows, message) {
@@ -34,20 +35,11 @@ async function recordAudit(eventType, actor, metadata = {}) {
 }
 
 async function getUsers() {
-  const [profiles, authUsers] = await Promise.all([
-    tableGet("profiles", {
-      select:
-        "id,display_name,username,role,status,created_at,updated_at",
-      order: "created_at.desc",
-      limit: "1000",
-    }),
-    listAuthUsers(),
-  ]);
-  const emails = emailsByUser(authUsers);
-  return profiles.map((profile) => ({
-    ...profile,
-    email: emails.get(profile.id) ?? "—",
-  }));
+  return tableGet("profiles", {
+    select: "id,display_name,username,role,status,created_at,updated_at",
+    order: "created_at.desc",
+    limit: "1000",
+  });
 }
 
 async function getProducts() {
@@ -59,7 +51,7 @@ async function getProducts() {
 }
 
 async function getLicenses() {
-  const [licenses, products, authUsers] = await Promise.all([
+  const [licenses, products, profiles] = await Promise.all([
     tableGet("licenses", {
       select:
         "id,user_id,product_id,status,valid_from,valid_until,max_devices,created_at",
@@ -67,20 +59,20 @@ async function getLicenses() {
       limit: "1000",
     }),
     tableGet("products", { select: "id,code,name", order: "name.asc" }),
-    listAuthUsers(),
+    listProfiles(),
   ]);
   const productsById = new Map(products.map((product) => [product.id, product]));
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   return licenses.map((license) => ({
     ...license,
-    email: emails.get(license.user_id) ?? "—",
+    username: usernames.get(license.user_id) ?? "—",
     product: productsById.get(license.product_id)?.name ?? "Unknown product",
     product_code: productsById.get(license.product_id)?.code ?? "unknown",
   }));
 }
 
 async function getCoupons() {
-  const [coupons, batches, products, authUsers] = await Promise.all([
+  const [coupons, batches, products, profiles] = await Promise.all([
     tableGet("coupons", {
       select: "id,batch_id,status,redeemed_by,redeemed_at,created_at",
       order: "created_at.desc",
@@ -93,10 +85,10 @@ async function getCoupons() {
       limit: "1000",
     }),
     tableGet("products", { select: "id,name,code" }),
-    listAuthUsers(),
+    listProfiles(),
   ]);
   const productsById = new Map(products.map((product) => [product.id, product]));
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   const couponsByBatch = new Map();
   for (const coupon of coupons) {
     const batchCoupons = couponsByBatch.get(coupon.batch_id) ?? [];
@@ -122,7 +114,7 @@ async function getCoupons() {
       revoked_count: counts.revoked,
       actual_quantity: batchCoupons.length,
       last_redeemed_by: latestRedemption?.redeemed_by
-        ? emails.get(latestRedemption.redeemed_by) ?? latestRedemption.redeemed_by
+        ? usernames.get(latestRedemption.redeemed_by) ?? latestRedemption.redeemed_by
         : "—",
       status: batch.revoked_at ? "revoked" : "active",
     };
@@ -130,7 +122,7 @@ async function getCoupons() {
 }
 
 async function getRedemptions() {
-  const [attempts, coupons, batches, products, authUsers] = await Promise.all([
+  const [attempts, coupons, batches, products, profiles] = await Promise.all([
     tableGet("coupon_redemption_attempts", {
       select: "id,user_id,coupon_id,succeeded,error_code,attempted_at",
       order: "attempted_at.desc",
@@ -139,9 +131,9 @@ async function getRedemptions() {
     tableGet("coupons", { select: "id,batch_id", limit: "5000" }),
     tableGet("coupon_batches", { select: "id,product_id,note", limit: "1000" }),
     tableGet("products", { select: "id,name,code", limit: "200" }),
-    listAuthUsers(),
+    listProfiles(),
   ]);
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   const couponsById = new Map(coupons.map((coupon) => [coupon.id, coupon]));
   const batchesById = new Map(batches.map((batch) => [batch.id, batch]));
   const productsById = new Map(products.map((product) => [product.id, product]));
@@ -151,7 +143,7 @@ async function getRedemptions() {
     const product = productsById.get(batch?.product_id);
     return {
       ...attempt,
-      email: emails.get(attempt.user_id) ?? "—",
+      username: usernames.get(attempt.user_id) ?? "—",
       batch: batch?.note || batch?.id?.slice(0, 8) || "—",
       product: product?.name ?? "—",
     };
@@ -159,37 +151,37 @@ async function getRedemptions() {
 }
 
 async function getInstallations() {
-  const [installations, authUsers] = await Promise.all([
+  const [installations, profiles] = await Promise.all([
     tableGet("installations", {
       select: "id,user_id,display_name,last_seen_at,revoked_at,created_at",
       order: "last_seen_at.desc",
       limit: "1000",
     }),
-    listAuthUsers(),
+    listProfiles(),
   ]);
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   return installations.map((installation) => ({
     ...installation,
-    email: emails.get(installation.user_id) ?? "—",
+    username: usernames.get(installation.user_id) ?? "—",
     status: installation.revoked_at ? "revoked" : "active",
   }));
 }
 
 async function getSessions() {
-  const [sessions, authUsers, installations] = await Promise.all([
+  const [sessions, profiles, installations] = await Promise.all([
     tableGet("launcher_sessions", {
       select:
         "id,user_id,installation_id,license_id,created_at,last_seen_at,revoked_at",
       order: "last_seen_at.desc",
       limit: "1000",
     }),
-    listAuthUsers(),
+    listProfiles(),
     tableGet("installations", {
       select: "id,display_name",
       limit: "1000",
     }),
   ]);
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   const devices = new Map(
     installations.map((installation) => [
       installation.id,
@@ -198,7 +190,7 @@ async function getSessions() {
   );
   return sessions.map((session) => ({
     ...session,
-    email: emails.get(session.user_id) ?? "—",
+    username: usernames.get(session.user_id) ?? "—",
     device: devices.get(session.installation_id) ?? "Unknown device",
   }));
 }
@@ -240,18 +232,18 @@ async function getOverview() {
 }
 
 async function getAudit() {
-  const [events, authUsers] = await Promise.all([
+  const [events, profiles] = await Promise.all([
     tableGet("audit_events", {
       select: "id,user_id,event_type,metadata,created_at",
       order: "created_at.desc",
       limit: "1000",
     }),
-    listAuthUsers(),
+    listProfiles(),
   ]);
-  const emails = emailsByUser(authUsers);
+  const usernames = usernamesByUser(profiles);
   return events.map((event) => ({
     ...event,
-    email: event.user_id ? emails.get(event.user_id) ?? event.user_id : "ระบบ",
+    username: event.user_id ? usernames.get(event.user_id) ?? event.user_id : "ระบบ",
   }));
 }
 

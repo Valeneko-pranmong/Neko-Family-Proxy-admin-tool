@@ -11,8 +11,8 @@ export function createSessionController(onChange) {
     get viewer() {
       return viewer;
     },
-    async login(email, password) {
-      const result = await api.login(email, password);
+    async login(username, password) {
+      const result = await api.login(username, password);
       authenticated = true;
       viewer = result.viewer || null;
       onChange();

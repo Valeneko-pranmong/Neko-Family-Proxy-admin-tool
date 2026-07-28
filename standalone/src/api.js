@@ -26,10 +26,10 @@ async function request(path, options = {}) {
 
 export const health = () => request("/api/health");
 
-export const login = (email, password) =>
+export const login = (username, password) =>
   request("/api/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
 
 export const logout = () => request("/api/logout", { method: "POST" });

@@ -88,8 +88,8 @@ async function getSession(token) {
   return {
     viewer: {
       userId: profile.id,
-      email: decoded.viewer.email,
-      name: profile.display_name || profile.username || decoded.viewer.email,
+      username: profile.username,
+      name: profile.display_name || profile.username,
       role: profile.role,
       status: profile.status,
     },
@@ -128,10 +128,10 @@ export default async function handler(request, response) {
     }
     if (request.method === "POST" && url.pathname === "/api/login") {
       const body = await bodyJson(request);
-      if (typeof body.email !== "string" || typeof body.password !== "string") {
-        return sendError(response, 400, "Email and password are required");
+      if (typeof body.username !== "string" || typeof body.password !== "string") {
+        return sendError(response, 400, "Username and password are required");
       }
-      const viewer = await authenticateAdmin(body.email.trim(), body.password);
+      const viewer = await authenticateAdmin(body.username.trim(), body.password);
       return sendJson(response, 200, { ok: true, viewer }, {
         "Set-Cookie": sessionCookie(createSession(viewer), request),
       });

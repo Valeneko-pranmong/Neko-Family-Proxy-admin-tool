@@ -121,10 +121,10 @@ root.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (event.target.id === "login-form") {
     const form = new FormData(event.target);
-    const email = form.get("email");
+    const username = form.get("username");
     const password = form.get("password");
     try {
-      await session.login(String(email || ""), String(password || ""));
+      await session.login(String(username || ""), String(password || ""));
       await load("overview");
     } catch (error) {
       loginError = error instanceof Error ? error.message : "เข้าสู่ระบบไม่สำเร็จ";

@@ -31,7 +31,7 @@ SUPABASE_SECRET_KEY=ใส่ Supabase Secret Key
 http://127.0.0.1:8787/
 ```
 
-ระบบจะถาม Email และ Password ของบัญชี Supabase Auth จากนั้นตรวจ
+ระบบจะถาม Username และ Password จากนั้นค้นบัญชี Supabase Auth ภายในฝั่งเซิร์ฟเวอร์และตรวจ
 `public.profiles.role` ของบัญชีนั้น ถ้าเป็น `admin` จะเปิดหน้า Control Room
 
 ## โครงสร้างที่แก้ไขได้
@@ -40,7 +40,7 @@ http://127.0.0.1:8787/
 - `standalone/src/ui/` — ตาราง ปุ่ม toast และ layout
 - `standalone/src/api.js` — จุดเรียก Local Admin API
 - `admin-api/src/routes/admin.mjs` — คำสั่งที่อ่าน/แก้ไข Supabase
-- `admin-api/src/auth.mjs` — Supabase Email/Password, role และ local session
+- `admin-api/src/auth.mjs` — Supabase Username/Password, role และ local session
 
 หลังแก้ frontend ให้รัน:
 

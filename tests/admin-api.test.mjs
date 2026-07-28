@@ -72,6 +72,23 @@ function createFakeSupabase() {
       }));
       return;
     }
+    const authUserId = url.pathname.match(/^\/auth\/v1\/admin\/users\/([^/]+)$/)?.[1];
+    if (request.method === "GET" && authUserId) {
+      const emailById = {
+        "admin-id": "admin@example.com",
+        "customer-id": "customer@example.com",
+        "suspended-id": "suspended@example.com",
+      };
+      const email = emailById[authUserId];
+      if (!email) {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "User not found" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ id: authUserId, email }));
+      return;
+    }
     if (request.method === "HEAD" && url.pathname === "/rest/v1/profiles") {
       response.writeHead(200, { "Content-Range": "0-0/1" });
       response.end();
@@ -79,13 +96,23 @@ function createFakeSupabase() {
     }
     if (request.method === "GET" && url.pathname === "/rest/v1/profiles") {
       const id = (url.searchParams.get("id") || "").replace(/^eq\./, "");
+      const username = (url.searchParams.get("username") || "").replace(/^eq\./, "");
+      const idByUsername = {
+        test_admin: "admin-id",
+        test_customer: "customer-id",
+        test_suspended: "suspended-id",
+      };
+      const resolvedId = id || idByUsername[username];
       response.writeHead(200, { "Content-Type": "application/json" });
-      if (id) {
+      if (username && !resolvedId) {
+        response.end("[]");
+      } else if (resolvedId) {
         response.end(JSON.stringify([{
-          id,
-          display_name: id === "admin-id" ? "Test Admin" : "Test Customer",
-          role: id === "admin-id" || id === "suspended-id" ? "admin" : "customer",
-          status: id === "suspended-id" ? "suspended" : "active",
+          id: resolvedId,
+          display_name: resolvedId === "admin-id" ? "Test Admin" : "Test Customer",
+          username: Object.entries(idByUsername).find(([, value]) => value === resolvedId)?.[0],
+          role: resolvedId === "admin-id" || resolvedId === "suspended-id" ? "admin" : "customer",
+          status: resolvedId === "suspended-id" ? "suspended" : "active",
         }]));
       } else {
         response.end(JSON.stringify([{
@@ -150,21 +177,21 @@ test("local admin API accepts Supabase credentials only for role admin", async (
     const wrongLogin = await fetch(`${base}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password: "wrong" }),
+      body: JSON.stringify({ username: "test_admin", password: "wrong" }),
     });
     assert.equal(wrongLogin.status, 401);
 
     const customerLogin = await fetch(`${base}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "customer@example.com", password: "correct-pass" }),
+      body: JSON.stringify({ username: "test_customer", password: "correct-pass" }),
     });
     assert.equal(customerLogin.status, 403);
 
     const suspendedLogin = await fetch(`${base}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "suspended@example.com", password: "correct-pass" }),
+      body: JSON.stringify({ username: "test_suspended", password: "correct-pass" }),
     });
     assert.equal(suspendedLogin.status, 403);
 
@@ -174,14 +201,14 @@ test("local admin API accepts Supabase credentials only for role admin", async (
     const login = await fetch(`${base}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password: "correct-pass" }),
+      body: JSON.stringify({ username: "test_admin", password: "correct-pass" }),
     });
     assert.equal(login.status, 200);
     assert.match(login.headers.get("set-cookie") || "", /admin_session=/);
     const loginBody = await login.json();
     assert.equal(loginBody.viewer.role, "admin");
     assert.equal(loginBody.viewer.status, "active");
-    assert.equal(loginBody.viewer.email, "admin@example.com");
+    assert.equal(loginBody.viewer.username, "test_admin");
 
     const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
     const resources = [

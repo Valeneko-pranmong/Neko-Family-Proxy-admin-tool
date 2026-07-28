@@ -9,8 +9,8 @@ export function loginView(error = "") {
         <h1>เข้าสู่ระบบผู้ดูแล</h1>
         <p class="muted">ใช้บัญชี Supabase ที่มี role เป็น admin</p>
         <form id="login-form" class="stack">
-          <label for="admin-email">อีเมล</label>
-          <input id="admin-email" name="email" type="email" autocomplete="username" required />
+          <label for="admin-username">Username</label>
+          <input id="admin-username" name="username" type="text" autocomplete="username" required />
           <label for="admin-password">รหัสผ่าน</label>
           <input id="admin-password" name="password" type="password" autocomplete="current-password" required />
           <button class="button button-primary" type="submit">เข้าสู่ระบบ</button>
@@ -38,7 +38,7 @@ export function shellView(active, viewer) {
             .join("")}
         </nav>
         <div class="sidebar-footer">
-          <div class="admin-label">ผู้ดูแล: ${escapeHtml(viewer?.name || viewer?.email || "Admin")}</div>
+          <div class="admin-label">ผู้ดูแล: ${escapeHtml(viewer?.name || viewer?.username || "Admin")}</div>
           <button class="button button-ghost" data-action="logout">ออกจากระบบ</button>
         </div>
       </aside>
