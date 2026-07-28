@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
 import {
+  rpcPost,
   tableCount,
   tableGet,
   tablePatch,
@@ -247,14 +247,6 @@ async function getAudit() {
   }));
 }
 
-function randomHex(bytes = 16) {
-  return randomBytes(bytes).toString("hex").toUpperCase();
-}
-
-function hashCode(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 async function generateCoupons(body, actor) {
   const productCode = String(body.productCode || "").toLowerCase();
   const durationDays = Number(body.durationDays);
@@ -266,46 +258,21 @@ async function generateCoupons(body, actor) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
     throw new Error("Invalid quantity");
   }
-  const products = await tableGet("products", {
-    select: "id,code",
-    code: `eq.${productCode}`,
+  const rows = await rpcPost("admin_generate_coupon_batch", {
+    p_actor_id: actor.userId,
+    p_product_code: productCode,
+    p_duration_days: durationDays,
+    p_quantity: quantity,
+    p_expires_at: body.expiresAt ? String(body.expiresAt) : null,
+    p_note: body.note ? String(body.note).slice(0, 500) : null,
   });
-  const product = products[0];
-  if (!product) throw new Error("Product not found");
-
-  const codes = Array.from({ length: quantity }, () => {
-    const secret = randomHex(16);
-    return {
-      code: `NEKO-${secret.slice(0, 8)}-${secret.slice(8, 16)}-${secret.slice(
-        16,
-        24,
-      )}-${secret.slice(24, 32)}`,
-      code_hash: hashCode(`NEKO${secret}`),
-    };
-  });
-  const batches = await tablePost("coupon_batches", {
-    product_id: product.id,
-    duration_days: durationDays,
-    quantity,
-    expires_at: body.expiresAt ? String(body.expiresAt) : null,
-    note: body.note ? String(body.note).slice(0, 500) : null,
-    created_by: actor.userId,
-  });
-  const batch = batches[0];
-  if (!batch) throw new Error("Could not create coupon batch");
-  try {
-    await tablePost("coupons", codes.map((coupon) => ({ ...coupon, batch_id: batch.id })));
-  } catch (error) {
-    await tablePatch("coupon_batches", { id: `eq.${batch.id}` }, { revoked_at: new Date().toISOString() });
-    throw error;
+  if (!Array.isArray(rows) || rows.length !== quantity) {
+    throw new Error("Could not create coupon batch");
   }
-  await recordAudit("coupon_batch_created", actor, {
-    batch_id: batch.id,
-    product_id: product.id,
-    quantity,
-    duration_days: durationDays,
-  });
-  return { batch, codes: codes.map((coupon) => coupon.code) };
+  return {
+    batch: { id: rows[0].batch_id },
+    codes: rows.map((row) => row.code),
+  };
 }
 
 export async function getResource(resource) {
@@ -412,20 +379,11 @@ export async function performAction(body, actor) {
   }
   if (action === "revoke_batch") {
     const batchId = String(body.batchId);
-    requireUpdated(
-      await tablePatch(
-        "coupon_batches",
-        { id: `eq.${batchId}` },
-        { revoked_at: new Date().toISOString() },
-      ),
-      "Coupon batch not found",
-    );
-    await tablePatch(
-      "coupons",
-      { batch_id: `eq.${batchId}`, status: "eq.active" },
-      { status: "revoked" },
-    );
-    await recordAudit("coupon_batch_revoked", actor, { batch_id: batchId });
+    const revoked = await rpcPost("admin_revoke_coupon_batch", {
+      p_actor_id: actor.userId,
+      p_batch_id: batchId,
+    });
+    if (revoked !== true) throw new Error("Coupon batch not found");
     return {};
   }
   if (action === "generate_coupons") return generateCoupons(body, actor);

@@ -57,6 +57,13 @@ export const tablePatch = (table, query, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const rpcPost = (functionName, payload, schema = "launcher") =>
+  requestJson(`/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    schema,
+    body: JSON.stringify(payload),
+  });
+
 export const tableCount = async (table, query = {}) => {
   const response = await fetch(
     `${config.supabaseUrl}/rest/v1/${table}${queryString({
