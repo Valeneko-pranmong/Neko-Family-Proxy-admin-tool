@@ -174,7 +174,14 @@ export default async function handler(request, response) {
     }
     return sendError(response, 405, "Method not allowed");
   } catch (error) {
-    console.error(error);
-    return sendError(response, error.status || 500, error.message || "Server error");
+    const status = error?.status || 500;
+    const safeMessage =
+      status < 500 || error?.isSafe
+        ? error?.message || "Request failed"
+        : "Server error";
+    if (status >= 500) {
+      console.error(error?.isSafe ? safeMessage : error);
+    }
+    return sendError(response, status, safeMessage);
   }
 }
