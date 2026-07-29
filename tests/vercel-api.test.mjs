@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
 import {
@@ -9,27 +9,29 @@ import {
   hasCouponCodes,
   saveCouponCodes,
 } from "../standalone/src/coupon-archive.js";
-import { renderCoupons } from "../standalone/src/sections/render.js";
+import {
+  renderCoupons,
+  renderPasswordResetDialog,
+  renderUsers,
+} from "../standalone/src/sections/render.js";
 
 const port = 8799;
 const supabasePort = 8800;
 const base = `http://127.0.0.1:${port}`;
-
-async function waitForHealth() {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    try {
-      const response = await fetch(`${base}/api/health`);
-      if (response.ok) return;
-    } catch {
-      // The child process may still be starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error("Local Admin API did not start");
-}
+const adminId = "11111111-1111-4111-8111-111111111111";
+const customerId = "22222222-2222-4222-8222-222222222222";
+const suspendedId = "33333333-3333-4333-8333-333333333333";
+const missingId = "44444444-4444-4444-8444-444444444444";
 
 function createFakeSupabase() {
-  return createServer(async (request, response) => {
+  const control = {
+    adminActive: true,
+    failAudit: false,
+    failAuthUpdate: false,
+    failSessionRevoke: false,
+    events: [],
+  };
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url, `http://127.0.0.1:${supabasePort}`);
     if (request.method === "POST" && url.pathname === "/auth/v1/token") {
       let text = "";
@@ -42,10 +44,10 @@ function createFakeSupabase() {
       }
       const id =
         body.email === "admin@example.com"
-          ? "admin-id"
+          ? adminId
           : body.email === "suspended@example.com"
-            ? "suspended-id"
-            : "customer-id";
+            ? suspendedId
+            : customerId;
       const now = new Date().toISOString();
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
@@ -73,8 +75,8 @@ function createFakeSupabase() {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
         users: [
-          { id: "admin-id", email: "admin@example.com" },
-          { id: "customer-id", email: "customer@example.com" },
+          { id: adminId, email: "admin@example.com" },
+          { id: customerId, email: "customer@example.com" },
         ],
       }));
       return;
@@ -82,9 +84,9 @@ function createFakeSupabase() {
     const authUserId = url.pathname.match(/^\/auth\/v1\/admin\/users\/([^/]+)$/)?.[1];
     if (request.method === "GET" && authUserId) {
       const emailById = {
-        "admin-id": "admin@example.com",
-        "customer-id": "customer@example.com",
-        "suspended-id": "suspended@example.com",
+        [adminId]: "admin@example.com",
+        [customerId]: "customer@example.com",
+        [suspendedId]: "suspended@example.com",
       };
       const email = emailById[authUserId];
       if (!email) {
@@ -96,6 +98,24 @@ function createFakeSupabase() {
       response.end(JSON.stringify({ id: authUserId, email }));
       return;
     }
+    if (request.method === "PUT" && authUserId) {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      const body = JSON.parse(text);
+      control.events.push({
+        type: "auth_update",
+        userId: authUserId,
+        password: body.password,
+      });
+      if (control.failAuthUpdate) {
+        response.writeHead(502, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "Auth unavailable" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ id: authUserId, email: "customer@example.com" }));
+      return;
+    }
     if (request.method === "HEAD" && url.pathname === "/rest/v1/profiles") {
       response.writeHead(200, { "Content-Range": "0-0/1" });
       response.end();
@@ -105,32 +125,47 @@ function createFakeSupabase() {
       const id = (url.searchParams.get("id") || "").replace(/^eq\./, "");
       const username = (url.searchParams.get("username") || "").replace(/^eq\./, "");
       const idByUsername = {
-        test_admin: "admin-id",
-        test_customer: "customer-id",
-        test_suspended: "suspended-id",
+        test_admin: adminId,
+        test_customer: customerId,
+        test_suspended: suspendedId,
       };
-      const resolvedId = id || idByUsername[username];
+      const knownIds = new Set([adminId, customerId, suspendedId]);
+      const resolvedId = id ? (knownIds.has(id) ? id : null) : idByUsername[username];
       response.writeHead(200, { "Content-Type": "application/json" });
-      if (username && !resolvedId) {
+      if ((id || username) && !resolvedId) {
         response.end("[]");
       } else if (resolvedId) {
         response.end(JSON.stringify([{
           id: resolvedId,
-          display_name: resolvedId === "admin-id" ? "Test Admin" : "Test Customer",
+          display_name: resolvedId === adminId ? "Test Admin" : "Test Customer",
           username: Object.entries(idByUsername).find(([, value]) => value === resolvedId)?.[0],
-          role: resolvedId === "admin-id" || resolvedId === "suspended-id" ? "admin" : "customer",
-          status: resolvedId === "suspended-id" ? "suspended" : "active",
+          role: resolvedId === adminId || resolvedId === suspendedId ? "admin" : "customer",
+          status:
+            resolvedId === suspendedId || (resolvedId === adminId && !control.adminActive)
+              ? "suspended"
+              : "active",
         }]));
       } else {
-        response.end(JSON.stringify([{
-          id: "admin-id",
-          display_name: "Test Admin",
-          username: "test_admin",
-          role: "admin",
-          status: "active",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }]));
+        response.end(JSON.stringify([
+          {
+            id: adminId,
+            display_name: "Test Admin",
+            username: "test_admin",
+            role: "admin",
+            status: control.adminActive ? "active" : "suspended",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: customerId,
+            display_name: "Test Customer",
+            username: "test_customer",
+            role: "customer",
+            status: "active",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ]));
       }
       return;
     }
@@ -178,7 +213,7 @@ function createFakeSupabase() {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify([{
         id: 1,
-        user_id: "customer-id",
+        user_id: customerId,
         coupon_id: null,
         batch_id: "batch-id",
         succeeded: true,
@@ -187,13 +222,40 @@ function createFakeSupabase() {
       }]));
       return;
     }
+    if (request.method === "PATCH" && url.pathname === "/rest/v1/launcher_sessions") {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      control.events.push({ type: "session_revoke", body: JSON.parse(text) });
+      if (control.failSessionRevoke) {
+        response.writeHead(500, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "Database unavailable" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([{ id: "session-1" }, { id: "session-2" }]));
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/rest/v1/audit_events") {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      const body = JSON.parse(text);
+      control.events.push({ type: "audit", body });
+      if (control.failAudit) {
+        response.writeHead(500, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "internal-audit-detail" }));
+        return;
+      }
+      response.writeHead(201, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([body]));
+      return;
+    }
     const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([^/]+)$/)?.[1];
     if (request.method === "POST" && rpc) {
       let text = "";
       for await (const chunk of request) text += chunk;
       const body = JSON.parse(text);
       assert.equal(request.headers["content-profile"], "launcher");
-      assert.equal(body.p_actor_id, "admin-id");
+      assert.equal(body.p_actor_id, adminId);
       response.writeHead(200, { "Content-Type": "application/json" });
       if (rpc === "admin_generate_coupon_batch") {
         response.end(JSON.stringify(
@@ -233,26 +295,26 @@ function createFakeSupabase() {
     response.writeHead(404, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ message: "Not found" }));
   });
+  server.control = control;
+  return server;
 }
 
-test("local admin API accepts Supabase credentials only for role admin", async () => {
+test("Vercel API accepts Supabase credentials only for role admin", async () => {
   const fakeSupabase = createFakeSupabase();
   fakeSupabase.listen(supabasePort, "127.0.0.1");
   await once(fakeSupabase, "listening");
-  const child = spawn(process.execPath, ["admin-api/src/server.mjs"], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      ADMIN_HOST: "127.0.0.1",
-      ADMIN_PORT: String(port),
-      SUPABASE_URL: `http://127.0.0.1:${supabasePort}`,
-      SUPABASE_SECRET_KEY: "test-secret",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  process.env.SUPABASE_URL = `http://127.0.0.1:${supabasePort}`;
+  process.env.SUPABASE_SECRET_KEY = "test-secret";
+  process.env.ADMIN_SESSION_SECRET =
+    "test-session-secret-that-is-long-enough-for-hmac-signing";
+  const { default: handler } = await import(
+    `../api/index.mjs?test=${Date.now()}`
+  );
+  const apiServer = createServer(handler);
+  apiServer.listen(port, "127.0.0.1");
+  await once(apiServer, "listening");
 
   try {
-    await waitForHealth();
     const health = await fetch(`${base}/api/health`);
     assert.equal(health.status, 200);
 
@@ -279,6 +341,16 @@ test("local admin API accepts Supabase credentials only for role admin", async (
 
     const unauthenticated = await fetch(`${base}/api/admin?resource=overview`);
     assert.equal(unauthenticated.status, 401);
+    const unauthenticatedReset = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: "test_customer",
+      }),
+    });
+    assert.equal(unauthenticatedReset.status, 401);
 
     const login = await fetch(`${base}/api/login`, {
       method: "POST",
@@ -335,18 +407,180 @@ test("local admin API accepts Supabase credentials only for role admin", async (
     assert.equal(generated.status, 200);
     assert.deepEqual((await generated.json()).codes, ["NEKO-TEST-1", "NEKO-TEST-2"]);
 
+    const mismatch = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: "wrong_customer",
+      }),
+    });
+    assert.equal(mismatch.status, 400);
+
+    const missingTarget = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: missingId,
+        confirmUsername: "missing_customer",
+      }),
+    });
+    assert.equal(missingTarget.status, 404);
+
+    const selfReset = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: adminId,
+        confirmUsername: "test_admin",
+      }),
+    });
+    assert.equal(selfReset.status, 403);
+
+    const adminTarget = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: suspendedId,
+        confirmUsername: "test_suspended",
+      }),
+    });
+    assert.equal(adminTarget.status, 403);
+
+    const beforeSuccess = fakeSupabase.control.events.length;
+    const reset = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: " TEST_CUSTOMER ",
+      }),
+    });
+    assert.equal(reset.status, 200);
+    assert.equal(reset.headers.get("cache-control"), "no-store");
+    const resetBody = await reset.json();
+    assert.match(resetBody.temporaryPassword, /[A-Z]/);
+    assert.match(resetBody.temporaryPassword, /[a-z]/);
+    assert.match(resetBody.temporaryPassword, /[0-9]/);
+    assert.match(resetBody.temporaryPassword, /[^A-Za-z0-9]/);
+    assert.ok(resetBody.temporaryPassword.length >= 16);
+    const resetEvents = fakeSupabase.control.events.slice(beforeSuccess);
+    assert.deepEqual(resetEvents.map((event) => event.type), [
+      "session_revoke",
+      "auth_update",
+      "audit",
+    ]);
+    assert.equal(resetEvents[2].body.event_type, "admin_password_reset");
+    assert.equal(resetEvents[2].body.metadata.sessions_revoked, 2);
+    assert.deepEqual(Object.keys(resetEvents[2].body.metadata).sort(), [
+      "sessions_revoked",
+      "target_user_id",
+      "target_username",
+    ]);
+    assert.doesNotMatch(
+      JSON.stringify(resetEvents[2].body.metadata),
+      new RegExp(resetBody.temporaryPassword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+
+    fakeSupabase.control.failSessionRevoke = true;
+    const eventsBeforeRevokeFailure = fakeSupabase.control.events.length;
+    const revokeFailure = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: "test_customer",
+      }),
+    });
+    assert.equal(revokeFailure.status, 502);
+    assert.equal(
+      fakeSupabase.control.events.slice(eventsBeforeRevokeFailure).some(
+        (event) => event.type === "auth_update",
+      ),
+      false,
+    );
+    assert.equal("temporaryPassword" in await revokeFailure.json(), false);
+    fakeSupabase.control.failSessionRevoke = false;
+
+    fakeSupabase.control.failAuthUpdate = true;
+    const authFailure = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: "test_customer",
+      }),
+    });
+    assert.equal(authFailure.status, 502);
+    assert.equal("temporaryPassword" in await authFailure.json(), false);
+    fakeSupabase.control.failAuthUpdate = false;
+
+    fakeSupabase.control.failAudit = true;
+    const auditFailure = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reset_user_password",
+        userId: customerId,
+        confirmUsername: "test_customer",
+      }),
+    });
+    assert.equal(auditFailure.status, 500);
+    const auditFailureBody = await auditFailure.json();
+    assert.equal("temporaryPassword" in auditFailureBody, false);
+    assert.doesNotMatch(JSON.stringify(auditFailureBody), /internal-audit-detail/);
+    fakeSupabase.control.failAudit = false;
+
     const deleted = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete_batch", batchId: "generated-batch-id" }),
     });
     assert.equal(deleted.status, 200);
+
+    fakeSupabase.control.adminActive = false;
+    const inactiveSession = await fetch(`${base}/api/admin?resource=overview`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(inactiveSession.status, 401);
+    fakeSupabase.control.adminActive = true;
   } finally {
-    child.kill();
-    await once(child, "close").catch(() => {});
+    apiServer.close();
+    await once(apiServer, "close").catch(() => {});
     fakeSupabase.close();
     await once(fakeSupabase, "close").catch(() => {});
   }
+});
+
+test("password reset controls are limited to customers and clearable from the DOM", () => {
+  const users = renderUsers([
+    { id: customerId, username: "test_customer", role: "customer", status: "active" },
+    { id: adminId, username: "test_admin", role: "admin", status: "active" },
+  ]);
+  assert.equal((users.match(/data-action="reset_user_password"/g) || []).length, 1);
+  assert.match(users, new RegExp(`data-id="${customerId}"`));
+
+  const success = renderPasswordResetDialog({
+    userId: customerId,
+    username: "test_customer",
+    phase: "success",
+    temporaryPassword: "Temp-Password-123!",
+  });
+  assert.match(success, /Temp-Password-123!/);
+  assert.match(success, /data-action="copy_temporary_password"/);
+  assert.equal(renderPasswordResetDialog(null), "");
+});
+
+test("standalone bundle contains no server credential", () => {
+  const bundle = readFileSync("standalone/dist/neko-control.html", "utf8");
+  assert.doesNotMatch(bundle, /SUPABASE_SECRET_KEY|test-secret/);
 });
 
 test("coupon rows expose safe management actions", () => {

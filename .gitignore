@@ -4,8 +4,6 @@
 # local credentials
 /.env
 /.env.local
-/admin-api/.env
-/admin-api/.env.local
 
 # test output
 /coverage/

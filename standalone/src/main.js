@@ -7,16 +7,22 @@ import {
 } from "./coupon-archive.js";
 import { createSessionController } from "./session.js";
 import { createStore } from "./state.js";
-import { couponForm, renderSection } from "./sections/render.js";
+import {
+  couponForm,
+  renderPasswordResetDialog,
+  renderSection,
+} from "./sections/render.js";
 import { loginView, shellView } from "./ui/layout.js";
 import { toast } from "./ui/toast.js";
 
 const root = document.querySelector("#app");
 const store = createStore();
 let loginError = "";
+let passwordResetDialog = null;
 
 function render() {
   if (!session.authenticated) {
+    passwordResetDialog = null;
     root.innerHTML = loginView(loginError);
     return;
   }
@@ -41,6 +47,7 @@ function render() {
       if (host) host.innerHTML = couponForm();
     }
   }
+  root.insertAdjacentHTML("beforeend", renderPasswordResetDialog(passwordResetDialog));
 }
 
 async function load(section = store.state.active) {
@@ -65,6 +72,18 @@ async function load(section = store.state.active) {
 
 async function action(name, id) {
   const row = (store.state.data[store.state.active] || []).find((item) => item.id === id);
+  if (name === "reset_user_password") {
+    if (!row || row.role !== "customer") return;
+    passwordResetDialog = {
+      userId: row.id,
+      username: String(row.username || "").trim().toLowerCase(),
+      phase: "confirm",
+      error: "",
+      temporaryPassword: "",
+    };
+    render();
+    return;
+  }
   if (name === "toggle_user_status") {
     const nextStatus = row?.status === "active" ? "suspended" : "active";
     if (!window.confirm(`ยืนยันเปลี่ยนสถานะสมาชิกเป็น ${nextStatus} หรือไม่`)) return;
@@ -95,6 +114,51 @@ async function action(name, id) {
   if (payload) {
     const succeeded = await run(payload);
     if (succeeded && name === "delete_batch") deleteCouponCodes(id);
+  }
+}
+
+function closePasswordResetDialog() {
+  if (passwordResetDialog) {
+    passwordResetDialog.temporaryPassword = "";
+    passwordResetDialog.error = "";
+  }
+  passwordResetDialog = null;
+  render();
+}
+
+async function submitPasswordReset(form) {
+  if (!passwordResetDialog || passwordResetDialog.phase === "submitting") return;
+  const formData = new FormData(form);
+  const confirmUsername = String(formData.get("confirmUsername") || "")
+    .trim()
+    .toLowerCase();
+  if (confirmUsername !== passwordResetDialog.username) {
+    passwordResetDialog.error = "Username ที่ยืนยันไม่ตรงกับบัญชี";
+    render();
+    return;
+  }
+  passwordResetDialog.phase = "submitting";
+  passwordResetDialog.error = "";
+  render();
+  try {
+    const result = await api.runAction({
+      action: "reset_user_password",
+      userId: passwordResetDialog.userId,
+      confirmUsername,
+    });
+    passwordResetDialog.phase = "success";
+    passwordResetDialog.temporaryPassword = String(result.temporaryPassword || "");
+    if (!passwordResetDialog.temporaryPassword) {
+      throw new Error("เซิร์ฟเวอร์ไม่ส่งรหัสผ่านชั่วคราวกลับมา");
+    }
+    render();
+    await load("users");
+  } catch (error) {
+    passwordResetDialog.phase = "confirm";
+    passwordResetDialog.temporaryPassword = "";
+    passwordResetDialog.error =
+      error instanceof Error ? error.message : "ตั้งรหัสผ่านใหม่ไม่สำเร็จ";
+    render();
   }
 }
 
@@ -175,6 +239,8 @@ root.addEventListener("submit", async (event) => {
     }
   } else if (event.target.id === "coupon-form") {
     await submitCoupon(event.target);
+  } else if (event.target.id === "password-reset-form") {
+    await submitPasswordReset(event.target);
   }
 });
 
@@ -182,13 +248,30 @@ root.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-section], [data-action]");
   if (!target) return;
   if (target.dataset.section) {
+    closePasswordResetDialog();
     store.patch({ active: target.dataset.section, couponFormOpen: false });
     await load(target.dataset.section);
     return;
   }
   const name = target.dataset.action;
   if (name === "logout") {
+    passwordResetDialog = null;
     await session.logout().catch(() => {});
+    return;
+  }
+  if (name === "close_password_reset") {
+    closePasswordResetDialog();
+    return;
+  }
+  if (name === "copy_temporary_password") {
+    const password = passwordResetDialog?.temporaryPassword || "";
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      toast("คัดลอกรหัสผ่านชั่วคราวแล้ว", "success");
+    } catch {
+      toast("คัดลอกอัตโนมัติไม่สำเร็จ กรุณาเลือกและคัดลอกรหัสด้วยตนเอง", "error");
+    }
     return;
   }
   if (name === "show-coupon-form") {

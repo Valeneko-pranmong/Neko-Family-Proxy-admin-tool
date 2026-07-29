@@ -1,9 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { authenticateAdmin } from "../admin-api/src/auth.mjs";
-import { getResource, performAction } from "../admin-api/src/routes/admin.mjs";
-import { tableGet } from "../admin-api/src/supabase.mjs";
+import { authenticateAdmin } from "../server/auth.mjs";
+import { getResource, performAction } from "../server/admin.mjs";
+import { tableGet } from "../server/supabase.mjs";
 
-const sessionTtlMs = Number(process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000);
+const configuredSessionTtlMs = Number(
+  process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000,
+);
+const sessionTtlMs =
+  Number.isFinite(configuredSessionTtlMs)
+  && configuredSessionTtlMs >= 5 * 60 * 1000
+  && configuredSessionTtlMs <= 24 * 60 * 60 * 1000
+    ? configuredSessionTtlMs
+    : 8 * 60 * 60 * 1000;
 
 function sendJson(response, status, body, headers = {}) {
   response.writeHead(status, {
@@ -39,7 +47,9 @@ async function bodyJson(request) {
 
 function sessionSecret() {
   const secret = process.env.ADMIN_SESSION_SECRET?.trim();
-  if (!secret) throw new Error("Missing ADMIN_SESSION_SECRET");
+  if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
+    throw new Error("ADMIN_SESSION_SECRET must contain at least 32 bytes");
+  }
   return secret;
 }
 
@@ -78,11 +88,18 @@ async function getSession(token) {
     return null;
   }
 
-  const profiles = await tableGet("profiles", {
-    select: "id,display_name,username,role,status",
-    id: `eq.${decoded.viewer.userId}`,
-    limit: "1",
-  });
+  let profiles;
+  try {
+    profiles = await tableGet("profiles", {
+      select: "id,display_name,username,role,status",
+      id: `eq.${decoded.viewer.userId}`,
+      limit: "1",
+    });
+  } catch {
+    const error = new Error("Could not validate admin session");
+    error.status = 502;
+    throw error;
+  }
   const profile = profiles[0];
   if (!profile || profile.role !== "admin" || profile.status !== "active") return null;
   return {

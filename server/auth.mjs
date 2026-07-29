@@ -1,9 +1,6 @@
-import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "./config.mjs";
 import { authAdminGet, tableGet } from "./supabase.mjs";
-
-const sessions = new Map();
 
 function authError(message, status) {
   const error = new Error(message);
@@ -66,33 +63,3 @@ export async function authenticateAdmin(username, password) {
   };
 }
 
-export function createSession(viewer) {
-  const token = randomBytes(32).toString("base64url");
-  sessions.set(token, { expiresAt: Date.now() + config.sessionTtlMs, viewer });
-  return token;
-}
-
-export function getSession(token) {
-  if (!token) return null;
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
-    return null;
-  }
-  return session;
-}
-
-export function deleteSession(token) {
-  if (token) sessions.delete(token);
-}
-
-export function sessionCookie(token) {
-  return `admin_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(
-    config.sessionTtlMs / 1000,
-  )}`;
-}
-
-export function clearSessionCookie() {
-  return "admin_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0";
-}

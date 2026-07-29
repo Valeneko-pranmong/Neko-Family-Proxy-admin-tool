@@ -1,10 +1,23 @@
+import { randomInt } from "node:crypto";
 import {
   rpcPost,
   tableCount,
   tableGet,
   tablePatch,
   tablePost,
-} from "../supabase.mjs";
+  updateAuthUserPassword,
+} from "./supabase.mjs";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
+
+function actionError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  error.isSafe = true;
+  return error;
+}
 
 async function listProfiles() {
   return tableGet("profiles", {
@@ -22,7 +35,7 @@ function requireUpdated(rows, message) {
   return rows;
 }
 
-async function recordAudit(eventType, actor, metadata = {}) {
+async function recordAudit(eventType, actor, metadata = {}, { required = false } = {}) {
   try {
     await tablePost("audit_events", {
       user_id: actor?.userId ?? null,
@@ -30,8 +43,115 @@ async function recordAudit(eventType, actor, metadata = {}) {
       metadata,
     });
   } catch (error) {
+    if (required) {
+      console.error(`Could not record ${eventType} audit event`);
+      throw error;
+    }
     console.error(`Could not record ${eventType} audit event`, error);
   }
+}
+
+export function generateTemporaryPassword(length = 20) {
+  if (!Number.isInteger(length) || length < 16 || length > 128) {
+    throw new Error("Invalid temporary password length");
+  }
+  const groups = [
+    "ABCDEFGHJKLMNPQRSTUVWXYZ",
+    "abcdefghijkmnopqrstuvwxyz",
+    "23456789",
+    "!@#$%&*+-=?",
+  ];
+  const characters = groups.map((group) => group[randomInt(group.length)]);
+  const all = groups.join("");
+  while (characters.length < length) {
+    characters.push(all[randomInt(all.length)]);
+  }
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapWith = randomInt(index + 1);
+    [characters[index], characters[swapWith]] = [
+      characters[swapWith],
+      characters[index],
+    ];
+  }
+  return characters.join("");
+}
+
+function normalizeUsername(value) {
+  return String(value || "").normalize("NFKC").trim().toLowerCase();
+}
+
+async function resetUserPassword(body, actor) {
+  if (typeof body.userId !== "string") throw actionError("รหัสผู้ใช้ไม่ถูกต้อง");
+  if (typeof body.confirmUsername !== "string") {
+    throw actionError("Username ที่ใช้ยืนยันไม่ถูกต้อง");
+  }
+  const userId = body.userId.trim();
+  const confirmUsername = normalizeUsername(body.confirmUsername);
+  if (!UUID_PATTERN.test(userId)) throw actionError("รหัสผู้ใช้ไม่ถูกต้อง");
+  if (!USERNAME_PATTERN.test(confirmUsername)) {
+    throw actionError("Username ที่ใช้ยืนยันไม่ถูกต้อง");
+  }
+  if (userId === actor.userId) {
+    throw actionError("ไม่สามารถตั้งรหัสผ่านใหม่ให้บัญชีผู้ดูแลที่กำลังใช้งาน", 403);
+  }
+
+  let profiles;
+  try {
+    profiles = await tableGet("profiles", {
+      select: "id,username,role,status",
+      id: `eq.${userId}`,
+      limit: "1",
+    });
+  } catch {
+    throw actionError("ตรวจสอบบัญชีสมาชิกไม่สำเร็จ", 502);
+  }
+  const target = profiles[0];
+  if (!target) throw actionError("ไม่พบบัญชีสมาชิก", 404);
+  const targetUsername = normalizeUsername(target.username);
+  if (targetUsername !== confirmUsername) {
+    throw actionError("Username ที่ยืนยันไม่ตรงกับบัญชี");
+  }
+  if (target.role !== "customer") {
+    throw actionError("ตั้งรหัสผ่านใหม่ได้เฉพาะบัญชีลูกค้า", 403);
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const revokedAt = new Date().toISOString();
+  let revokedSessions;
+  try {
+    revokedSessions = await tablePatch(
+      "launcher_sessions",
+      { user_id: `eq.${userId}`, revoked_at: "is.null" },
+      { revoked_at: revokedAt },
+    );
+  } catch {
+    throw actionError("ยกเลิก Launcher session ไม่สำเร็จ จึงยังไม่เปลี่ยนรหัสผ่าน", 502);
+  }
+
+  try {
+    await updateAuthUserPassword(userId, temporaryPassword);
+  } catch {
+    throw actionError("เปลี่ยนรหัสผ่านใน Supabase Auth ไม่สำเร็จ", 502);
+  }
+
+  try {
+    await recordAudit(
+      "admin_password_reset",
+      actor,
+      {
+        target_user_id: userId,
+        target_username: targetUsername,
+        sessions_revoked: Array.isArray(revokedSessions) ? revokedSessions.length : 0,
+      },
+      { required: true },
+    );
+  } catch {
+    throw actionError(
+      "รหัสผ่านถูกเปลี่ยนแล้ว แต่บันทึก Audit ไม่สำเร็จ ห้ามกดซ้ำ กรุณาติดต่อผู้ดูแลระบบ",
+      500,
+    );
+  }
+  return { temporaryPassword };
 }
 
 async function getUsers() {
@@ -293,6 +413,9 @@ export async function getResource(resource) {
 
 export async function performAction(body, actor) {
   const action = String(body.action || "");
+  if (action === "reset_user_password") {
+    return resetUserPassword(body, actor);
+  }
   if (action === "set_user_status") {
     const status = String(body.status);
     if (!["active", "suspended", "banned"].includes(status)) throw new Error("Invalid status");

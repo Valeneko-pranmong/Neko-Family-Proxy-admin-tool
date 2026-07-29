@@ -41,11 +41,64 @@ export function renderOverview(data = {}) {
 }
 
 export function renderUsers(rows = []) {
-  const body = rows.map(
-    (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.role)}<td>${statusBadge(row.status)}</td>${dateCell(row.updated_at)}<td class="actions">${actionButton("toggle_user_status", row.id, row.status === "active" ? "ระงับ" : "เปิดใช้", row.status === "active" ? "button-danger" : "button-success")}</td></tr>`,
-  );
+  const body = rows.map((row) => {
+    const resetAction =
+      row.role === "customer"
+        ? actionButton("reset_user_password", row.id, "ตั้งรหัสผ่านใหม่", "button-warning")
+        : "";
+    const statusAction = actionButton(
+      "toggle_user_status",
+      row.id,
+      row.status === "active" ? "ระงับ" : "เปิดใช้",
+      row.status === "active" ? "button-danger" : "button-success",
+    );
+    return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.role)}<td>${statusBadge(row.status)}</td>${dateCell(row.updated_at)}<td class="actions">${resetAction} ${statusAction}</td></tr>`;
+  });
   return `${heading("สมาชิก", "ข้อมูลบัญชีจาก public.profiles")}${table(["Username", "ชื่อแสดง", "บทบาท", "สถานะ", "แก้ไขล่าสุด", "คำสั่ง"], body)}`;
+}
+
+export function renderPasswordResetDialog(state) {
+  if (!state) return "";
+  const username = escapeHtml(state.username);
+  const error = state.error
+    ? `<div class="form-error" role="alert">${escapeHtml(state.error)}</div>`
+    : "";
+  if (state.phase === "success") {
+    return `
+      <div class="modal-backdrop" role="presentation">
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+          <h2 id="reset-title">รหัสผ่านชั่วคราวของ ${username}</h2>
+          <p class="muted">รหัสนี้แสดงเพียงครั้งเดียว ส่งให้ลูกค้าผ่านช่องทางส่วนตัว และปิดหน้าต่างเมื่อคัดลอกเสร็จ</p>
+          <code class="temporary-password">${escapeHtml(state.temporaryPassword)}</code>
+          <div class="modal-actions">
+            <button class="button button-primary" type="button" data-action="copy_temporary_password">คัดลอก</button>
+            <button class="button" type="button" data-action="close_password_reset">ปิดและล้างรหัส</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+  const busy = state.phase === "submitting";
+  return `
+    <div class="modal-backdrop" role="presentation">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+        <h2 id="reset-title">ตั้งรหัสผ่านใหม่</h2>
+        <p>ระบบจะยกเลิก Launcher session เดิมทั้งหมดของ <strong>${username}</strong> แล้วสร้างรหัสผ่านชั่วคราวแบบสุ่ม</p>
+        <form id="password-reset-form" class="stack">
+          <input name="userId" type="hidden" value="${escapeHtml(state.userId)}" />
+          <label>
+            พิมพ์ Username “${username}” เพื่อยืนยัน
+            <input name="confirmUsername" type="text" maxlength="32" autocomplete="off" required ${busy ? "disabled" : ""} />
+          </label>
+          ${error}
+          <div class="modal-actions">
+            <button class="button button-warning" type="submit" ${busy ? "disabled" : ""}>${busy ? "กำลังตั้งรหัสผ่าน…" : "ยืนยันและตั้งรหัสผ่านใหม่"}</button>
+            <button class="button" type="button" data-action="close_password_reset" ${busy ? "disabled" : ""}>ยกเลิก</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
 }
 
 export function renderProducts(rows = []) {

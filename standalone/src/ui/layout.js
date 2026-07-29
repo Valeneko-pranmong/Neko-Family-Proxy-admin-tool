@@ -27,7 +27,7 @@ export function shellView(active, viewer) {
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-mark">NEKO CONTROL</div>
-          <div class="brand-subtitle">Local Admin Console</div>
+          <div class="brand-subtitle">Vercel Admin Console</div>
         </div>
         <nav class="nav" aria-label="เมนูผู้ดูแล">
           ${sections
@@ -48,7 +48,7 @@ export function shellView(active, viewer) {
             <div class="eyebrow">Neko Family Proxy</div>
             <h1>Control Room</h1>
           </div>
-          <span class="local-chip">LOCAL ONLY</span>
+          <span class="deployment-chip">VERCEL SECURE</span>
         </header>
         <div id="content"></div>
       </main>

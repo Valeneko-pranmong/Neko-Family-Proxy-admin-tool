@@ -1,4 +1,13 @@
+import { createClient } from "@supabase/supabase-js";
 import { config } from "./config.mjs";
+
+const supabaseAdmin = createClient(config.supabaseUrl, config.supabaseSecretKey, {
+  auth: {
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    persistSession: false,
+  },
+});
 
 function headersFor(schema) {
   const headers = {
@@ -83,3 +92,15 @@ export const tableCount = async (table, query = {}) => {
 
 export const authAdminGet = (path, query = {}) =>
   requestJson(`/auth/v1/admin/${path}${queryString(query)}`);
+
+export async function updateAuthUserPassword(userId, password) {
+  let result;
+  try {
+    result = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+  } catch {
+    throw new Error("ไม่สามารถเชื่อมต่อ Supabase Auth ได้");
+  }
+  if (result.error || !result.data?.user || result.data.user.id !== userId) {
+    throw new Error("Supabase Auth ปฏิเสธการเปลี่ยนรหัสผ่าน");
+  }
+}
