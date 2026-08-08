@@ -52,6 +52,20 @@ function queryString(query) {
 export const tableGet = (table, query = {}) =>
   requestJson(`/rest/v1/${table}${queryString(query)}`);
 
+export async function tableGetAll(table, query = {}, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await tableGet(table, {
+      ...query,
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+    if (!Array.isArray(page)) throw new Error("Invalid Supabase table response");
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export const tablePost = (table, payload) =>
   requestJson(`/rest/v1/${table}`, {
     method: "POST",

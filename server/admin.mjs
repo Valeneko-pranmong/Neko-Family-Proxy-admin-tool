@@ -3,6 +3,7 @@ import {
   rpcPost,
   tableCount,
   tableGet,
+  tableGetAll,
   tablePatch,
   tablePost,
   updateAuthUserPassword,
@@ -275,20 +276,43 @@ async function getRedemptions() {
 }
 
 async function getInstallations() {
-  const [installations, profiles] = await Promise.all([
+  const [installations, profiles, activeSessions] = await Promise.all([
     tableGet("installations", {
-      select: "id,user_id,display_name,last_seen_at,revoked_at,created_at",
+      select:
+        "id,user_id,installation_key_hash,display_name,last_seen_at,revoked_at,created_at",
       order: "last_seen_at.desc",
       limit: "1000",
     }),
     listProfiles(),
+    tableGetAll("launcher_sessions", {
+      select: "id,installation_id,created_at,last_seen_at",
+      revoked_at: "is.null",
+    }),
   ]);
   const usernames = usernamesByUser(profiles);
-  return installations.map((installation) => ({
-    ...installation,
-    username: usernames.get(installation.user_id) ?? "—",
-    status: installation.revoked_at ? "revoked" : "active",
-  }));
+  const activeSessionsByInstallation = new Map(
+    activeSessions.map((session) => [session.installation_id, session]),
+  );
+  return installations.map((installation) => {
+    const activeSession = activeSessionsByInstallation.get(installation.id);
+    const installationHash =
+      typeof installation.installation_key_hash === "string"
+        ? installation.installation_key_hash
+        : "";
+    const installationHashMasked = installationHash.length >= 8
+      ? `${installationHash.slice(0, 4)}…${installationHash.slice(-4)}`
+      : "—";
+    const { installation_key_hash: _installationKeyHash, ...safeInstallation } = installation;
+    return {
+      ...safeInstallation,
+      installation_key_hash_masked: installationHashMasked,
+      username: usernames.get(installation.user_id) ?? "—",
+      status: installation.revoked_at ? "revoked" : "remembered",
+      owns_active_session: Boolean(activeSession),
+      active_session_created_at: activeSession?.created_at ?? null,
+      active_session_last_seen_at: activeSession?.last_seen_at ?? null,
+    };
+  });
 }
 
 async function getSessions() {

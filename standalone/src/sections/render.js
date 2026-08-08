@@ -104,17 +104,17 @@ export function renderPasswordResetDialog(state) {
 export function renderProducts(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.code, "primary")}${cell(row.name)}${cell(row.max_devices)}<td>${statusBadge(row.is_active ? "active" : "inactive")}</td>${dateCell(row.created_at)}</tr>`,
+      `<tr>${cell(row.code, "primary")}${cell(row.name)}<td>${statusBadge(row.is_active ? "active" : "inactive")}</td>${dateCell(row.created_at)}</tr>`,
   );
-  return `${heading("สินค้า", "รายการสินค้าและจำนวนอุปกรณ์ที่รองรับ")}${table(["รหัสสินค้า", "ชื่อ", "อุปกรณ์สูงสุด", "สถานะ", "สร้างเมื่อ"], body)}`;
+  return `${heading("สินค้า", "บัญชีจดจำได้หลายเครื่อง แต่ใช้งานพร้อมกันได้หนึ่งเครื่อง")}${table(["รหัสสินค้า", "ชื่อ", "สถานะ", "สร้างเมื่อ"], body)}`;
 }
 
 export function renderLicenses(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.product_code)}<td>${statusBadge(row.status)}</td>${dateCell(row.valid_from)}${dateCell(row.valid_until)}${cell(row.max_devices ?? "ตามสินค้า")}<td class="actions">${actionButton("extend_license", row.id, "ต่ออายุ")} ${row.status !== "revoked" ? actionButton("revoke_license", row.id, "ยกเลิก", "button-danger") : ""}</td></tr>`,
+      `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.product_code)}<td>${statusBadge(row.status)}</td>${dateCell(row.valid_from)}${dateCell(row.valid_until)}<td class="actions">${actionButton("extend_license", row.id, "ต่ออายุ")} ${row.status !== "revoked" ? actionButton("revoke_license", row.id, "ยกเลิก", "button-danger") : ""}</td></tr>`,
   );
-  return `${heading("สิทธิ์ใช้งาน", "ต่ออายุหรือยกเลิก License")}${table(["สมาชิก", "สินค้า", "รหัสสินค้า", "สถานะ", "เริ่มใช้", "หมดอายุ", "อุปกรณ์", "คำสั่ง"], body)}`;
+  return `${heading("สิทธิ์ใช้งาน", "ต่ออายุหรือยกเลิก License การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "สินค้า", "รหัสสินค้า", "สถานะ", "เริ่มใช้", "หมดอายุ", "คำสั่ง"], body)}`;
 }
 
 export function renderCoupons(rows = []) {
@@ -162,9 +162,9 @@ export function renderSessions(rows = []) {
 export function renderInstallations(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.id.slice(0, 8))}<td>${statusBadge(row.status)}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_installation", row.id, "เพิกถอนอุปกรณ์", "button-danger")}</td></tr>`,
+      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge(row.status)}</td><td>${row.owns_active_session ? statusBadge("เครื่องที่กำลังใช้งาน") : "ประวัติการติดตั้ง"}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.revoked_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_installation", row.id, "บล็อกเฉพาะการติดตั้งนี้", "button-danger")}</td></tr>`,
   );
-  return `${heading("อุปกรณ์", "อุปกรณ์ที่ลงทะเบียนและเวลาใช้งานล่าสุด")}${table(["สมาชิก", "ชื่ออุปกรณ์", "รหัส", "สถานะ", "สร้างเมื่อ", "ใช้งานล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("การติดตั้งที่จดจำไว้", "บัญชีจดจำได้หลายเครื่อง แต่มีเซสชันปัจจุบันได้หนึ่งเครื่อง การเข้าใช้เครื่องใหม่จะแทนที่เครื่องเดิม หากต้องการบล็อกทุกเครื่อง ให้ระงับบัญชีแทน")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "บล็อกเมื่อ", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
 }
 
 export function renderRedemptions(rows = []) {

@@ -11,7 +11,10 @@ import {
 } from "../standalone/src/coupon-archive.js";
 import {
   renderCoupons,
+  renderInstallations,
+  renderLicenses,
   renderPasswordResetDialog,
+  renderProducts,
   renderUsers,
 } from "../standalone/src/sections/render.js";
 
@@ -178,6 +181,73 @@ function createFakeSupabase() {
         max_devices: 1,
         is_active: true,
         created_at: new Date().toISOString(),
+      }]));
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/rest/v1/installations") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify([
+        {
+          id: "installation-id",
+          user_id: customerId,
+          display_name: "Office PC",
+          installation_key_hash: "a".repeat(64),
+          last_seen_at: "2026-08-08T00:00:00.000Z",
+          revoked_at: null,
+          created_at: "2026-08-01T00:00:00.000Z",
+        },
+        {
+          id: "legacy-installation-id",
+          user_id: customerId,
+          display_name: "Legacy PC",
+          installation_key_hash: null,
+          last_seen_at: "2026-07-08T00:00:00.000Z",
+          revoked_at: "2026-07-09T00:00:00.000Z",
+          created_at: "2026-07-01T00:00:00.000Z",
+        },
+      ]));
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/rest/v1/launcher_sessions") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const activeOnly = url.searchParams.get("revoked_at") === "is.null";
+      if (activeOnly && offset === 0) {
+        response.end(JSON.stringify(Array.from({ length: 1000 }, (_, index) => ({
+          id: `historical-session-${index}`,
+          user_id: customerId,
+          installation_id: `historical-installation-${index}`,
+          license_id: "license-id",
+          created_at: "2026-08-07T00:00:00.000Z",
+          last_seen_at: "2026-08-07T00:01:00.000Z",
+          revoked_at: null,
+        }))));
+        return;
+      }
+      if (activeOnly && offset === 1000) {
+        response.end(JSON.stringify([{
+          id: "session-id",
+          user_id: customerId,
+          installation_id: "installation-id",
+          license_id: "license-id",
+          created_at: "2026-08-08T00:00:00.000Z",
+          last_seen_at: "2026-08-08T00:01:00.000Z",
+          revoked_at: null,
+        }]));
+        return;
+      }
+      if (activeOnly) {
+        response.end("[]");
+        return;
+      }
+      response.end(JSON.stringify([{
+        id: "session-id",
+        user_id: customerId,
+        installation_id: "installation-id",
+        license_id: "license-id",
+        created_at: "2026-08-08T00:00:00.000Z",
+        last_seen_at: "2026-08-08T00:01:00.000Z",
+        revoked_at: null,
       }]));
       return;
     }
@@ -391,6 +461,21 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       if (resource === "redemptions") {
         assert.equal(payload.data[0].batch, "Disposable batch");
         assert.equal(payload.data[0].product, "Neko Family Proxy");
+      }
+      if (resource === "installations") {
+        assert.equal(payload.data[0].installation_key_hash_masked, "aaaa…aaaa");
+        assert.equal("installation_key_hash" in payload.data[0], false);
+        assert.equal(payload.data[0].owns_active_session, true);
+        assert.equal(
+          payload.data[0].active_session_created_at,
+          "2026-08-08T00:00:00.000Z",
+        );
+        assert.equal(
+          payload.data[0].active_session_last_seen_at,
+          "2026-08-08T00:01:00.000Z",
+        );
+        assert.equal(payload.data[1].installation_key_hash_masked, "—");
+        assert.equal("installation_key_hash" in payload.data[1], false);
       }
     }
 
@@ -627,6 +712,74 @@ test("coupon rows expose safe management actions", () => {
   assert.match(html, /data-action="revoke_batch" data-id="active-batch"/);
   assert.match(html, /data-action="delete_batch" data-id="revoked-batch"/);
   assert.doesNotMatch(html, /data-action="delete_batch" data-id="used-batch"/);
+});
+
+test("installation history is distinct from the current active session", () => {
+  const html = renderInstallations([
+    {
+      id: "installation-active",
+      username: "test_customer",
+      display_name: "Office PC",
+      installation_key_hash_masked: "aaaa…aaaa",
+      created_at: "2026-08-01T00:00:00.000Z",
+      last_seen_at: "2026-08-08T00:00:00.000Z",
+      revoked_at: null,
+      owns_active_session: true,
+      active_session_created_at: "2026-08-08T00:00:00.000Z",
+      active_session_last_seen_at: "2026-08-08T00:01:00.000Z",
+    },
+    {
+      id: "installation-history",
+      username: "test_customer",
+      display_name: "Home PC",
+      installation_key_hash_masked: "bbbb…bbbb",
+      created_at: "2026-07-01T00:00:00.000Z",
+      last_seen_at: "2026-07-02T00:00:00.000Z",
+      revoked_at: null,
+      owns_active_session: false,
+      active_session_created_at: null,
+      active_session_last_seen_at: null,
+    },
+  ]);
+
+  assert.match(html, /ติดตั้งที่จดจำไว้/);
+  assert.match(html, /เซสชันปัจจุบัน/);
+  assert.match(html, /aaaa…aaaa/);
+  assert.doesNotMatch(html, new RegExp("a{64}"));
+  assert.match(html, /เครื่องที่กำลังใช้งาน/);
+  assert.match(html, /ประวัติการติดตั้ง/);
+  assert.match(html, /บล็อกเฉพาะการติดตั้งนี้/);
+  assert.match(html, /หากต้องการบล็อกทุกเครื่อง ให้ระงับบัญชีแทน/);
+});
+
+test("deprecated max-device fields are not presented as the active session policy", () => {
+  const products = renderProducts([
+    {
+      id: "product-id",
+      code: "neko-family-proxy",
+      name: "Neko Family Proxy",
+      max_devices: 1,
+      is_active: true,
+      created_at: "2026-08-01T00:00:00.000Z",
+    },
+  ]);
+  const licenses = renderLicenses([
+    {
+      id: "license-id",
+      username: "test_customer",
+      product: "Neko Family Proxy",
+      product_code: "neko-family-proxy",
+      status: "active",
+      valid_from: "2026-08-01T00:00:00.000Z",
+      valid_until: "2026-09-01T00:00:00.000Z",
+      max_devices: 1,
+    },
+  ]);
+
+  assert.doesNotMatch(products, /อุปกรณ์สูงสุด/);
+  assert.doesNotMatch(licenses, />อุปกรณ์</);
+  assert.match(products, /ใช้งานพร้อมกันได้หนึ่งเครื่อง/);
+  assert.match(licenses, /การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม/);
 });
 
 test("coupon codes can be archived and removed in browser storage", () => {
