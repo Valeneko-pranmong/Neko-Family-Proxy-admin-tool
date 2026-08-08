@@ -908,7 +908,10 @@ test("installation history is distinct from the current active session", () => {
   assert.match(html, /เครื่องที่กำลังใช้งาน/);
   assert.match(html, /ประวัติการติดตั้ง/);
   assert.match(html, /บล็อกเฉพาะการติดตั้งนี้/);
-  assert.match(html, /หากต้องการบล็อกทุกเครื่อง ให้ระงับบัญชีแทน/);
+  assert.match(
+    html,
+    /หากต้องการระงับการใช้งานทุกเครื่อง ให้ระงับบัญชีแทน การระงับบัญชีจะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด/,
+  );
 });
 
 test("deprecated max-device fields are not presented as the active session policy", () => {
@@ -969,7 +972,7 @@ test("overview and session history wording do not imply concurrent online device
   const launcherMain = readFileSync("standalone/src/main.js", "utf8");
   assert.match(
     launcherMain,
-    /จะยกเลิกทุก installation และ Launcher session ปัจจุบัน/,
+    /จะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด/,
   );
 });
 
