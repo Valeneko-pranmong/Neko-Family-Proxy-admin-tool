@@ -8,6 +8,6 @@ export const sections = [
   { id: "coupons", label: "คูปอง" },
   { id: "redemptions", label: "การใช้คูปอง" },
   { id: "installations", label: "อุปกรณ์" },
-  { id: "sessions", label: "เซสชันออนไลน์" },
+  { id: "sessions", label: "Launcher sessions" },
   { id: "audit", label: "ประวัติการใช้งาน" },
 ];

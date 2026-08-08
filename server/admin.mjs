@@ -442,90 +442,67 @@ export async function performAction(body, actor) {
   }
   if (action === "set_user_status") {
     const status = String(body.status);
-    if (!["active", "suspended", "banned"].includes(status)) throw new Error("Invalid status");
-    const userId = String(body.userId);
-    if (userId === actor.userId && status !== "active") {
-      throw new Error("ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่");
+    if (!["active", "suspended", "banned"].includes(status)) {
+      throw actionError("สถานะสมาชิกไม่ถูกต้อง");
     }
-    requireUpdated(
-      await tablePatch("profiles", { id: `eq.${userId}` }, { status }),
-      "User not found",
-    );
-    await recordAudit("admin_user_status_changed", actor, {
-      target_user_id: userId,
-      status,
+    const userId = String(body.userId);
+    if (!UUID_PATTERN.test(userId)) throw actionError("รหัสผู้ใช้ไม่ถูกต้อง");
+    if (userId === actor.userId && status !== "active") {
+      throw actionError("ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่", 403);
+    }
+    const updated = await rpcPost("admin_set_user_status", {
+      p_actor_id: actor.userId,
+      p_user_id: userId,
+      p_status: status,
     });
+    if (updated !== true) throw actionError("ไม่พบบัญชีสมาชิก", 404);
     return {};
   }
   if (action === "revoke_license") {
     const licenseId = String(body.licenseId);
-    requireUpdated(
-      await tablePatch("licenses", { id: `eq.${licenseId}` }, { status: "revoked" }),
-      "License not found",
-    );
-    await recordAudit("admin_license_revoked", actor, { license_id: licenseId });
+    if (!UUID_PATTERN.test(licenseId)) throw actionError("รหัส License ไม่ถูกต้อง");
+    const revoked = await rpcPost("admin_revoke_license", {
+      p_actor_id: actor.userId,
+      p_license_id: licenseId,
+    });
+    if (revoked !== true) throw actionError("ไม่พบ License", 404);
     return {};
   }
   if (action === "extend_license") {
-    const licenses = await tableGet("licenses", {
-      select: "id,valid_until",
-      id: `eq.${String(body.licenseId)}`,
-      limit: "1",
-    });
-    const current = licenses[0];
-    if (!current) throw new Error("License not found");
+    const licenseId = String(body.licenseId);
+    if (!UUID_PATTERN.test(licenseId)) throw actionError("รหัส License ไม่ถูกต้อง");
     const days = Number(body.days);
-    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error("Invalid extension");
-    const base = Math.max(Date.now(), Date.parse(current.valid_until));
-    const validUntil = new Date(base + days * 86400000).toISOString();
-    requireUpdated(
-      await tablePatch(
-        "licenses",
-        { id: `eq.${String(body.licenseId)}` },
-        { valid_until: validUntil, status: "active" },
-      ),
-      "License not found",
-    );
-    await recordAudit("admin_license_extended", actor, {
-      license_id: String(body.licenseId),
-      days,
-      valid_until: validUntil,
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      throw actionError("จำนวนวันต่ออายุไม่ถูกต้อง");
+    }
+    const validUntil = await rpcPost("admin_extend_license", {
+      p_actor_id: actor.userId,
+      p_license_id: licenseId,
+      p_days: days,
     });
+    if (typeof validUntil !== "string" || Number.isNaN(Date.parse(validUntil))) {
+      throw actionError("ไม่พบ License", 404);
+    }
     return { valid_until: validUntil };
   }
   if (action === "revoke_session") {
     const sessionId = String(body.sessionId);
-    requireUpdated(
-      await tablePatch(
-        "launcher_sessions",
-        { id: `eq.${sessionId}` },
-        { revoked_at: new Date().toISOString() },
-      ),
-      "Session not found",
-    );
-    await recordAudit("admin_session_revoked", actor, { session_id: sessionId });
+    if (!UUID_PATTERN.test(sessionId)) throw actionError("รหัส session ไม่ถูกต้อง");
+    const revoked = await rpcPost("admin_revoke_session", {
+      p_actor_id: actor.userId,
+      p_session_id: sessionId,
+    });
+    if (revoked !== true) throw actionError("ไม่พบ session", 404);
     return {};
   }
   if (action === "revoke_installation") {
     const installationId = String(body.installationId);
-    const revokedAt = new Date().toISOString();
-    requireUpdated(
-      await tablePatch(
-        "installations",
-        { id: `eq.${installationId}` },
-        { revoked_at: revokedAt },
-      ),
-      "Installation not found",
-    );
-    await tablePatch(
-      "launcher_sessions",
-      { installation_id: `eq.${installationId}`, revoked_at: "is.null" },
-      { revoked_at: revokedAt },
-    );
-    await recordAudit("admin_session_revoked", actor, {
-      installation_id: installationId,
-      scope: "installation",
+    if (!UUID_PATTERN.test(installationId)) throw actionError("รหัส installation ไม่ถูกต้อง");
+    const revoked = await rpcPost("admin_revoke_installation", {
+      p_actor_id: actor.userId,
+      p_installation_id: installationId,
     });
+    if (revoked !== true) throw actionError("ไม่พบ installation", 404);
     return {};
   }
   if (action === "revoke_batch") {

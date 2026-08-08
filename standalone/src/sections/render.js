@@ -20,8 +20,8 @@ export function renderOverview(data = {}) {
     ["สมาชิก", stats.users ?? 0, "users"],
     ["สินค้าที่เปิดใช้", stats.products ?? 0, "product"],
     ["License ที่ใช้งาน", stats.activeLicenses ?? 0, "active"],
-    ["อุปกรณ์ที่ใช้งาน", stats.activeInstallations ?? 0, "device"],
-    ["Session ออนไลน์", stats.activeSessions ?? 0, "session"],
+    ["การติดตั้งที่จดจำ", stats.activeInstallations ?? 0, "device"],
+    ["Session ปัจจุบัน", stats.activeSessions ?? 0, "session"],
     ["คูปองพร้อมใช้", stats.unusedCoupons ?? 0, "coupon"],
   ];
   const recent = (data.recent || []).map(
@@ -156,7 +156,7 @@ export function renderSessions(rows = []) {
     (row) =>
       `<tr>${cell(row.username, "primary")}${cell(row.device)}${cell(row.license_id ? row.license_id.slice(0, 8) : "—")}<td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`,
   );
-  return `${heading("เซสชันออนไลน์", "ตรวจสอบและยกเลิกการเชื่อมต่อของเครื่องลูกค้า")}${table(["สมาชิก", "อุปกรณ์", "License", "สถานะ", "เริ่มเมื่อ", "ใช้งานล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "อุปกรณ์", "License", "สถานะ", "เริ่มเมื่อ", "ใช้งานล่าสุด", "คำสั่ง"], body)}`;
 }
 
 export function renderInstallations(rows = []) {

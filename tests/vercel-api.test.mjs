@@ -13,10 +13,13 @@ import {
   renderCoupons,
   renderInstallations,
   renderLicenses,
+  renderOverview,
   renderPasswordResetDialog,
   renderProducts,
+  renderSessions,
   renderUsers,
 } from "../standalone/src/sections/render.js";
+import { sections } from "../standalone/src/config.js";
 
 const port = 8799;
 const supabasePort = 8800;
@@ -25,6 +28,9 @@ const adminId = "11111111-1111-4111-8111-111111111111";
 const customerId = "22222222-2222-4222-8222-222222222222";
 const suspendedId = "33333333-3333-4333-8333-333333333333";
 const missingId = "44444444-4444-4444-8444-444444444444";
+const installationId = "55555555-5555-4555-8555-555555555555";
+const licenseId = "66666666-6666-4666-8666-666666666666";
+const sessionId = "77777777-7777-4777-8777-777777777777";
 
 function createFakeSupabase() {
   const control = {
@@ -32,6 +38,8 @@ function createFakeSupabase() {
     failAudit: false,
     failAuthUpdate: false,
     failSessionRevoke: false,
+    falseRpcs: new Set(),
+    invalidTimestampRpcs: new Set(),
     events: [],
   };
   const server = createServer(async (request, response) => {
@@ -326,7 +334,16 @@ function createFakeSupabase() {
       const body = JSON.parse(text);
       assert.equal(request.headers["content-profile"], "launcher");
       assert.equal(body.p_actor_id, adminId);
+      control.events.push({ type: "rpc", rpc, body });
       response.writeHead(200, { "Content-Type": "application/json" });
+      if (control.falseRpcs.has(rpc)) {
+        response.end("false");
+        return;
+      }
+      if (control.invalidTimestampRpcs.has(rpc)) {
+        response.end(JSON.stringify("not-a-timestamp"));
+        return;
+      }
       if (rpc === "admin_generate_coupon_batch") {
         response.end(JSON.stringify(
           Array.from({ length: body.p_quantity }, (_, index) => ({
@@ -336,7 +353,18 @@ function createFakeSupabase() {
         ));
         return;
       }
-      if (rpc === "admin_revoke_coupon_batch" || rpc === "admin_delete_coupon_batch") {
+      if (rpc === "admin_extend_license") {
+        response.end(JSON.stringify("2026-09-30T00:00:00.000Z"));
+        return;
+      }
+      if (
+        rpc === "admin_set_user_status"
+        || rpc === "admin_revoke_license"
+        || rpc === "admin_revoke_session"
+        || rpc === "admin_revoke_installation"
+        || rpc === "admin_revoke_coupon_batch"
+        || rpc === "admin_delete_coupon_batch"
+      ) {
         response.end("true");
         return;
       }
@@ -491,6 +519,137 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     });
     assert.equal(generated.status, 200);
     assert.deepEqual((await generated.json()).codes, ["NEKO-TEST-1", "NEKO-TEST-2"]);
+
+    const adminActionCases = [
+      {
+        payload: { action: "set_user_status", userId: customerId, status: "suspended" },
+        rpc: "admin_set_user_status",
+        rpcBody: {
+          p_actor_id: adminId,
+          p_user_id: customerId,
+          p_status: "suspended",
+        },
+      },
+      {
+        payload: { action: "revoke_installation", installationId },
+        rpc: "admin_revoke_installation",
+        rpcBody: {
+          p_actor_id: adminId,
+          p_installation_id: installationId,
+        },
+      },
+      {
+        payload: { action: "revoke_license", licenseId },
+        rpc: "admin_revoke_license",
+        rpcBody: {
+          p_actor_id: adminId,
+          p_license_id: licenseId,
+        },
+      },
+      {
+        payload: { action: "extend_license", licenseId, days: 30 },
+        rpc: "admin_extend_license",
+        rpcBody: {
+          p_actor_id: adminId,
+          p_license_id: licenseId,
+          p_days: 30,
+        },
+      },
+      {
+        payload: { action: "revoke_session", sessionId },
+        rpc: "admin_revoke_session",
+        rpcBody: {
+          p_actor_id: adminId,
+          p_session_id: sessionId,
+        },
+      },
+    ];
+    for (const actionCase of adminActionCases) {
+      const eventsBeforeAction = fakeSupabase.control.events.length;
+      const response = await fetch(`${base}/api/admin`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify(actionCase.payload),
+      });
+      assert.equal(response.status, 200, `${actionCase.payload.action} should succeed`);
+      assert.deepEqual(
+        fakeSupabase.control.events.slice(eventsBeforeAction),
+        [{ type: "rpc", rpc: actionCase.rpc, body: actionCase.rpcBody }],
+      );
+    }
+
+    const eventsBeforeInvalidInstallation = fakeSupabase.control.events.length;
+    const invalidInstallation = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revoke_installation", installationId: "not-a-uuid" }),
+    });
+    assert.equal(invalidInstallation.status, 400);
+    assert.equal(fakeSupabase.control.events.length, eventsBeforeInvalidInstallation);
+
+    fakeSupabase.control.falseRpcs.add("admin_revoke_installation");
+    const missingInstallation = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revoke_installation", installationId }),
+    });
+    assert.equal(missingInstallation.status, 404);
+    assert.deepEqual(await missingInstallation.json(), { ok: false, error: "ไม่พบ installation" });
+    fakeSupabase.control.falseRpcs.delete("admin_revoke_installation");
+
+    const falseRpcCases = [
+      ["set_user_status", "admin_set_user_status", { userId: customerId, status: "suspended" }],
+      ["revoke_license", "admin_revoke_license", { licenseId }],
+      ["revoke_session", "admin_revoke_session", { sessionId }],
+    ];
+    for (const [action, rpc, fields] of falseRpcCases) {
+      fakeSupabase.control.falseRpcs.add(rpc);
+      const response = await fetch(`${base}/api/admin`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...fields }),
+      });
+      assert.equal(response.status, 404, `${action} false RPC result should be safe failure`);
+      assert.equal((await response.json()).ok, false);
+      fakeSupabase.control.falseRpcs.delete(rpc);
+    }
+
+    fakeSupabase.control.invalidTimestampRpcs.add("admin_extend_license");
+    const invalidTimestamp = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "extend_license", licenseId, days: 30 }),
+    });
+    assert.equal(invalidTimestamp.status, 404);
+    assert.equal((await invalidTimestamp.json()).ok, false);
+    fakeSupabase.control.invalidTimestampRpcs.delete("admin_extend_license");
+
+    const invalidStatus = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "set_user_status",
+        userId: customerId,
+        status: "not-a-status",
+      }),
+    });
+    assert.equal(invalidStatus.status, 400);
+    assert.deepEqual(await invalidStatus.json(), { ok: false, error: "สถานะสมาชิกไม่ถูกต้อง" });
+
+    const selfRestriction = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "set_user_status",
+        userId: adminId,
+        status: "suspended",
+      }),
+    });
+    assert.equal(selfRestriction.status, 403);
+    assert.deepEqual(await selfRestriction.json(), {
+      ok: false,
+      error: "ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่",
+    });
 
     const mismatch = await fetch(`${base}/api/admin`, {
       method: "POST",
@@ -780,6 +939,38 @@ test("deprecated max-device fields are not presented as the active session polic
   assert.doesNotMatch(licenses, />อุปกรณ์</);
   assert.match(products, /ใช้งานพร้อมกันได้หนึ่งเครื่อง/);
   assert.match(licenses, /การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม/);
+});
+
+test("overview and session history wording do not imply concurrent online devices", () => {
+  const overview = renderOverview({
+    stats: { activeInstallations: 2, activeSessions: 1 },
+  });
+  const sessions = renderSessions([
+    {
+      id: sessionId,
+      username: "test_customer",
+      device: "Office PC",
+      license_id: licenseId,
+      created_at: "2026-08-08T00:00:00.000Z",
+      last_seen_at: "2026-08-08T00:01:00.000Z",
+      revoked_at: null,
+    },
+  ]);
+  const sessionNavigation = sections.find((section) => section.id === "sessions");
+
+  assert.match(overview, /การติดตั้งที่จดจำ/);
+  assert.doesNotMatch(overview, /อุปกรณ์ที่ใช้งาน/);
+  assert.match(overview, /Session ปัจจุบัน/);
+  assert.match(sessions, /ประวัติ Launcher session/);
+  assert.match(sessions, /แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ/);
+  assert.doesNotMatch(sessions, /เซสชันออนไลน์/);
+  assert.equal(sessionNavigation?.label, "Launcher sessions");
+
+  const launcherMain = readFileSync("standalone/src/main.js", "utf8");
+  assert.match(
+    launcherMain,
+    /จะยกเลิกทุก installation และ Launcher session ปัจจุบัน/,
+  );
 });
 
 test("coupon codes can be archived and removed in browser storage", () => {
