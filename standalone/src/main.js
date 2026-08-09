@@ -11,6 +11,7 @@ import {
   couponForm,
   renderRecoveryCodeDialog,
   renderSection,
+  renderSectionRefreshNotice,
 } from "./sections/render.js";
 import { loginView, shellView } from "./ui/layout.js";
 import { escapeHtml } from "./ui/escape.js";
@@ -32,20 +33,28 @@ function render() {
   }
   root.innerHTML = shellView(store.state.active, session.viewer);
   const content = root.querySelector("#content");
-  if (store.state.loading) {
-    content.innerHTML = `<div class="panel"><div class="empty">กำลังโหลดข้อมูล…</div></div>`;
-  } else if (store.state.error) {
+  const sectionData = store.state.data[store.state.active];
+  if (store.state.loading && sectionData === undefined) {
+    content.innerHTML = `<div class="dashboard-skeleton" role="status" aria-label="กำลังโหลดข้อมูล"><div></div><div></div><div></div><div></div><div></div><div></div><section></section></div>`;
+  } else if (store.state.error && sectionData === undefined) {
     content.innerHTML = `<div class="panel"><div class="form-error">${escapeHtml(store.state.error)}</div></div>`;
   } else {
-    const sectionData = store.state.data[store.state.active];
     const renderedData =
       store.state.active === "coupons" && Array.isArray(sectionData)
         ? sectionData.map((row) => ({
             ...row,
             has_archived_codes: hasCouponCodes(row.id),
           }))
-        : sectionData;
-    content.innerHTML = renderSection(store.state.active, renderedData, session.viewer);
+        : store.state.active === "overview"
+          ? { ...(sectionData || {}), _ui: { refreshing: store.state.refreshing, error: store.state.error } }
+          : sectionData;
+    const refreshNotice = store.state.active === "overview"
+      ? ""
+      : renderSectionRefreshNotice({
+          refreshing: store.state.refreshing,
+          error: store.state.error,
+        });
+    content.innerHTML = `${refreshNotice}${renderSection(store.state.active, renderedData, session.viewer)}`;
     if (store.state.couponFormOpen) {
       const host = root.querySelector("#coupon-form-host");
       if (host) host.innerHTML = couponForm();
@@ -62,19 +71,28 @@ async function handleUnauthorized(error) {
 
 async function load(section = store.state.active) {
   const requestId = ++loadRequestId;
-  store.patch({ loading: true, error: "" });
+  const staleData = store.state.data[section];
+  const hasStaleData = staleData !== undefined;
+  store.patch({ loading: !hasStaleData, refreshing: hasStaleData, error: "" });
   try {
-    const result = await api.loadResource(section);
+    const result = await api.loadResource(section, {
+      range: section === "overview" ? store.state.overviewRange : undefined,
+    });
     if (requestId !== loadRequestId || section !== store.state.active) return;
     store.patch({
       data: { ...store.state.data, [section]: result.data },
       loading: false,
+      refreshing: false,
     });
   } catch (error) {
-    if (await handleUnauthorized(error)) return;
     if (requestId !== loadRequestId || section !== store.state.active) return;
+    if (await handleUnauthorized(error)) return;
     store.patch({
       loading: false,
+      refreshing: false,
+      ...(section === "overview" && staleData?.range
+        ? { overviewRange: staleData.range }
+        : {}),
       error: error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ",
     });
   }
@@ -113,7 +131,8 @@ async function action(name, id) {
         "แบนบัญชีนี้หรือไม่ บัญชีจะใช้ทุกการติดตั้งไม่ได้และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
       active: "เปิดใช้บัญชีนี้อีกครั้งหรือไม่",
     }[nextStatus];
-    if (!window.confirm(confirmation)) return;
+    const targetIdentity = row?.username || id;
+    if (!window.confirm(`${confirmation}\nเป้าหมาย: ${targetIdentity}`)) return;
     await run({ action: "set_user_status", userId: id, status: nextStatus });
     return;
   }
@@ -309,6 +328,17 @@ root.addEventListener("click", async (event) => {
     return;
   }
   const name = target.dataset.action;
+  if (name === "refresh_overview") {
+    await load("overview");
+    return;
+  }
+  if (name === "set_range") {
+    const range = target.dataset.range;
+    if (!["24h", "7d", "14d", "30d"].includes(range)) return;
+    store.patch({ overviewRange: range });
+    await load("overview");
+    return;
+  }
   if (name === "logout") {
     closeRecoveryCodeDialog();
     try {

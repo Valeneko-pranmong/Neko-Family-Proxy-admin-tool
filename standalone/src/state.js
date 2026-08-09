@@ -3,7 +3,9 @@ export function createStore() {
     active: "overview",
     data: {},
     loading: false,
+    refreshing: false,
     error: "",
+    overviewRange: "14d",
     toast: "",
     couponFormOpen: false,
   };

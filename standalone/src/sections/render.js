@@ -1,4 +1,4 @@
-import { escapeHtml } from "../ui/escape.js";
+import { escapeHtml, formatDate, formatTime, formatTrendBucket } from "../ui/escape.js";
 import { cell, dateCell, statusBadge, table } from "../ui/table.js";
 
 function heading(title, subtitle, action = "") {
@@ -10,32 +10,97 @@ function heading(title, subtitle, action = "") {
   `;
 }
 
+export function renderSectionRefreshNotice(ui = {}) {
+  if (ui.refreshing) {
+    return `<div class="inline-refresh" role="status">กำลังอัปเดตข้อมูล…</div>`;
+  }
+  if (ui.error) {
+    return `<div class="inline-alert" role="alert">อัปเดตไม่สำเร็จ: ${escapeHtml(ui.error)} · กำลังแสดงข้อมูลล่าสุดที่มี</div>`;
+  }
+  return "";
+}
+
 function actionButton(action, id, label, extra = "") {
   return `<button class="button button-small ${extra}" data-action="${action}" data-id="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
 }
 
 export function renderOverview(data = {}) {
   const stats = data.stats || {};
+  const safeCount = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : 0;
+  };
   const cards = [
-    ["สมาชิก", stats.users ?? 0, "users"],
-    ["สินค้าที่เปิดใช้", stats.products ?? 0, "product"],
-    ["License ที่ใช้งาน", stats.activeLicenses ?? 0, "active"],
-    ["การติดตั้งที่จดจำ", stats.activeInstallations ?? 0, "device"],
-    ["Session ปัจจุบัน", stats.activeSessions ?? 0, "session"],
-    ["คูปองพร้อมใช้", stats.unusedCoupons ?? 0, "coupon"],
+    ["สมาชิกทั้งหมด", stats.users ?? 0, "users", "บัญชีสมาชิกทั้งหมดในระบบ", `${stats.userBreakdown?.suspended ?? 0} ระงับ · ${stats.userBreakdown?.banned ?? 0} แบน`],
+    ["License ใช้งานได้", stats.activeLicenses ?? 0, "active", "สถานะ active และอยู่ในช่วงเวลาที่ใช้ได้", `${stats.licenseBreakdown?.expiringSoon ?? 0} ใกล้หมดอายุ`],
+    ["Session ปัจจุบัน", stats.activeSessions ?? 0, "session", "Session ที่ยังไม่ถูก revoke", "ไม่เท่ากับผู้ใช้ออนไลน์"],
+    ["Online ล่าสุด", stats.recentlyOnline ?? 0, "online", "Current session ที่ heartbeat ภายใน 2 นาที", "ค่าประมาณจาก heartbeat"],
+    ["การติดตั้งที่จดจำ", stats.installations ?? stats.activeInstallations ?? 0, "device", "ประวัติเครื่องที่บัญชีเคยจดจำ", "ไม่ใช่อุปกรณ์ออนไลน์"],
+    ["คูปองพร้อมใช้", stats.usableCoupons ?? stats.unusedCoupons ?? 0, "coupon", "คูปอง active ใน batch ที่ยังใช้ได้", "ตัด batch หมดอายุ/revoke แล้ว"],
   ];
   const recent = (data.recent || []).map(
     (event) =>
       `<tr>${cell(event.title)}${cell(event.detail)}${dateCell(event.time)}</tr>`,
   );
+  const range = ["24h", "7d", "14d", "30d"].includes(data.range) ? data.range : "14d";
+  const trend = Array.isArray(data.trend) ? data.trend : [];
+  const maxValue = Math.max(1, ...trend.flatMap((point) => [safeCount(point.sessions), safeCount(point.redemptions)]));
+  const width = 840;
+  const height = 280;
+  const pad = { left: 46, right: 18, top: 18, bottom: 42 };
+  const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, trend.length - 1);
+  const y = (value) => height - pad.bottom - (value * (height - pad.top - pad.bottom)) / maxValue;
+  const series = (field, color, label) => {
+    const points = trend.map((point, index) => `${x(index)},${y(safeCount(point[field]))}`).join(" ");
+    const dots = trend.map((point, index) => {
+      const count = safeCount(point[field]);
+      const context = `${formatDate(point.bucket)} · ${label} ${count}`;
+      return `<circle tabindex="0" cx="${x(index)}" cy="${y(count)}" r="4" fill="${color}" aria-label="${escapeHtml(context)}"><title>${escapeHtml(context)}</title></circle>`;
+    }).join("");
+    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />${dots}`;
+  };
+  const labels = trend.map((point, index) => {
+    const every = Math.max(1, Math.ceil(trend.length / 7));
+    if (index % every !== 0 && index !== trend.length - 1) return "";
+    return `<text x="${x(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(formatTrendBucket(point.bucket, range))}</text>`;
+  }).join("");
+  const graph = trend.length
+    ? `<div class="chart-wrap" role="img" aria-label="กราฟ Launcher activity">
+        <svg class="activity-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${y(maxValue / 2)}" x2="${width - pad.right}" y2="${y(maxValue / 2)}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
+          <text x="8" y="${pad.top + 6}" class="chart-max">${maxValue}</text>
+          <text x="8" y="${y(maxValue / 2) + 4}" class="chart-max">${Math.round(maxValue / 2)}</text>
+          <text x="28" y="${height - pad.bottom + 4}" class="chart-max">0</text>
+          ${series("sessions", "#d83e80", "Session เริ่มใหม่")}
+          ${series("redemptions", "#287b5b", "ใช้คูปองสำเร็จ")}
+          ${labels}
+        </svg>
+      </div>`
+    : `<div class="chart-empty"><strong>ยังไม่มีกิจกรรมในช่วงเวลานี้</strong><span>ระบบจะไม่สร้างข้อมูลจำลองหรือเส้นศูนย์แทนข้อมูลจริง</span></div>`;
+  const refreshState = data._ui?.refreshing ? `<span class="refreshing" role="status">กำลังอัปเดต…</span>` : "";
+  const error = data._ui?.error ? `<div class="inline-alert" role="alert">อัปเดตไม่สำเร็จ: ${escapeHtml(data._ui.error)} · กำลังแสดงข้อมูลล่าสุดที่มี</div>` : "";
   return `
-    ${heading("ภาพรวมระบบ", "สถานะล่าสุดจากฐานข้อมูล")}
+    <div class="dashboard-head">
+      <div><span class="system-status"><i></i> เชื่อมต่อ Admin API แล้ว</span><h2>ภาพรวมระบบ</h2><p class="muted">Metrics ที่แยก Session, Online ล่าสุด และ Installation อย่างชัดเจน</p></div>
+      <div class="refresh-meta"><span>อัปเดต ${escapeHtml(formatTime(data.generatedAt))}</span><span>${escapeHtml(data.timezone || "Asia/Bangkok")} (UTC+7)</span><div>${refreshState}<button class="button" data-action="refresh_overview" aria-label="รีเฟรชข้อมูล Dashboard" ${data._ui?.refreshing ? "disabled" : ""}>↻ รีเฟรช</button></div></div>
+    </div>
+    ${error}
     <section class="stats-grid">${cards
-      .map(([label, value, tone]) => `<article class="stat-card stat-${tone}"><span>${label}</span><strong>${value}</strong></article>`)
+      .map(([label, value, tone, explanation, secondary]) => `<article class="stat-card stat-${tone}"><span>${label}</span><strong>${escapeHtml(safeCount(value))}</strong><p>${explanation}</p><small>${escapeHtml(secondary)}</small></article>`)
       .join("")}</section>
+    <section class="panel chart-panel">
+      <div class="panel-title-row"><div><h3>Launcher Activity</h3><p class="muted">Session เริ่มใหม่และการใช้คูปองสำเร็จ · เวลา Asia/Bangkok</p></div><div class="range-switch" aria-label="ช่วงเวลากราฟ">${["24h", "7d", "14d", "30d"].map((value) => `<button class="${value === range ? "is-selected" : ""}" data-action="set_range" data-range="${value}" aria-pressed="${value === range}">${value.toUpperCase()}</button>`).join("")}</div></div>
+      <div class="chart-legend"><span><i class="legend-sessions"></i>Session เริ่มใหม่</span><span><i class="legend-redemptions"></i>ใช้คูปองสำเร็จ</span></div>
+      ${graph}
+    </section>
+    <section class="ops-grid">
+      <article class="panel ops-summary"><h3>Operational summary</h3><dl><div><dt>สมาชิก Active</dt><dd>${safeCount(stats.userBreakdown?.active)}</dd></div><div><dt>License หมดอายุ</dt><dd>${safeCount(stats.licenseBreakdown?.expired)}</dd></div><div><dt>License ถูกยกเลิก</dt><dd>${safeCount(stats.licenseBreakdown?.revoked)}</dd></div></dl></article>
     <section class="panel">
       <div class="panel-title-row"><h3>กิจกรรมล่าสุด</h3></div>
       ${table(["รายการ", "รายละเอียด", "เวลา"], recent)}
+    </section>
     </section>
   `;
 }
@@ -113,7 +178,7 @@ export function renderProducts(rows = []) {
 export function renderLicenses(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.product_code)}<td>${statusBadge(row.status)}</td>${dateCell(row.valid_from)}${dateCell(row.valid_until)}<td class="actions">${actionButton("extend_license", row.id, "ต่ออายุ")} ${row.status !== "revoked" ? actionButton("revoke_license", row.id, "ยกเลิก", "button-danger") : ""}</td></tr>`,
+      `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.product_code)}<td>${statusBadge(row.effective_status || row.status)}</td>${dateCell(row.valid_from)}${dateCell(row.valid_until)}<td class="actions">${actionButton("extend_license", row.id, "ต่ออายุ")} ${row.status !== "revoked" ? actionButton("revoke_license", row.id, "ยกเลิก", "button-danger") : ""}</td></tr>`,
   );
   return `${heading("สิทธิ์ใช้งาน", "ต่ออายุหรือยกเลิก License การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "สินค้า", "รหัสสินค้า", "สถานะ", "เริ่มใช้", "หมดอายุ", "คำสั่ง"], body)}`;
 }
@@ -153,10 +218,12 @@ export function couponForm() {
 }
 
 export function renderSessions(rows = []) {
-  const body = rows.map(
-    (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.device)}${cell(row.license_id ? row.license_id.slice(0, 8) : "—")}<td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`,
-  );
+  const body = rows.map((row) => {
+    const license = row.license_id
+      ? `<span class="truncated-id" title="${escapeHtml(row.license_id)}">${escapeHtml(row.license_id.slice(0, 8))}</span>`
+      : "—";
+    return `<tr>${cell(row.username, "primary")}${cell(row.device)}<td>${license}</td><td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`;
+  });
   return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "อุปกรณ์", "License", "สถานะ", "เริ่มเมื่อ", "ใช้งานล่าสุด", "คำสั่ง"], body)}`;
 }
 
@@ -179,9 +246,9 @@ export function renderRedemptions(rows = []) {
 export function renderAudit(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.event_type, "primary")}${cell(row.username)}${cell(JSON.stringify(row.metadata))}${dateCell(row.created_at)}</tr>`,
+      `<tr>${cell(row.title, "primary")}${cell(row.username)}${cell(row.detail)}${dateCell(row.time)}</tr>`,
   );
-  return `${heading("ประวัติการใช้งาน", "Audit log จากระบบ Launcher และคำสั่งผู้ดูแล")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body)}`;
+  return `${heading("ประวัติการใช้งาน", "Audit log ที่คัดเฉพาะ metadata ที่ปลอดภัยและมีประโยชน์")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body)}`;
 }
 
 export function renderSection(section, data, viewer = null) {

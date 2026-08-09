@@ -230,7 +230,7 @@ export default async function handler(request, response) {
         ok: true,
         viewer: session.viewer,
         resource,
-        data: await getResource(resource),
+        data: await getResource(resource, { range: url.searchParams.get("range") }),
       });
     }
     if (request.method === "POST") {

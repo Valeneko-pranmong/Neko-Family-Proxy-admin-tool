@@ -35,8 +35,11 @@ export const login = (username, password) =>
 
 export const logout = () => request("/api/logout", { method: "POST" });
 
-export const loadResource = (resource) =>
-  request(`/api/admin?resource=${encodeURIComponent(resource)}`);
+export const loadResource = (resource, options = {}) => {
+  const params = new URLSearchParams({ resource });
+  if (resource === "overview" && options.range) params.set("range", options.range);
+  return request(`/api/admin?${params}`);
+};
 
 export const runAction = (payload) =>
   request("/api/admin", {

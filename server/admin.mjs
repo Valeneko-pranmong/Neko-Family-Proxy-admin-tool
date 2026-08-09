@@ -6,6 +6,17 @@ import {
   tablePost,
 } from "./supabase.mjs";
 import { accountRecovery } from "./account-recovery.mjs";
+import {
+  aggregateTrend,
+  classifyLicense,
+  countRecentlyOnlineSessions,
+  formatAuditEvent,
+  isCouponBatchUsable,
+  normalizeTrendRange,
+  RECENT_ONLINE_WINDOW_MS,
+  REPORT_TIMEZONE,
+  trendStart,
+} from "./dashboard.mjs";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -75,6 +86,7 @@ async function getProducts() {
 }
 
 async function getLicenses() {
+  const now = new Date();
   const [licenses, products, profiles] = await Promise.all([
     tableGet("licenses", {
       select:
@@ -89,6 +101,7 @@ async function getLicenses() {
   const usernames = usernamesByUser(profiles);
   return licenses.map((license) => ({
     ...license,
+    effective_status: classifyLicense(license, now),
     username: usernames.get(license.user_id) ?? "—",
     product: productsById.get(license.product_id)?.name ?? "Unknown product",
     product_code: productsById.get(license.product_id)?.code ?? "unknown",
@@ -97,16 +110,14 @@ async function getLicenses() {
 
 async function getCoupons() {
   const [coupons, batches, products, profiles] = await Promise.all([
-    tableGet("coupons", {
+    tableGetAll("coupons", {
       select: "id,batch_id,status,redeemed_by,redeemed_at,created_at",
-      order: "created_at.desc",
-      limit: "5000",
+      order: "created_at.desc,id.desc",
     }),
-    tableGet("coupon_batches", {
+    tableGetAll("coupon_batches", {
       select:
         "id,product_id,duration_days,quantity,expires_at,note,created_at,revoked_at",
-      order: "created_at.desc",
-      limit: "1000",
+      order: "created_at.desc,id.desc",
     }),
     tableGet("products", { select: "id,name,code" }),
     listProfiles(),
@@ -132,19 +143,20 @@ async function getCoupons() {
     const latestRedemption = batchCoupons
       .filter((coupon) => coupon.redeemed_at)
       .sort((a, b) => String(b.redeemed_at).localeCompare(String(a.redeemed_at)))[0];
+    const batchUsable = isCouponBatchUsable(batch);
     return {
       ...batch,
       batch: batch.note || batch.id.slice(0, 8),
       product: productsById.get(batch.product_id)?.name ?? "Unknown product",
       product_code: productsById.get(batch.product_id)?.code ?? "unknown",
-      active_count: counts.active,
+      active_count: batchUsable ? counts.active : 0,
       redeemed_count: redeemedCount,
       revoked_count: counts.revoked,
       actual_quantity: Number(batch.quantity),
       last_redeemed_by: latestRedemption?.redeemed_by
         ? usernames.get(latestRedemption.redeemed_by) ?? latestRedemption.redeemed_by
         : "—",
-      status: batch.revoked_at ? "revoked" : "active",
+      status: batch.revoked_at ? "revoked" : batchUsable ? "active" : "expired",
     };
   });
 }
@@ -250,39 +262,133 @@ async function getSessions() {
   }));
 }
 
-async function getOverview() {
-  const [users, products, activeLicenses, activeInstallations, activeSessions, unusedCoupons, audit] =
-    await Promise.all([
-      tableCount("profiles"),
-      tableCount("products", { is_active: "eq.true" }),
-      tableCount("licenses", { status: "eq.active" }),
-      tableCount("installations"),
-      tableCount("launcher_sessions", { revoked_at: "is.null" }),
-      tableCount("coupons", { status: "eq.active" }),
-      tableGet("audit_events", {
-        select: "id,event_type,metadata,created_at",
-        order: "created_at.desc",
-        limit: "8",
-      }),
-    ]);
+async function getOverview(requestedRange = "14d") {
+  const range = normalizeTrendRange(requestedRange);
+  const now = new Date();
+  const generatedAt = now.toISOString();
+  const trendFrom = trendStart(range, now).toISOString();
+  const recentFrom = new Date(now.getTime() - RECENT_ONLINE_WINDOW_MS).toISOString();
+  const expiringAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const [
+    users,
+    activeUsers,
+    suspendedUsers,
+    bannedUsers,
+    activeLicenses,
+    expiringLicenses,
+    expiredLicenses,
+    revokedLicenses,
+    installations,
+    activeSessions,
+    recentSessions,
+    recentlyOnlineLicenses,
+    activeCoupons,
+    couponBatches,
+    trendSessions,
+    trendRedemptions,
+    audit,
+  ] = await Promise.all([
+    tableCount("profiles"),
+    tableCount("profiles", { status: "eq.active" }),
+    tableCount("profiles", { status: "eq.suspended" }),
+    tableCount("profiles", { status: "eq.banned" }),
+    tableCount("licenses", {
+      status: "eq.active",
+      valid_from: `lte.${generatedAt}`,
+      valid_until: `gt.${generatedAt}`,
+    }),
+    tableCount("licenses", {
+      status: "eq.active",
+      valid_from: `lte.${generatedAt}`,
+      valid_until: `gt.${generatedAt}`,
+      and: `(valid_until.lte.${expiringAt})`,
+    }),
+    tableCount("licenses", {
+      status: "eq.active",
+      valid_until: `lte.${generatedAt}`,
+    }),
+    tableCount("licenses", { status: "eq.revoked" }),
+    tableCount("installations"),
+    tableCount("launcher_sessions", { revoked_at: "is.null" }),
+    tableGetAll("launcher_sessions", {
+      select: "id,license_id,last_seen_at,revoked_at",
+      revoked_at: "is.null",
+      last_seen_at: `gte.${recentFrom}`,
+      and: `(last_seen_at.lte.${generatedAt})`,
+      order: "last_seen_at.asc,id.asc",
+    }),
+    tableGetAll("licenses", {
+      select: "id,status,valid_from,valid_until",
+      status: "eq.active",
+      valid_from: `lte.${generatedAt}`,
+      valid_until: `gt.${generatedAt}`,
+      order: "id.asc",
+    }),
+    tableGetAll("coupons", {
+      select: "id,batch_id",
+      status: "eq.active",
+      redeemed_at: "is.null",
+      order: "id.asc",
+    }),
+    tableGetAll("coupon_batches", {
+      select: "id,revoked_at,expires_at",
+      revoked_at: "is.null",
+      or: `(expires_at.is.null,expires_at.gt.${generatedAt})`,
+      order: "id.asc",
+    }),
+    tableGetAll("launcher_sessions", {
+      select: "id,created_at",
+      created_at: `gte.${trendFrom}`,
+      order: "created_at.asc,id.asc",
+    }),
+    tableGetAll("coupon_redemption_attempts", {
+      select: "id,attempted_at",
+      succeeded: "eq.true",
+      attempted_at: `gte.${trendFrom}`,
+      order: "attempted_at.asc,id.asc",
+    }),
+    tableGet("audit_events", {
+      select: "id,event_type,metadata,created_at",
+      order: "created_at.desc",
+      limit: "8",
+    }),
+  ]);
+  const usableBatchIds = new Set(
+    couponBatches
+      .filter((batch) => isCouponBatchUsable(batch, now))
+      .map((batch) => batch.id),
+  );
+  const usableCoupons = activeCoupons.reduce(
+    (count, coupon) => count + (usableBatchIds.has(coupon.batch_id) ? 1 : 0),
+    0,
+  );
   return {
     stats: {
       users,
-      products,
+      userBreakdown: { active: activeUsers, suspended: suspendedUsers, banned: bannedUsers },
       activeLicenses,
-      activeInstallations,
+      licenseBreakdown: {
+        expiringSoon: expiringLicenses,
+        expired: expiredLicenses,
+        revoked: revokedLicenses,
+      },
+      installations,
       activeSessions,
-      unusedCoupons,
+      recentlyOnline: countRecentlyOnlineSessions(recentSessions, recentlyOnlineLicenses, now),
+      usableCoupons,
     },
-    trend: [],
-    recent: audit.map((event) => ({
-      id: String(event.id),
-      type: event.event_type,
-      title: event.event_type.replaceAll("_", " "),
-      detail: JSON.stringify(event.metadata),
-      time: event.created_at,
-      tone: event.event_type.includes("rejected") ? "red" : "blue",
-    })),
+    trend: aggregateTrend({
+      range,
+      now,
+      sessions: trendSessions,
+      redemptions: trendRedemptions,
+      users: [],
+    }),
+    recent: audit.map(formatAuditEvent),
+    generatedAt,
+    timezone: REPORT_TIMEZONE,
+    range,
+    recentlyOnlineThresholdSeconds: RECENT_ONLINE_WINDOW_MS / 1000,
   };
 }
 
@@ -296,10 +402,13 @@ async function getAudit() {
     listProfiles(),
   ]);
   const usernames = usernamesByUser(profiles);
-  return events.map((event) => ({
-    ...event,
-    username: event.user_id ? usernames.get(event.user_id) ?? event.user_id : "ระบบ",
-  }));
+  return events.map((event) => {
+    const formatted = formatAuditEvent(event);
+    return {
+      ...formatted,
+      username: event.user_id ? usernames.get(event.user_id) ?? event.user_id : "ระบบ",
+    };
+  });
 }
 
 async function generateCoupons(body, actor) {
@@ -330,7 +439,7 @@ async function generateCoupons(body, actor) {
   };
 }
 
-export async function getResource(resource) {
+export async function getResource(resource, options = {}) {
   if (resource === "users") return getUsers();
   if (resource === "products") return getProducts();
   if (resource === "licenses") return getLicenses();
@@ -339,7 +448,7 @@ export async function getResource(resource) {
   if (resource === "installations") return getInstallations();
   if (resource === "sessions") return getSessions();
   if (resource === "audit") return getAudit();
-  if (resource === "overview") return getOverview();
+  if (resource === "overview") return getOverview(options.range);
   throw actionError("ไม่พบข้อมูลที่ร้องขอ", 404);
 }
 

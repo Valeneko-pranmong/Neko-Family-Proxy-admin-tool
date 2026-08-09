@@ -33,7 +33,7 @@ export function shellView(active, viewer) {
           ${sections
             .map(
               (section) =>
-                `<button class="nav-item ${section.id === active ? "is-active" : ""}" data-section="${section.id}">${section.label}</button>`,
+                `<button class="nav-item ${section.id === active ? "is-active" : ""}" data-section="${section.id}" ${section.id === active ? 'aria-current="page"' : ""}><span aria-hidden="true">${section.icon || "•"}</span>${section.label}</button>`,
             )
             .join("")}
         </nav>
