@@ -1,6 +1,12 @@
 # AI Implementation Prompt: Allow multiple installations but only one active session
 
-> **Status: IMPLEMENTATION HANDOFF**  
+> **Status: SUPERSEDED 9 AUGUST 2026 — DO NOT USE AS THE CURRENT CONTRACT.**
+> This historical handoff still describes explicit installation revocation. The
+> current policy removes permanent machine locking: installations are remembered
+> history, authorization comes only from the newest unrevoked Launcher session,
+> and Admin operations terminate sessions rather than ban installations. The
+> authoritative forward migration is
+> `Neko-Family-Proxy/supabase/migrations/20260809133000_remove_permanent_installation_lock.sql`.
 > **Target team:** Backend / Supabase / Admin Web  
 > **Consumer:** Neko Family Launcher desktop client  
 > **Repository context:** Verify all paths and deployed database definitions before editing.  

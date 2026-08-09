@@ -163,9 +163,9 @@ export function renderSessions(rows = []) {
 export function renderInstallations(rows = []) {
   const body = rows.map(
     (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge(row.status)}</td><td>${row.owns_active_session ? statusBadge("เครื่องที่กำลังใช้งาน") : "ประวัติการติดตั้ง"}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.revoked_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_installation", row.id, "บล็อกเฉพาะการติดตั้งนี้", "button-danger")}</td></tr>`,
+      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge("remembered")}</td><td>${row.owns_active_session ? statusBadge("เครื่องที่กำลังใช้งาน") : "ประวัติการติดตั้ง"}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${row.active_session_id ? actionButton("revoke_session", row.active_session_id, "ยุติเซสชันปัจจุบัน", "button-danger") : ""}</td></tr>`,
   );
-  return `${heading("การติดตั้งที่จดจำไว้", "บัญชีจดจำได้หลายเครื่อง แต่มีเซสชันปัจจุบันได้หนึ่งเครื่อง การเข้าใช้เครื่องใหม่จะแทนที่เครื่องเดิม หากต้องการระงับการใช้งานทุกเครื่อง ให้ระงับบัญชีแทน การระงับบัญชีจะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "บล็อกเมื่อ", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("การติดตั้งที่จดจำไว้", "อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน บัญชีมีเซสชันปัจจุบันได้หนึ่งรายการ และการเข้าใช้เครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
 }
 
 export function renderRedemptions(rows = []) {

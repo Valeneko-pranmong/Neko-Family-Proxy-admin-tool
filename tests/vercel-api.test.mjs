@@ -401,7 +401,6 @@ function createFakeSupabase() {
         rpc === "admin_set_user_status"
         || rpc === "admin_revoke_license"
         || rpc === "admin_revoke_session"
-        || rpc === "admin_revoke_installation"
         || rpc === "admin_revoke_coupon_batch"
         || rpc === "admin_delete_coupon_batch"
       ) {
@@ -583,6 +582,9 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
         assert.equal(payload.data[0].installation_key_hash_masked, "aaaa…aaaa");
         assert.equal("installation_key_hash" in payload.data[0], false);
         assert.equal(payload.data[0].owns_active_session, true);
+        assert.equal(payload.data[0].active_session_id, "session-id");
+        assert.equal(payload.data[0].status, "remembered");
+        assert.equal("revoked_at" in payload.data[0], false);
         assert.equal(
           payload.data[0].active_session_created_at,
           "2026-08-08T00:00:00.000Z",
@@ -593,6 +595,9 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
         );
         assert.equal(payload.data[1].installation_key_hash_masked, "—");
         assert.equal("installation_key_hash" in payload.data[1], false);
+        assert.equal(payload.data[1].status, "remembered");
+        assert.equal(payload.data[1].owns_active_session, false);
+        assert.equal("revoked_at" in payload.data[1], false);
       }
     }
 
@@ -619,14 +624,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
           p_status: "suspended",
         },
       },
-      {
-        payload: { action: "revoke_installation", installationId },
-        rpc: "admin_revoke_installation",
-        rpcBody: {
-          p_actor_id: adminId,
-          p_installation_id: installationId,
-        },
-      },
+
       {
         payload: { action: "revoke_license", licenseId },
         rpc: "admin_revoke_license",
@@ -667,30 +665,19 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       );
     }
 
-    const eventsBeforeInvalidInstallation = fakeSupabase.control.events.length;
-    const invalidInstallation = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "revoke_installation", installationId: "not-a-uuid" }),
-    });
-    assert.equal(invalidInstallation.status, 400);
-    assert.equal(fakeSupabase.control.events.length, eventsBeforeInvalidInstallation);
-
-    fakeSupabase.control.falseRpcs.add("admin_revoke_installation");
-    const missingInstallation = await fetch(`${base}/api/admin`, {
+    const eventsBeforeLegacyInstallationAction = fakeSupabase.control.events.length;
+    const legacyInstallationAction = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "revoke_installation", installationId }),
     });
-    assert.equal(missingInstallation.status, 404);
-    assert.deepEqual(await missingInstallation.json(), { ok: false, error: "ไม่พบ installation" });
-    fakeSupabase.control.falseRpcs.delete("admin_revoke_installation");
+    assert.equal(legacyInstallationAction.status, 400);
+    assert.equal(fakeSupabase.control.events.length, eventsBeforeLegacyInstallationAction);
 
     const falseRpcCases = [
       ["set_user_status", "admin_set_user_status", { userId: customerId, status: "suspended" }],
       ["revoke_license", "admin_revoke_license", { licenseId }],
       ["revoke_session", "admin_revoke_session", { sessionId }],
-      ["revoke_installation", "admin_revoke_installation", { installationId }],
     ];
     for (const [action, rpc, fields] of falseRpcCases) {
       fakeSupabase.control.falseRpcs.add(rpc);
@@ -999,6 +986,7 @@ test("installation history is distinct from the current active session", () => {
       last_seen_at: "2026-08-08T00:00:00.000Z",
       revoked_at: null,
       owns_active_session: true,
+      active_session_id: sessionId,
       active_session_created_at: "2026-08-08T00:00:00.000Z",
       active_session_last_seen_at: "2026-08-08T00:01:00.000Z",
     },
@@ -1022,11 +1010,9 @@ test("installation history is distinct from the current active session", () => {
   assert.doesNotMatch(html, new RegExp("a{64}"));
   assert.match(html, /เครื่องที่กำลังใช้งาน/);
   assert.match(html, /ประวัติการติดตั้ง/);
-  assert.match(html, /บล็อกเฉพาะการติดตั้งนี้/);
-  assert.match(
-    html,
-    /หากต้องการระงับการใช้งานทุกเครื่อง ให้ระงับบัญชีแทน การระงับบัญชีจะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด/,
-  );
+  assert.match(html, new RegExp(`data-action="revoke_session" data-id="${sessionId}"`));
+  assert.doesNotMatch(html, /revoke_installation|บล็อกเฉพาะการติดตั้ง|บล็อกเมื่อ/);
+  assert.match(html, /อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน/);
 });
 
 test("deprecated max-device fields are not presented as the active session policy", () => {
@@ -1087,8 +1073,13 @@ test("overview and session history wording do not imply concurrent online device
   const launcherMain = readFileSync("standalone/src/main.js", "utf8");
   assert.match(
     launcherMain,
-    /จะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด/,
+    /ยุติ Launcher session ปัจจุบันนี้หรือไม่ อุปกรณ์จะยังคงถูกจดจำและสามารถเข้าสู่ระบบใหม่ได้/,
   );
+  assert.match(
+    launcherMain,
+    /name === "revoke_session" && item\.active_session_id === id/,
+  );
+  assert.doesNotMatch(launcherMain, /revoke_installation|บล็อกเฉพาะการติดตั้ง/);
 });
 
 test("coupon codes can be archived and removed in browser storage", () => {

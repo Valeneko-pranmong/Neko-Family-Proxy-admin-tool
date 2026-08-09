@@ -182,7 +182,7 @@ async function getInstallations() {
   const [installations, profiles, activeSessions] = await Promise.all([
     tableGetAll("installations", {
       select:
-        "id,user_id,installation_key_hash,display_name,last_seen_at,revoked_at,created_at",
+        "id,user_id,installation_key_hash,display_name,last_seen_at,created_at",
       order: "last_seen_at.desc",
     }),
     listProfiles(),
@@ -204,13 +204,18 @@ async function getInstallations() {
     const installationHashMasked = installationHash.length >= 8
       ? `${installationHash.slice(0, 4)}…${installationHash.slice(-4)}`
       : "—";
-    const { installation_key_hash: _installationKeyHash, ...safeInstallation } = installation;
+    const {
+      installation_key_hash: _installationKeyHash,
+      revoked_at: _legacyRevokedAt,
+      ...safeInstallation
+    } = installation;
     return {
       ...safeInstallation,
       installation_key_hash_masked: installationHashMasked,
       username: usernames.get(installation.user_id) ?? "—",
-      status: installation.revoked_at ? "revoked" : "remembered",
+      status: "remembered",
       owns_active_session: Boolean(activeSession),
+      active_session_id: activeSession?.id ?? null,
       active_session_created_at: activeSession?.created_at ?? null,
       active_session_last_seen_at: activeSession?.last_seen_at ?? null,
     };
@@ -251,7 +256,7 @@ async function getOverview() {
       tableCount("profiles"),
       tableCount("products", { is_active: "eq.true" }),
       tableCount("licenses", { status: "eq.active" }),
-      tableCount("installations", { revoked_at: "is.null" }),
+      tableCount("installations"),
       tableCount("launcher_sessions", { revoked_at: "is.null" }),
       tableCount("coupons", { status: "eq.active" }),
       tableGet("audit_events", {
@@ -407,16 +412,7 @@ export async function performAction(body, actor) {
     requireRpcBoolean(revoked, "ไม่พบ session");
     return {};
   }
-  if (action === "revoke_installation") {
-    const installationId = String(body.installationId);
-    if (!UUID_PATTERN.test(installationId)) throw actionError("รหัส installation ไม่ถูกต้อง");
-    const revoked = await rpcPost("admin_revoke_installation", {
-      p_actor_id: actor.userId,
-      p_installation_id: installationId,
-    });
-    requireRpcBoolean(revoked, "ไม่พบ installation");
-    return {};
-  }
+
   if (action === "revoke_batch") {
     const batchId = String(body.batchId);
     if (!UUID_PATTERN.test(batchId)) throw actionError("รหัสชุดคูปองไม่ถูกต้อง");

@@ -81,7 +81,11 @@ async function load(section = store.state.active) {
 }
 
 async function action(name, id) {
-  const row = (store.state.data[store.state.active] || []).find((item) => item.id === id);
+  const row = (store.state.data[store.state.active] || []).find(
+    (item) =>
+      item.id === id
+      || (name === "revoke_session" && item.active_session_id === id),
+  );
   if (name === "generate_recovery_code") {
     if (!row || row.role !== "customer") return;
     recoveryCodeDialog = {
@@ -126,9 +130,7 @@ async function action(name, id) {
   ].filter(Boolean).join(" / ");
   const labels = {
     revoke_license: "ยกเลิก License นี้หรือไม่",
-    revoke_installation:
-      "บล็อกเฉพาะการติดตั้งนี้และยกเลิกเซสชันปัจจุบันของการติดตั้งนี้หรือไม่ หากต้องการระงับการใช้งานทุกเครื่อง ให้ระงับบัญชีแทน การระงับบัญชีจะทำให้ทุกการติดตั้งของบัญชีไม่สามารถเปิด Launcher session ใหม่ได้ และจะยกเลิก Launcher session ปัจจุบันทั้งหมด",
-    revoke_session: "ยกเลิก session นี้หรือไม่",
+    revoke_session: "ยุติ Launcher session ปัจจุบันนี้หรือไม่ อุปกรณ์จะยังคงถูกจดจำและสามารถเข้าสู่ระบบใหม่ได้",
     revoke_batch: "ยกเลิกคูปองทั้งชุดนี้หรือไม่",
     delete_batch: "ลบชุดคูปองนี้ถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้",
   };
@@ -137,7 +139,6 @@ async function action(name, id) {
   if (!window.confirm(confirmation)) return;
   const payload = {
     revoke_license: { action: name, licenseId: id },
-    revoke_installation: { action: name, installationId: id },
     revoke_session: { action: name, sessionId: id },
     revoke_batch: { action: name, batchId: id },
     delete_batch: { action: name, batchId: id },
