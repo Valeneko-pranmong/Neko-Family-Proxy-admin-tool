@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 process.env.SUPABASE_URL ||= "http://127.0.0.1";
@@ -17,6 +18,25 @@ const userId = "22222222-2222-4222-8222-222222222222";
 const recoveryId = "33333333-3333-4333-8333-333333333333";
 const sessionId = "44444444-4444-4444-8444-444444444444";
 const expiresAt = "2026-08-09T10:05:00.000Z";
+
+test("recovery HMAC secret requires at least 32 bytes", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", "import './server/config.mjs'"],
+    {
+      cwd: new URL("..", import.meta.url),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SUPABASE_URL: "http://127.0.0.1",
+        SUPABASE_SECRET_KEY: "test-secret",
+        ACCOUNT_RECOVERY_HMAC_SECRET: "too-short",
+      },
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ACCOUNT_RECOVERY_HMAC_SECRET must contain at least 32 bytes/);
+});
 
 function fixture(overrides = {}) {
   const calls = [];
@@ -64,7 +84,8 @@ test("admin generation returns raw code once but sends only verifier to RPC", as
   assert.equal(result.recovery_id, recoveryId);
   assert.equal(result.username, "test_customer");
   assert.equal(result.expires_at, expiresAt);
-  assert.match(result.recovery_code, /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}$/);
+  assert.match(result.recovery_code, /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}-[A-Z2-9]{6}$/);
+  assert.equal(result.recovery_code.replaceAll("-", "").length, 26);
   const serializedCalls = JSON.stringify(calls);
   assert.doesNotMatch(serializedCalls, new RegExp(result.recovery_code.replaceAll("-", "")));
   const generation = calls.find((call) => call.name === "admin_generate_recovery_code");
@@ -92,7 +113,7 @@ test("correct code creates a restricted opaque recovery token", async () => {
   const { service, calls } = fixture();
   const result = await service.verifyRecoveryCode({
     username: " TEST_CUSTOMER ",
-    recoveryCode: "ABCD-EFGH-JKLM-NPQR",
+    recoveryCode: "ABCD-EFGH-JKLM-NPQR-STUV-WX2345",
     requester: "198.51.100.10",
   });
 
@@ -115,7 +136,7 @@ test("invalid, expired, locked and rate-limited codes return one safe error", as
     await assert.rejects(
       () => service.verifyRecoveryCode({
         username: "test_customer",
-        recoveryCode: "ABCD-EFGH-JKLM-NPQR",
+        recoveryCode: "ABCD-EFGH-JKLM-NPQR-STUV-WX2345",
         requester: "198.51.100.10",
       }),
       (error) => error.status === 400 && error.message === "Recovery code is invalid or expired",
@@ -169,23 +190,84 @@ test("Auth failure releases operation as retryable without leaking raw error", a
   ]);
 });
 
-test("completed retry returns success without calling Supabase Auth again", async () => {
+test("lost success response retries completed operation without another Auth update", async () => {
+  let completed = false;
   const { service, calls } = fixture({
     rpc: async (name, payload) => {
       calls.push({ kind: "rpc", name, payload });
       if (name === "claim_recovery_password_change") {
-        return [{ user_id: userId, recovery_id: recoveryId, already_completed: true }];
+        return [{ user_id: userId, recovery_id: recoveryId, already_completed: completed }];
+      }
+      if (name === "complete_recovery_password_change") {
+        completed = true;
+        return true;
       }
       return true;
     },
   });
-  const result = await service.changePassword({
+  const request = {
     recoverySession: "token-that-is-long-enough-for-testing-1234567890",
     newPassword: "Valid-New-Password-123!",
+  };
+
+  const firstResult = await service.changePassword(request);
+  assert.deepEqual(firstResult, { completed: true, state: "completed" });
+  // Simulate that firstResult was lost before the Launcher received it.
+  const retriedResult = await service.changePassword(request);
+
+  assert.deepEqual(retriedResult, { completed: true, state: "completed" });
+  assert.equal(calls.filter((call) => call.kind === "auth").length, 1);
+  assert.deepEqual(calls.map((call) => call.name || call.kind), [
+    "claim_recovery_password_change",
+    "auth",
+    "complete_recovery_password_change",
+    "claim_recovery_password_change",
+  ]);
+});
+
+test("claim failures use stable safe recovery status codes", async () => {
+  for (const [backendCode, status] of [
+    ["recovery_session_invalid", 401],
+    ["password_fingerprint_mismatch", 409],
+    ["auth_update_in_progress", 409],
+  ]) {
+    const { service } = fixture({
+      rpc: async (name) => {
+        if (name === "claim_recovery_password_change") throw new Error(backendCode);
+        return true;
+      },
+    });
+    await assert.rejects(
+      () => service.changePassword({
+        recoverySession: "token-that-is-long-enough-for-testing-1234567890",
+        newPassword: "Valid-New-Password-123!",
+      }),
+      (error) => error.isSafe === true && error.status === status,
+    );
+  }
+});
+
+test("completion failure after Auth success is explicitly retryable", async () => {
+  const { service } = fixture({
+    rpc: async (name) => {
+      if (name === "claim_recovery_password_change") {
+        return [{ user_id: userId, recovery_id: recoveryId, already_completed: false }];
+      }
+      if (name === "complete_recovery_password_change") {
+        throw new Error("raw completion detail");
+      }
+      return true;
+    },
   });
-  assert.deepEqual(result, { completed: true, state: "completed" });
-  assert.equal(calls.filter((call) => call.kind === "auth").length, 0);
-  assert.deepEqual(calls.map((call) => call.name), ["claim_recovery_password_change"]);
+  await assert.rejects(
+    () => service.changePassword({
+      recoverySession: "token-that-is-long-enough-for-testing-1234567890",
+      newPassword: "Valid-New-Password-123!",
+    }),
+    (error) => error.isSafe === true
+      && error.status === 503
+      && error.message === "Password was updated but recovery finalization is pending; retry the same request",
+  );
 });
 
 test("malformed Backend responses fail closed", async () => {
@@ -193,9 +275,33 @@ test("malformed Backend responses fail closed", async () => {
   await assert.rejects(
     () => service.verifyRecoveryCode({
       username: "test_customer",
-      recoveryCode: "ABCD-EFGH-JKLM-NPQR",
+      recoveryCode: "ABCD-EFGH-JKLM-NPQR-STUV-WX2345",
       requester: "198.51.100.10",
     }),
     (error) => error.status === 502 && !/unexpected/.test(error.message),
   );
+});
+
+test("Backend timestamps must be timezone-bearing RFC3339", async () => {
+  for (const expiresAtValue of ["0", "2026-08-09", "2026-08-09T10:05:00"]) {
+    const { service } = fixture({
+      rpc: async (name) => name === "verify_recovery_code"
+        ? [{
+          ok: true,
+          error_code: null,
+          recovery_session_id: sessionId,
+          user_id: userId,
+          expires_at: expiresAtValue,
+        }]
+        : true,
+    });
+    await assert.rejects(
+      () => service.verifyRecoveryCode({
+        username: "test_customer",
+        recoveryCode: "ABCD-EFGH-JKLM-NPQR-STUV-WX2345",
+        requester: "198.51.100.10",
+      }),
+      (error) => error.status === 502,
+    );
+  }
 });

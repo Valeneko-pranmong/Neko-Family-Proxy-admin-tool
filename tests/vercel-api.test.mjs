@@ -794,7 +794,10 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.equal(recovery.headers.get("cache-control"), "no-store");
     const recoveryBody = await recovery.json();
     assert.match(recoveryBody.recovery_id, /^[0-9a-f-]{36}$/i);
-    assert.match(recoveryBody.recovery_code, /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}$/);
+    assert.match(
+      recoveryBody.recovery_code,
+      /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}-[A-Z2-9]{6}$/,
+    );
     assert.equal(recoveryBody.username, "test_customer");
     const generationRpc = fakeSupabase.control.events.find(
       (event) => event.rpc === "admin_generate_recovery_code",
@@ -911,10 +914,10 @@ test("user controls expose ban/reactivation and hide self-restriction actions", 
     userId: customerId,
     username: "test_customer",
     phase: "success",
-    recoveryCode: "ABCD-EFGH-JKLM-NPQR",
+    recoveryCode: "ABCD-EFGH-JKLM-NPQR-STUV-WX2345",
     countdown: "04:59",
   });
-  assert.match(success, /ABCD-EFGH-JKLM-NPQR/);
+  assert.match(success, /ABCD-EFGH-JKLM-NPQR-STUV-WX2345/);
   assert.match(success, /04:59/);
   assert.match(success, /data-action="copy_recovery_code"/);
   assert.doesNotMatch(success, /รหัสผ่านชั่วคราว/);

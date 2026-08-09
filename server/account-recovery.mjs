@@ -5,9 +5,10 @@ import { rpcPost, updateAuthUserPassword } from "./supabase.mjs";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
-const RECOVERY_CODE_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}$/;
+const RECOVERY_CODE_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}-[A-Z2-9]{6}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{40,200}$/;
 const HEX_PATTERN = /^[0-9a-f]{64}$/;
+const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function safeError(message, status = 400) {
@@ -36,7 +37,14 @@ function defaultVerifier(purpose, value) {
 function defaultRandomCode(bytes) {
   let code = "";
   for (const byte of bytes) code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
-  return code.match(/.{1,4}/g).join("-");
+  return [
+    code.slice(0, 4),
+    code.slice(4, 8),
+    code.slice(8, 12),
+    code.slice(12, 16),
+    code.slice(16, 20),
+    code.slice(20, 26),
+  ].join("-");
 }
 
 function validatePassword(password) {
@@ -62,7 +70,9 @@ function validateActor(actor) {
 }
 
 function validateTimestamp(value) {
-  return typeof value === "string" && Number.isFinite(Date.parse(value));
+  return typeof value === "string"
+    && RFC3339_PATTERN.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 
 export function createAccountRecoveryService(dependencies = {}) {
@@ -80,7 +90,7 @@ export function createAccountRecoveryService(dependencies = {}) {
         throw safeError("Invalid recovery target");
       }
       const recoveryId = makeUuid("recovery");
-      const recoveryCode = defaultRandomCode(makeBytes(16));
+      const recoveryCode = defaultRandomCode(makeBytes(26));
       const response = await rpc("admin_generate_recovery_code", {
         p_actor_id: actor.userId,
         p_user_id: userId,
@@ -159,10 +169,26 @@ export function createAccountRecoveryService(dependencies = {}) {
       if (!HEX_PATTERN.test(tokenVerifier) || !HEX_PATTERN.test(passwordFingerprint)) {
         throw safeError("Recovery verifier configuration is invalid", 500);
       }
-      const claim = firstRow(await rpc("claim_recovery_password_change", {
-        p_token_verifier: tokenVerifier,
-        p_password_fingerprint: passwordFingerprint,
-      }));
+      let claimResponse;
+      try {
+        claimResponse = await rpc("claim_recovery_password_change", {
+          p_token_verifier: tokenVerifier,
+          p_password_fingerprint: passwordFingerprint,
+        });
+      } catch (error) {
+        const detail = String(error?.message || "");
+        if (detail.includes("recovery_session_invalid")) {
+          throw safeError("Recovery session is invalid or expired", 401);
+        }
+        if (
+          detail.includes("password_fingerprint_mismatch")
+          || detail.includes("auth_update_in_progress")
+        ) {
+          throw safeError("Retry the same recovery session and password", 409);
+        }
+        throw safeError("Recovery backend is temporarily unavailable", 502);
+      }
+      const claim = firstRow(claimResponse);
       if (
         !claim
         || !UUID_PATTERN.test(String(claim.user_id || ""))
@@ -191,10 +217,18 @@ export function createAccountRecoveryService(dependencies = {}) {
         );
       }
 
-      const completed = await rpc("complete_recovery_password_change", {
-        p_token_verifier: tokenVerifier,
-        p_password_fingerprint: passwordFingerprint,
-      });
+      let completed;
+      try {
+        completed = await rpc("complete_recovery_password_change", {
+          p_token_verifier: tokenVerifier,
+          p_password_fingerprint: passwordFingerprint,
+        });
+      } catch {
+        throw safeError(
+          "Password was updated but recovery finalization is pending; retry the same request",
+          503,
+        );
+      }
       if (completed !== true) {
         throw safeError(
           "Password was updated but recovery finalization is pending; retry the same request",
