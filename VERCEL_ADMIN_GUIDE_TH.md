@@ -1,63 +1,56 @@
 # คู่มือ Neko Control Room บน Vercel
 
-ระบบนี้ให้บริการผ่าน Vercel เท่านั้น ไม่มี Local Admin API และไม่ต้องเปิด port
-หรือรัน PowerShell launcher บนเครื่องผู้ดูแล
+ระบบนี้ให้บริการผ่าน Vercel เท่านั้น ไม่มี Local Admin API
 
-## ตั้งค่า Vercel
+## ตั้งค่า
 
-1. เชื่อม repository นี้กับ Vercel project
-2. ตั้ง Environment Variables สำหรับ Production และ Preview ตามความเหมาะสม:
+ตั้ง Environment Variables สำหรับ Production/Preview:
 
 ```text
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SECRET_KEY=ใส่ Supabase Secret Key
 ADMIN_SESSION_SECRET=ค่าสุ่มลับอย่างน้อย 32 bytes
+ACCOUNT_RECOVERY_HMAC_SECRET=ค่าสุ่มลับอิสระอย่างน้อย 32 bytes
 ```
 
-3. หากต้องการเปลี่ยนอายุ session ให้กำหนด `ADMIN_SESSION_TTL_MS`
-   ระหว่าง `300000` ถึง `86400000`
-4. Deploy แล้วเปิด URL ของ Vercel
-5. Login ด้วย Username/Password ของ Supabase user ที่มี
-   `public.profiles.role = admin` และ `status = active`
+ห้ามใช้ค่าเดียวกันระหว่าง session secret และ recovery HMAC secret ห้ามเปิดเผยผ่าน browser environment หรือ logs จากนั้น apply forward-only Backend migration `20260809120000_account_recovery_codes.sql` ใน staging ก่อน production
 
-Vercel Function จะเก็บ secret ไว้ฝั่ง server เท่านั้น ส่วนเบราว์เซอร์ได้รับ
-signed session cookie ที่เป็น `Secure`, `HttpOnly` และ `SameSite=Strict`
+## สร้าง Recovery Code
 
-## ตั้งรหัสผ่านใหม่ให้ลูกค้า
-
-1. ตรวจสอบตัวตนของลูกค้าตามกระบวนการของทีม
+1. ตรวจสอบตัวตนลูกค้าตามกระบวนการธุรกิจ
 2. เข้าเมนู **สมาชิก**
-3. กด **ตั้งรหัสผ่านใหม่** ที่บัญชี `customer`
+3. กด **สร้าง Recovery Code** ที่บัญชี customer
 4. พิมพ์ Username ให้ตรงเพื่อยืนยัน
-5. ระบบจะยกเลิก Launcher session เดิมและสร้างรหัสผ่านชั่วคราว
-6. กด **คัดลอก** แล้วส่งให้ลูกค้าผ่านช่องทางส่วนตัว
-7. ปิด dialog เพื่อให้รหัสผ่านถูกล้างออกจากหน้าเว็บ
+5. อ่านคำเตือน: code อายุ 5 นาที ใช้ได้ครั้งเดียว และ code ใหม่ยกเลิก code เดิม
+6. คัดลอก code จาก dialog แล้วส่งผ่านช่องทางส่วนตัว
+7. ปิด dialog เมื่อส่งเสร็จ ระบบจะล้าง plaintext จาก memory ของหน้าเว็บ
 
-หากระบบแจ้งว่ารหัสผ่านถูกเปลี่ยนแล้วแต่ Audit ล้มเหลว **ห้ามกดซ้ำ**
-ให้ติดต่อผู้ดูแลฐานข้อมูล เพราะการกดซ้ำจะสร้างรหัสใหม่อีกครั้ง
+Admin ไม่ตั้งและไม่เห็น password ใหม่ Recovery Code ไม่ใช่ Supabase password ลูกค้าต้องใช้ Launcher recovery flow เพื่อตั้ง password เอง หาก Admin ปิดหรือ refresh dialog แล้วทำ code หาย ให้สร้าง code ใหม่
 
-## ข้อกำหนดฐานข้อมูล
+## Endpoint สำหรับ Launcher
 
-repository ฐานข้อมูลหลักต้องเพิ่ม `admin_password_reset` เป็นค่าที่อนุญาตใน
-`public.audit_events` constraint `audit_events_event_type_check`
+ดูสัญญาฉบับเต็มที่ `docs/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md`:
 
-## ความปลอดภัยสำหรับระบบบนอินเทอร์เน็ต
+- `POST /api/account/recovery/verify`
+- `POST /api/account/recovery/change-password`
 
-- เปิด Vercel Firewall rate limiting สำหรับ `/api/login` และ `/api/admin`
-- จำกัดสิทธิ์ผู้ที่เข้าถึง Production deployment ตามนโยบายของทีม
-- หมุน `ADMIN_SESSION_SECRET` เมื่อสงสัยว่ารั่ว ซึ่งจะทำให้ session เดิมหมดผล
-- ห้ามเปิดเผย `.env.local`, Supabase Secret Key หรือ admin session cookie
-- ตรวจ Runtime Logs และ Audit เป็นประจำ โดยต้องไม่มี plaintext password
+Recovery Session เป็น restricted opaque credential ใช้ได้เฉพาะ change-password ห้ามนำไปใช้เป็น Launcher access token
 
-## คำสั่งตรวจสอบ
+## ความปลอดภัย
+
+- เปิด Vercel Firewall/WAF rate limiting เพิ่มเติมสำหรับ `/api/login`, `/api/admin`, `/api/account/recovery/verify` และ `/api/account/recovery/change-password`
+- Database มี transactional per-requester rate limit และ failed-code attempt lock อยู่แล้ว แต่ edge rate limit ช่วยลด load ก่อนถึง Function
+- จำกัดผู้เข้าถึง Production deployment ตามนโยบายทีม
+- ห้าม log request body หรือ Authorization header ของ recovery endpoints
+- ตรวจ Audit โดยต้องไม่มี code, password หรือ recovery token
+- หมุน HMAC secret เฉพาะเมื่อจำเป็นและถือว่า recovery operations ที่ค้างทั้งหมดใช้ต่อไม่ได้
+
+## ตรวจสอบ
 
 ```powershell
 npm run build
 npm test
+npm audit
 ```
 
-E2E กับ disposable user ต้องมี `SUPABASE_PUBLISHABLE_KEY` เพิ่มใน environment:
-
-```powershell
-npm run test:e2e:password-reset
-```
+ก่อน release ต้องทดสอบ migration/RPC และ Auth failure injection ใน staging ห้าม deploy migration หรือเปลี่ยน Auth configuration จากเครื่อง development โดยพลการ

@@ -9,8 +9,7 @@
   "scripts": {
     "build": "npm run build:standalone",
     "build:standalone": "node scripts/build-standalone.mjs",
-    "test": "npm run build:standalone && node --test tests/vercel-api.test.mjs",
-    "test:e2e:password-reset": "node scripts/e2e-password-reset.mjs"
+    "test": "npm run build:standalone && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.8"

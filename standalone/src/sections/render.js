@@ -40,24 +40,24 @@ export function renderOverview(data = {}) {
   `;
 }
 
-export function renderUsers(rows = []) {
+export function renderUsers(rows = [], viewer = null) {
   const body = rows.map((row) => {
-    const resetAction =
+    const recoveryAction =
       row.role === "customer"
-        ? actionButton("reset_user_password", row.id, "ตั้งรหัสผ่านใหม่", "button-warning")
+        ? actionButton("generate_recovery_code", row.id, "สร้าง Recovery Code", "button-warning")
         : "";
-    const statusAction = actionButton(
-      "toggle_user_status",
-      row.id,
-      row.status === "active" ? "ระงับ" : "เปิดใช้",
-      row.status === "active" ? "button-danger" : "button-success",
-    );
-    return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.role)}<td>${statusBadge(row.status)}</td>${dateCell(row.updated_at)}<td class="actions">${resetAction} ${statusAction}</td></tr>`;
+    const isSelf = row.id === viewer?.userId;
+    const statusActions = isSelf
+      ? "บัญชีที่กำลังใช้งาน"
+      : row.status === "active"
+        ? `${actionButton("suspend_user", row.id, "ระงับ", "button-danger")} ${actionButton("ban_user", row.id, "แบน", "button-danger")}`
+        : actionButton("activate_user", row.id, "เปิดใช้", "button-success");
+    return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.role)}<td>${statusBadge(row.status)}</td>${dateCell(row.updated_at)}<td class="actions">${recoveryAction} ${statusActions}</td></tr>`;
   });
   return `${heading("สมาชิก", "ข้อมูลบัญชีจาก public.profiles")}${table(["Username", "ชื่อแสดง", "บทบาท", "สถานะ", "แก้ไขล่าสุด", "คำสั่ง"], body)}`;
 }
 
-export function renderPasswordResetDialog(state) {
+export function renderRecoveryCodeDialog(state) {
   if (!state) return "";
   const username = escapeHtml(state.username);
   const error = state.error
@@ -66,13 +66,14 @@ export function renderPasswordResetDialog(state) {
   if (state.phase === "success") {
     return `
       <div class="modal-backdrop" role="presentation">
-        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title">
-          <h2 id="reset-title">รหัสผ่านชั่วคราวของ ${username}</h2>
-          <p class="muted">รหัสนี้แสดงเพียงครั้งเดียว ส่งให้ลูกค้าผ่านช่องทางส่วนตัว และปิดหน้าต่างเมื่อคัดลอกเสร็จ</p>
-          <code class="temporary-password">${escapeHtml(state.temporaryPassword)}</code>
+        <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+          <h2 id="recovery-title">Recovery Code ของ ${username}</h2>
+          <p class="muted">ส่งรหัสนี้ให้ลูกค้าผ่านช่องทางส่วนตัว รหัสใช้ได้ครั้งเดียวและระบบจะไม่แสดงซ้ำหลังปิดหรือรีเฟรช</p>
+          <code class="temporary-password">${escapeHtml(state.recoveryCode)}</code>
+          <p><strong>หมดอายุใน ${escapeHtml(state.countdown || "00:00")}</strong> · ใช้ได้ครั้งเดียว</p>
           <div class="modal-actions">
-            <button class="button button-primary" type="button" data-action="copy_temporary_password">คัดลอก</button>
-            <button class="button" type="button" data-action="close_password_reset">ปิดและล้างรหัส</button>
+            <button class="button button-primary" type="button" data-action="copy_recovery_code">คัดลอกรหัส</button>
+            <button class="button" type="button" data-action="close_recovery_code">ปิดและล้างรหัส</button>
           </div>
         </section>
       </div>
@@ -81,10 +82,10 @@ export function renderPasswordResetDialog(state) {
   const busy = state.phase === "submitting";
   return `
     <div class="modal-backdrop" role="presentation">
-      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-title">
-        <h2 id="reset-title">ตั้งรหัสผ่านใหม่</h2>
-        <p>ระบบจะยกเลิก Launcher session เดิมทั้งหมดของ <strong>${username}</strong> แล้วสร้างรหัสผ่านชั่วคราวแบบสุ่ม</p>
-        <form id="password-reset-form" class="stack">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+        <h2 id="recovery-title">สร้าง Recovery Code</h2>
+        <p>สร้างรหัสใช้ครั้งเดียวสำหรับ <strong>${username}</strong> รหัสมีอายุ 5 นาที และการสร้างรหัสใหม่จะยกเลิกรหัสเดิมทันที Admin จะไม่ทราบรหัสผ่านใหม่ที่ลูกค้าเลือก</p>
+        <form id="recovery-code-form" class="stack">
           <input name="userId" type="hidden" value="${escapeHtml(state.userId)}" />
           <label>
             พิมพ์ Username “${username}” เพื่อยืนยัน
@@ -92,8 +93,8 @@ export function renderPasswordResetDialog(state) {
           </label>
           ${error}
           <div class="modal-actions">
-            <button class="button button-warning" type="submit" ${busy ? "disabled" : ""}>${busy ? "กำลังตั้งรหัสผ่าน…" : "ยืนยันและตั้งรหัสผ่านใหม่"}</button>
-            <button class="button" type="button" data-action="close_password_reset" ${busy ? "disabled" : ""}>ยกเลิก</button>
+            <button class="button button-warning" type="submit" ${busy ? "disabled" : ""}>${busy ? "กำลังสร้างรหัส…" : "ยืนยันและสร้าง Recovery Code"}</button>
+            <button class="button" type="button" data-action="close_recovery_code" ${busy ? "disabled" : ""}>ยกเลิก</button>
           </div>
         </form>
       </section>
@@ -183,8 +184,8 @@ export function renderAudit(rows = []) {
   return `${heading("ประวัติการใช้งาน", "Audit log จากระบบ Launcher และคำสั่งผู้ดูแล")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body)}`;
 }
 
-export function renderSection(section, data) {
-  if (section === "users") return renderUsers(data);
+export function renderSection(section, data, viewer = null) {
+  if (section === "users") return renderUsers(data, viewer);
   if (section === "products") return renderProducts(data);
   if (section === "licenses") return renderLicenses(data);
   if (section === "coupons") return renderCoupons(data);

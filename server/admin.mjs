@@ -1,17 +1,17 @@
-import { randomInt } from "node:crypto";
 import {
   rpcPost,
   tableCount,
   tableGet,
   tableGetAll,
-  tablePatch,
   tablePost,
-  updateAuthUserPassword,
 } from "./supabase.mjs";
+import { accountRecovery } from "./account-recovery.mjs";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
+const TIMESTAMPTZ_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function actionError(message, status = 400) {
   const error = new Error(message);
@@ -36,6 +36,11 @@ function requireUpdated(rows, message) {
   return rows;
 }
 
+function requireRpcBoolean(value, notFoundMessage) {
+  if (value === false) throw actionError(notFoundMessage, 404);
+  if (value !== true) throw actionError("Backend ตอบกลับไม่ถูกต้อง", 502);
+}
+
 async function recordAudit(eventType, actor, metadata = {}, { required = false } = {}) {
   try {
     await tablePost("audit_events", {
@@ -52,108 +57,6 @@ async function recordAudit(eventType, actor, metadata = {}, { required = false }
   }
 }
 
-export function generateTemporaryPassword(length = 20) {
-  if (!Number.isInteger(length) || length < 16 || length > 128) {
-    throw new Error("Invalid temporary password length");
-  }
-  const groups = [
-    "ABCDEFGHJKLMNPQRSTUVWXYZ",
-    "abcdefghijkmnopqrstuvwxyz",
-    "23456789",
-    "!@#$%&*+-=?",
-  ];
-  const characters = groups.map((group) => group[randomInt(group.length)]);
-  const all = groups.join("");
-  while (characters.length < length) {
-    characters.push(all[randomInt(all.length)]);
-  }
-  for (let index = characters.length - 1; index > 0; index -= 1) {
-    const swapWith = randomInt(index + 1);
-    [characters[index], characters[swapWith]] = [
-      characters[swapWith],
-      characters[index],
-    ];
-  }
-  return characters.join("");
-}
-
-function normalizeUsername(value) {
-  return String(value || "").normalize("NFKC").trim().toLowerCase();
-}
-
-async function resetUserPassword(body, actor) {
-  if (typeof body.userId !== "string") throw actionError("รหัสผู้ใช้ไม่ถูกต้อง");
-  if (typeof body.confirmUsername !== "string") {
-    throw actionError("Username ที่ใช้ยืนยันไม่ถูกต้อง");
-  }
-  const userId = body.userId.trim();
-  const confirmUsername = normalizeUsername(body.confirmUsername);
-  if (!UUID_PATTERN.test(userId)) throw actionError("รหัสผู้ใช้ไม่ถูกต้อง");
-  if (!USERNAME_PATTERN.test(confirmUsername)) {
-    throw actionError("Username ที่ใช้ยืนยันไม่ถูกต้อง");
-  }
-  if (userId === actor.userId) {
-    throw actionError("ไม่สามารถตั้งรหัสผ่านใหม่ให้บัญชีผู้ดูแลที่กำลังใช้งาน", 403);
-  }
-
-  let profiles;
-  try {
-    profiles = await tableGet("profiles", {
-      select: "id,username,role,status",
-      id: `eq.${userId}`,
-      limit: "1",
-    });
-  } catch {
-    throw actionError("ตรวจสอบบัญชีสมาชิกไม่สำเร็จ", 502);
-  }
-  const target = profiles[0];
-  if (!target) throw actionError("ไม่พบบัญชีสมาชิก", 404);
-  const targetUsername = normalizeUsername(target.username);
-  if (targetUsername !== confirmUsername) {
-    throw actionError("Username ที่ยืนยันไม่ตรงกับบัญชี");
-  }
-  if (target.role !== "customer") {
-    throw actionError("ตั้งรหัสผ่านใหม่ได้เฉพาะบัญชีลูกค้า", 403);
-  }
-
-  const temporaryPassword = generateTemporaryPassword();
-  const revokedAt = new Date().toISOString();
-  let revokedSessions;
-  try {
-    revokedSessions = await tablePatch(
-      "launcher_sessions",
-      { user_id: `eq.${userId}`, revoked_at: "is.null" },
-      { revoked_at: revokedAt },
-    );
-  } catch {
-    throw actionError("ยกเลิก Launcher session ไม่สำเร็จ จึงยังไม่เปลี่ยนรหัสผ่าน", 502);
-  }
-
-  try {
-    await updateAuthUserPassword(userId, temporaryPassword);
-  } catch {
-    throw actionError("เปลี่ยนรหัสผ่านใน Supabase Auth ไม่สำเร็จ", 502);
-  }
-
-  try {
-    await recordAudit(
-      "admin_password_reset",
-      actor,
-      {
-        target_user_id: userId,
-        target_username: targetUsername,
-        sessions_revoked: Array.isArray(revokedSessions) ? revokedSessions.length : 0,
-      },
-      { required: true },
-    );
-  } catch {
-    throw actionError(
-      "รหัสผ่านถูกเปลี่ยนแล้ว แต่บันทึก Audit ไม่สำเร็จ ห้ามกดซ้ำ กรุณาติดต่อผู้ดูแลระบบ",
-      500,
-    );
-  }
-  return { temporaryPassword };
-}
 
 async function getUsers() {
   return tableGet("profiles", {
@@ -277,11 +180,10 @@ async function getRedemptions() {
 
 async function getInstallations() {
   const [installations, profiles, activeSessions] = await Promise.all([
-    tableGet("installations", {
+    tableGetAll("installations", {
       select:
         "id,user_id,installation_key_hash,display_name,last_seen_at,revoked_at,created_at",
       order: "last_seen_at.desc",
-      limit: "1000",
     }),
     listProfiles(),
     tableGetAll("launcher_sessions", {
@@ -432,13 +334,18 @@ export async function getResource(resource) {
   if (resource === "installations") return getInstallations();
   if (resource === "sessions") return getSessions();
   if (resource === "audit") return getAudit();
-  return getOverview();
+  if (resource === "overview") return getOverview();
+  throw actionError("ไม่พบข้อมูลที่ร้องขอ", 404);
 }
 
 export async function performAction(body, actor) {
   const action = String(body.action || "");
-  if (action === "reset_user_password") {
-    return resetUserPassword(body, actor);
+  if (action === "generate_recovery_code") {
+    return accountRecovery.generateRecoveryCode({
+      actor,
+      userId: body.userId,
+      confirmUsername: body.confirmUsername,
+    });
   }
   if (action === "set_user_status") {
     const status = String(body.status);
@@ -455,7 +362,7 @@ export async function performAction(body, actor) {
       p_user_id: userId,
       p_status: status,
     });
-    if (updated !== true) throw actionError("ไม่พบบัญชีสมาชิก", 404);
+    requireRpcBoolean(updated, "ไม่พบบัญชีสมาชิก");
     return {};
   }
   if (action === "revoke_license") {
@@ -465,7 +372,7 @@ export async function performAction(body, actor) {
       p_actor_id: actor.userId,
       p_license_id: licenseId,
     });
-    if (revoked !== true) throw actionError("ไม่พบ License", 404);
+    requireRpcBoolean(revoked, "ไม่พบ License");
     return {};
   }
   if (action === "extend_license") {
@@ -480,8 +387,13 @@ export async function performAction(body, actor) {
       p_license_id: licenseId,
       p_days: days,
     });
-    if (typeof validUntil !== "string" || Number.isNaN(Date.parse(validUntil))) {
-      throw actionError("ไม่พบ License", 404);
+    if (validUntil === false) throw actionError("ไม่พบ License", 404);
+    if (
+      typeof validUntil !== "string"
+      || !TIMESTAMPTZ_PATTERN.test(validUntil)
+      || Number.isNaN(Date.parse(validUntil))
+    ) {
+      throw actionError("Backend ตอบวันหมดอายุไม่ถูกต้อง", 502);
     }
     return { valid_until: validUntil };
   }
@@ -492,7 +404,7 @@ export async function performAction(body, actor) {
       p_actor_id: actor.userId,
       p_session_id: sessionId,
     });
-    if (revoked !== true) throw actionError("ไม่พบ session", 404);
+    requireRpcBoolean(revoked, "ไม่พบ session");
     return {};
   }
   if (action === "revoke_installation") {
@@ -502,27 +414,29 @@ export async function performAction(body, actor) {
       p_actor_id: actor.userId,
       p_installation_id: installationId,
     });
-    if (revoked !== true) throw actionError("ไม่พบ installation", 404);
+    requireRpcBoolean(revoked, "ไม่พบ installation");
     return {};
   }
   if (action === "revoke_batch") {
     const batchId = String(body.batchId);
+    if (!UUID_PATTERN.test(batchId)) throw actionError("รหัสชุดคูปองไม่ถูกต้อง");
     const revoked = await rpcPost("admin_revoke_coupon_batch", {
       p_actor_id: actor.userId,
       p_batch_id: batchId,
     });
-    if (revoked !== true) throw new Error("Coupon batch not found");
+    requireRpcBoolean(revoked, "ไม่พบชุดคูปอง");
     return {};
   }
   if (action === "delete_batch") {
     const batchId = String(body.batchId);
+    if (!UUID_PATTERN.test(batchId)) throw actionError("รหัสชุดคูปองไม่ถูกต้อง");
     const deleted = await rpcPost("admin_delete_coupon_batch", {
       p_actor_id: actor.userId,
       p_batch_id: batchId,
     });
-    if (deleted !== true) throw new Error("Coupon batch not found");
+    requireRpcBoolean(deleted, "ไม่พบชุดคูปอง");
     return {};
   }
   if (action === "generate_coupons") return generateCoupons(body, actor);
-  throw new Error("Unknown admin action");
+  throw actionError("คำสั่งผู้ดูแลไม่ถูกต้อง");
 }

@@ -14,12 +14,13 @@ import {
   renderInstallations,
   renderLicenses,
   renderOverview,
-  renderPasswordResetDialog,
+  renderRecoveryCodeDialog,
   renderProducts,
   renderSessions,
   renderUsers,
 } from "../standalone/src/sections/render.js";
 import { sections } from "../standalone/src/config.js";
+import { escapeHtml } from "../standalone/src/ui/escape.js";
 
 const port = 8799;
 const supabasePort = 8800;
@@ -31,6 +32,7 @@ const missingId = "44444444-4444-4444-8444-444444444444";
 const installationId = "55555555-5555-4555-8555-555555555555";
 const licenseId = "66666666-6666-4666-8666-666666666666";
 const sessionId = "77777777-7777-4777-8777-777777777777";
+const batchId = "88888888-8888-4888-8888-888888888888";
 
 function createFakeSupabase() {
   const control = {
@@ -39,6 +41,7 @@ function createFakeSupabase() {
     failAuthUpdate: false,
     failSessionRevoke: false,
     falseRpcs: new Set(),
+    invalidBooleanRpcs: new Set(),
     invalidTimestampRpcs: new Set(),
     events: [],
   };
@@ -333,21 +336,25 @@ function createFakeSupabase() {
       for await (const chunk of request) text += chunk;
       const body = JSON.parse(text);
       assert.equal(request.headers["content-profile"], "launcher");
-      assert.equal(body.p_actor_id, adminId);
+      if (rpc.startsWith("admin_")) assert.equal(body.p_actor_id, adminId);
       control.events.push({ type: "rpc", rpc, body });
       response.writeHead(200, { "Content-Type": "application/json" });
       if (control.falseRpcs.has(rpc)) {
         response.end("false");
         return;
       }
+      if (control.invalidBooleanRpcs.has(rpc)) {
+        response.end(JSON.stringify({ unexpected: true }));
+        return;
+      }
       if (control.invalidTimestampRpcs.has(rpc)) {
-        response.end(JSON.stringify("not-a-timestamp"));
+        response.end(JSON.stringify(control.invalidTimestampValue || "not-a-timestamp"));
         return;
       }
       if (rpc === "admin_generate_coupon_batch") {
         response.end(JSON.stringify(
           Array.from({ length: body.p_quantity }, (_, index) => ({
-            batch_id: "generated-batch-id",
+            batch_id: batchId,
             code: `NEKO-TEST-${index + 1}`,
           })),
         ));
@@ -355,6 +362,39 @@ function createFakeSupabase() {
       }
       if (rpc === "admin_extend_license") {
         response.end(JSON.stringify("2026-09-30T00:00:00.000Z"));
+        return;
+      }
+      if (rpc === "admin_generate_recovery_code") {
+        response.end(JSON.stringify([{
+          recovery_id: body.p_recovery_id,
+          username: "test_customer",
+          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        }]));
+        return;
+      }
+      if (rpc === "verify_recovery_code") {
+        response.end(JSON.stringify([{
+          ok: true,
+          error_code: null,
+          recovery_session_id: body.p_session_id,
+          user_id: customerId,
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        }]));
+        return;
+      }
+      if (rpc === "claim_recovery_password_change") {
+        response.end(JSON.stringify([{
+          user_id: customerId,
+          recovery_id: "99999999-9999-4999-8999-999999999999",
+          already_completed: false,
+        }]));
+        return;
+      }
+      if (
+        rpc === "release_recovery_password_change"
+        || rpc === "complete_recovery_password_change"
+      ) {
+        response.end("true");
         return;
       }
       if (
@@ -405,6 +445,9 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   process.env.SUPABASE_SECRET_KEY = "test-secret";
   process.env.ADMIN_SESSION_SECRET =
     "test-session-secret-that-is-long-enough-for-hmac-signing";
+  process.env.ACCOUNT_RECOVERY_HMAC_SECRET =
+    "test-recovery-hmac-secret-that-is-long-enough";
+  process.env.VERCEL = "1";
   const { default: handler } = await import(
     `../api/index.mjs?test=${Date.now()}`
   );
@@ -439,16 +482,16 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
 
     const unauthenticated = await fetch(`${base}/api/admin?resource=overview`);
     assert.equal(unauthenticated.status, 401);
-    const unauthenticatedReset = await fetch(`${base}/api/admin`, {
+    const unauthenticatedRecovery = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "reset_user_password",
+        action: "generate_recovery_code",
         userId: customerId,
         confirmUsername: "test_customer",
       }),
     });
-    assert.equal(unauthenticatedReset.status, 401);
+    assert.equal(unauthenticatedRecovery.status, 401);
 
     const login = await fetch(`${base}/api/login`, {
       method: "POST",
@@ -456,13 +499,57 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       body: JSON.stringify({ username: "test_admin", password: "correct-pass" }),
     });
     assert.equal(login.status, 200);
-    assert.match(login.headers.get("set-cookie") || "", /admin_session=/);
+    const loginCookie = login.headers.get("set-cookie") || "";
+    assert.match(loginCookie, /admin_session=/);
+    assert.match(loginCookie, /HttpOnly/i);
+    assert.match(loginCookie, /SameSite=Strict/i);
+    assert.match(loginCookie, /Path=\//i);
+    assert.match(loginCookie, /Max-Age=28800/i);
+    assert.match(loginCookie, /Secure/i);
     const loginBody = await login.json();
     assert.equal(loginBody.viewer.role, "admin");
     assert.equal(loginBody.viewer.status, "active");
     assert.equal(loginBody.viewer.username, "test_admin");
 
     const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
+
+    const crossOriginAction = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+        Origin: "https://attacker.invalid",
+      },
+      body: JSON.stringify({ action: "revoke_session", sessionId }),
+    });
+    assert.equal(crossOriginAction.status, 403);
+    assert.deepEqual(await crossOriginAction.json(), {
+      ok: false,
+      error: "Cross-origin request rejected",
+    });
+
+    const malformedJson = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: "{",
+    });
+    assert.equal(malformedJson.status, 400);
+    assert.deepEqual(await malformedJson.json(), {
+      ok: false,
+      error: "Invalid JSON request",
+    });
+
+    const unknownResource = await fetch(`${base}/api/admin?resource=secret-table`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(unknownResource.status, 404);
+
+    const unknownAction = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unknown_action" }),
+    });
+    assert.equal(unknownAction.status, 400);
     const resources = [
       "overview",
       "users",
@@ -481,6 +568,8 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       assert.equal(response.status, 200, `${resource} should load`);
       const payload = await response.json();
       assert.equal(payload.resource, resource);
+      assert.equal(payload.viewer.userId, adminId);
+      assert.equal(payload.viewer.role, "admin");
       if (resource === "coupons") {
         assert.equal(payload.data[0].active_count, 1);
         assert.equal(payload.data[0].redeemed_count, 1);
@@ -601,6 +690,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       ["set_user_status", "admin_set_user_status", { userId: customerId, status: "suspended" }],
       ["revoke_license", "admin_revoke_license", { licenseId }],
       ["revoke_session", "admin_revoke_session", { sessionId }],
+      ["revoke_installation", "admin_revoke_installation", { installationId }],
     ];
     for (const [action, rpc, fields] of falseRpcCases) {
       fakeSupabase.control.falseRpcs.add(rpc);
@@ -614,15 +704,44 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       fakeSupabase.control.falseRpcs.delete(rpc);
     }
 
+    for (const [action, rpc, fields] of falseRpcCases) {
+      fakeSupabase.control.invalidBooleanRpcs.add(rpc);
+      const response = await fetch(`${base}/api/admin`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...fields }),
+      });
+      assert.equal(response.status, 502, `${action} malformed RPC result should fail closed`);
+      assert.deepEqual(await response.json(), {
+        ok: false,
+        error: "Backend ตอบกลับไม่ถูกต้อง",
+      });
+      fakeSupabase.control.invalidBooleanRpcs.delete(rpc);
+    }
+
     fakeSupabase.control.invalidTimestampRpcs.add("admin_extend_license");
     const invalidTimestamp = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "extend_license", licenseId, days: 30 }),
     });
-    assert.equal(invalidTimestamp.status, 404);
-    assert.equal((await invalidTimestamp.json()).ok, false);
+    assert.equal(invalidTimestamp.status, 502);
+    assert.deepEqual(await invalidTimestamp.json(), {
+      ok: false,
+      error: "Backend ตอบวันหมดอายุไม่ถูกต้อง",
+    });
     fakeSupabase.control.invalidTimestampRpcs.delete("admin_extend_license");
+
+    fakeSupabase.control.invalidTimestampRpcs.add("admin_extend_license");
+    fakeSupabase.control.invalidTimestampValue = "0";
+    const dateParseLoophole = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "extend_license", licenseId, days: 30 }),
+    });
+    assert.equal(dateParseLoophole.status, 502);
+    fakeSupabase.control.invalidTimestampRpcs.delete("admin_extend_license");
+    delete fakeSupabase.control.invalidTimestampValue;
 
     const invalidStatus = await fetch(`${base}/api/admin`, {
       method: "POST",
@@ -651,141 +770,98 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       error: "ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่",
     });
 
-    const mismatch = await fetch(`${base}/api/admin`, {
+    const legacyReset = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "reset_user_password",
         userId: customerId,
-        confirmUsername: "wrong_customer",
+        confirmUsername: "test_customer",
       }),
     });
-    assert.equal(mismatch.status, 400);
+    assert.equal(legacyReset.status, 400);
 
-    const missingTarget = await fetch(`${base}/api/admin`, {
+    const recovery = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "reset_user_password",
-        userId: missingId,
-        confirmUsername: "missing_customer",
-      }),
-    });
-    assert.equal(missingTarget.status, 404);
-
-    const selfReset = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
-        userId: adminId,
-        confirmUsername: "test_admin",
-      }),
-    });
-    assert.equal(selfReset.status, 403);
-
-    const adminTarget = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
-        userId: suspendedId,
-        confirmUsername: "test_suspended",
-      }),
-    });
-    assert.equal(adminTarget.status, 403);
-
-    const beforeSuccess = fakeSupabase.control.events.length;
-    const reset = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
+        action: "generate_recovery_code",
         userId: customerId,
-        confirmUsername: " TEST_CUSTOMER ",
+        confirmUsername: "test_customer",
       }),
     });
-    assert.equal(reset.status, 200);
-    assert.equal(reset.headers.get("cache-control"), "no-store");
-    const resetBody = await reset.json();
-    assert.match(resetBody.temporaryPassword, /[A-Z]/);
-    assert.match(resetBody.temporaryPassword, /[a-z]/);
-    assert.match(resetBody.temporaryPassword, /[0-9]/);
-    assert.match(resetBody.temporaryPassword, /[^A-Za-z0-9]/);
-    assert.ok(resetBody.temporaryPassword.length >= 16);
-    const resetEvents = fakeSupabase.control.events.slice(beforeSuccess);
-    assert.deepEqual(resetEvents.map((event) => event.type), [
-      "session_revoke",
+    assert.equal(recovery.status, 200);
+    assert.equal(recovery.headers.get("cache-control"), "no-store");
+    const recoveryBody = await recovery.json();
+    assert.match(recoveryBody.recovery_id, /^[0-9a-f-]{36}$/i);
+    assert.match(recoveryBody.recovery_code, /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}$/);
+    assert.equal(recoveryBody.username, "test_customer");
+    const generationRpc = fakeSupabase.control.events.find(
+      (event) => event.rpc === "admin_generate_recovery_code",
+    );
+    assert.ok(generationRpc);
+    assert.equal("recovery_code" in generationRpc.body, false);
+    assert.doesNotMatch(JSON.stringify(generationRpc.body), new RegExp(
+      recoveryBody.recovery_code.replaceAll("-", ""),
+    ));
+
+    const verified = await fetch(`${base}/api/account/recovery/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-For": "198.51.100.10",
+      },
+      body: JSON.stringify({
+        username: "test_customer",
+        recovery_code: recoveryBody.recovery_code,
+      }),
+    });
+    assert.equal(verified.status, 200);
+    const verifiedBody = await verified.json();
+    assert.equal(verifiedBody.scope, "change_password");
+    assert.match(verifiedBody.recovery_session, /^[A-Za-z0-9_-]{40,}$/);
+
+    const missingRecoveryBearer = await fetch(
+      `${base}/api/account/recovery/change-password`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_password: "Valid-New-Password-123!" }),
+      },
+    );
+    assert.equal(missingRecoveryBearer.status, 401);
+
+    const changed = await fetch(`${base}/api/account/recovery/change-password`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${verifiedBody.recovery_session}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ new_password: "Valid-New-Password-123!" }),
+    });
+    assert.equal(changed.status, 200);
+    assert.deepEqual(await changed.json(), {
+      ok: true,
+      completed: true,
+      state: "completed",
+    });
+    const recoveryEvents = fakeSupabase.control.events.filter(
+      (event) => event.rpc?.includes("recovery_password_change") || event.type === "auth_update",
+    );
+    assert.deepEqual(recoveryEvents.map((event) => event.rpc || event.type), [
+      "claim_recovery_password_change",
       "auth_update",
-      "audit",
-    ]);
-    assert.equal(resetEvents[2].body.event_type, "admin_password_reset");
-    assert.equal(resetEvents[2].body.metadata.sessions_revoked, 2);
-    assert.deepEqual(Object.keys(resetEvents[2].body.metadata).sort(), [
-      "sessions_revoked",
-      "target_user_id",
-      "target_username",
+      "complete_recovery_password_change",
     ]);
     assert.doesNotMatch(
-      JSON.stringify(resetEvents[2].body.metadata),
-      new RegExp(resetBody.temporaryPassword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      JSON.stringify(recoveryEvents.filter((event) => event.type !== "auth_update")),
+      /Valid-New-Password-123!/,
     );
-
-    fakeSupabase.control.failSessionRevoke = true;
-    const eventsBeforeRevokeFailure = fakeSupabase.control.events.length;
-    const revokeFailure = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
-        userId: customerId,
-        confirmUsername: "test_customer",
-      }),
-    });
-    assert.equal(revokeFailure.status, 502);
-    assert.equal(
-      fakeSupabase.control.events.slice(eventsBeforeRevokeFailure).some(
-        (event) => event.type === "auth_update",
-      ),
-      false,
-    );
-    assert.equal("temporaryPassword" in await revokeFailure.json(), false);
-    fakeSupabase.control.failSessionRevoke = false;
-
-    fakeSupabase.control.failAuthUpdate = true;
-    const authFailure = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
-        userId: customerId,
-        confirmUsername: "test_customer",
-      }),
-    });
-    assert.equal(authFailure.status, 502);
-    assert.equal("temporaryPassword" in await authFailure.json(), false);
-    fakeSupabase.control.failAuthUpdate = false;
-
-    fakeSupabase.control.failAudit = true;
-    const auditFailure = await fetch(`${base}/api/admin`, {
-      method: "POST",
-      headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "reset_user_password",
-        userId: customerId,
-        confirmUsername: "test_customer",
-      }),
-    });
-    assert.equal(auditFailure.status, 500);
-    const auditFailureBody = await auditFailure.json();
-    assert.equal("temporaryPassword" in auditFailureBody, false);
-    assert.doesNotMatch(JSON.stringify(auditFailureBody), /internal-audit-detail/);
-    fakeSupabase.control.failAudit = false;
 
     const deleted = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete_batch", batchId: "generated-batch-id" }),
+      body: JSON.stringify({ action: "delete_batch", batchId }),
     });
     assert.equal(deleted.status, 200);
 
@@ -795,6 +871,18 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     });
     assert.equal(inactiveSession.status, 401);
     fakeSupabase.control.adminActive = true;
+
+    const logout = await fetch(`${base}/api/logout`, {
+      method: "POST",
+      headers: { Cookie: cookie },
+    });
+    assert.equal(logout.status, 200);
+    const logoutCookie = logout.headers.get("set-cookie") || "";
+    assert.match(logoutCookie, /admin_session=;/);
+    assert.match(logoutCookie, /Max-Age=0/i);
+    assert.match(logoutCookie, /HttpOnly/i);
+    assert.match(logoutCookie, /SameSite=Strict/i);
+    assert.match(logoutCookie, /Secure/i);
   } finally {
     apiServer.close();
     await once(apiServer, "close").catch(() => {});
@@ -803,28 +891,52 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   }
 });
 
-test("password reset controls are limited to customers and clearable from the DOM", () => {
+test("user controls expose ban/reactivation and hide self-restriction actions", () => {
   const users = renderUsers([
     { id: customerId, username: "test_customer", role: "customer", status: "active" },
     { id: adminId, username: "test_admin", role: "admin", status: "active" },
-  ]);
-  assert.equal((users.match(/data-action="reset_user_password"/g) || []).length, 1);
-  assert.match(users, new RegExp(`data-id="${customerId}"`));
+    { id: suspendedId, username: "test_suspended", role: "customer", status: "suspended" },
+  ], { userId: adminId });
+  assert.equal((users.match(/data-action="generate_recovery_code"/g) || []).length, 2);
+  assert.match(users, /data-action="suspend_user"/);
+  assert.match(users, /data-action="ban_user"/);
+  assert.match(users, /data-action="activate_user"/);
+  assert.match(users, /บัญชีที่กำลังใช้งาน/);
+  assert.doesNotMatch(
+    users,
+    new RegExp(`data-action="(?:suspend_user|ban_user)" data-id="${adminId}"`),
+  );
 
-  const success = renderPasswordResetDialog({
+  const success = renderRecoveryCodeDialog({
     userId: customerId,
     username: "test_customer",
     phase: "success",
-    temporaryPassword: "Temp-Password-123!",
+    recoveryCode: "ABCD-EFGH-JKLM-NPQR",
+    countdown: "04:59",
   });
-  assert.match(success, /Temp-Password-123!/);
-  assert.match(success, /data-action="copy_temporary_password"/);
-  assert.equal(renderPasswordResetDialog(null), "");
+  assert.match(success, /ABCD-EFGH-JKLM-NPQR/);
+  assert.match(success, /04:59/);
+  assert.match(success, /data-action="copy_recovery_code"/);
+  assert.doesNotMatch(success, /รหัสผ่านชั่วคราว/);
+  assert.equal(renderRecoveryCodeDialog(null), "");
 });
 
 test("standalone bundle contains no server credential", () => {
   const bundle = readFileSync("standalone/dist/neko-control.html", "utf8");
-  assert.doesNotMatch(bundle, /SUPABASE_SECRET_KEY|test-secret/);
+  assert.doesNotMatch(
+    bundle,
+    /SUPABASE_(?:SECRET|SERVICE_ROLE)_KEY|ADMIN_SESSION_SECRET|service[_ -]?role|test-secret/i,
+  );
+});
+
+test("browser-rendered API errors and dynamic fields are HTML escaped", () => {
+  const payload = `<img src=x onerror="globalThis.compromised=true">`;
+  assert.equal(
+    escapeHtml(payload),
+    "&lt;img src=x onerror=&quot;globalThis.compromised=true&quot;&gt;",
+  );
+  const launcherMain = readFileSync("standalone/src/main.js", "utf8");
+  assert.match(launcherMain, /escapeHtml\(store\.state\.error\)/);
 });
 
 test("coupon rows expose safe management actions", () => {

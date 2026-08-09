@@ -20,9 +20,16 @@ const result = await build({
   minify: true,
 });
 const script = result.outputFiles[0].text;
+const scriptMarker = '<script type="module" src="./main.js"></script>';
+if (!template.includes("</head>") || !template.includes(scriptMarker)) {
+  throw new Error("Standalone template is missing a required build marker");
+}
 const html = template
   .replace("</head>", `<style>${css}</style></head>`)
-  .replace('<script type="module" src="./main.js"></script>', `<script>${script}</script>`);
+  .replace(scriptMarker, `<script>${script}</script>`);
+if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(css)) {
+  throw new Error("Standalone build output is incomplete");
+}
 
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, html, "utf8");

@@ -17,16 +17,24 @@ export function createSessionController(onChange) {
       viewer = result.viewer || null;
       onChange();
     },
-    async logout() {
-      await api.logout();
+    async logout({ forceLocal = false } = {}) {
+      try {
+        await api.logout();
+      } catch (error) {
+        if (!forceLocal) throw error;
+      }
       authenticated = false;
       viewer = null;
       onChange();
     },
     async restore() {
       try {
-        await api.loadResource("overview");
+        const result = await api.loadResource("overview");
+        if (!result.viewer?.userId || result.viewer.role !== "admin") {
+          throw new Error("Invalid admin session response");
+        }
         authenticated = true;
+        viewer = result.viewer;
         onChange();
         return true;
       } catch {

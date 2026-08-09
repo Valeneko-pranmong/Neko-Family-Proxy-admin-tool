@@ -9,20 +9,24 @@ import { createSessionController } from "./session.js";
 import { createStore } from "./state.js";
 import {
   couponForm,
-  renderPasswordResetDialog,
+  renderRecoveryCodeDialog,
   renderSection,
 } from "./sections/render.js";
 import { loginView, shellView } from "./ui/layout.js";
+import { escapeHtml } from "./ui/escape.js";
 import { toast } from "./ui/toast.js";
 
 const root = document.querySelector("#app");
 const store = createStore();
 let loginError = "";
-let passwordResetDialog = null;
+let recoveryCodeDialog = null;
+let recoveryCountdownTimer = null;
+let loadRequestId = 0;
+let actionInFlight = false;
 
 function render() {
   if (!session.authenticated) {
-    passwordResetDialog = null;
+    recoveryCodeDialog = null;
     root.innerHTML = loginView(loginError);
     return;
   }
@@ -31,7 +35,7 @@ function render() {
   if (store.state.loading) {
     content.innerHTML = `<div class="panel"><div class="empty">กำลังโหลดข้อมูล…</div></div>`;
   } else if (store.state.error) {
-    content.innerHTML = `<div class="panel"><div class="form-error">${store.state.error}</div></div>`;
+    content.innerHTML = `<div class="panel"><div class="form-error">${escapeHtml(store.state.error)}</div></div>`;
   } else {
     const sectionData = store.state.data[store.state.active];
     const renderedData =
@@ -41,28 +45,34 @@ function render() {
             has_archived_codes: hasCouponCodes(row.id),
           }))
         : sectionData;
-    content.innerHTML = renderSection(store.state.active, renderedData);
+    content.innerHTML = renderSection(store.state.active, renderedData, session.viewer);
     if (store.state.couponFormOpen) {
       const host = root.querySelector("#coupon-form-host");
       if (host) host.innerHTML = couponForm();
     }
   }
-  root.insertAdjacentHTML("beforeend", renderPasswordResetDialog(passwordResetDialog));
+  root.insertAdjacentHTML("beforeend", renderRecoveryCodeDialog(recoveryCodeDialog));
+}
+
+async function handleUnauthorized(error) {
+  if (error?.status !== 401) return false;
+  await session.logout({ forceLocal: true });
+  return true;
 }
 
 async function load(section = store.state.active) {
+  const requestId = ++loadRequestId;
   store.patch({ loading: true, error: "" });
   try {
     const result = await api.loadResource(section);
+    if (requestId !== loadRequestId || section !== store.state.active) return;
     store.patch({
       data: { ...store.state.data, [section]: result.data },
       loading: false,
     });
   } catch (error) {
-    if (error?.status === 401) {
-      await session.logout().catch(() => {});
-      return;
-    }
+    if (await handleUnauthorized(error)) return;
+    if (requestId !== loadRequestId || section !== store.state.active) return;
     store.patch({
       loading: false,
       error: error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ",
@@ -72,21 +82,34 @@ async function load(section = store.state.active) {
 
 async function action(name, id) {
   const row = (store.state.data[store.state.active] || []).find((item) => item.id === id);
-  if (name === "reset_user_password") {
+  if (name === "generate_recovery_code") {
     if (!row || row.role !== "customer") return;
-    passwordResetDialog = {
+    recoveryCodeDialog = {
       userId: row.id,
       username: String(row.username || "").trim().toLowerCase(),
       phase: "confirm",
       error: "",
-      temporaryPassword: "",
+      recoveryCode: "",
+      countdown: "05:00",
+      expiresAt: "",
     };
     render();
     return;
   }
-  if (name === "toggle_user_status") {
-    const nextStatus = row?.status === "active" ? "suspended" : "active";
-    if (!window.confirm(`ยืนยันเปลี่ยนสถานะสมาชิกเป็น ${nextStatus} หรือไม่`)) return;
+  if (["suspend_user", "ban_user", "activate_user"].includes(name)) {
+    const nextStatus = {
+      suspend_user: "suspended",
+      ban_user: "banned",
+      activate_user: "active",
+    }[name];
+    const confirmation = {
+      suspended:
+        "ระงับบัญชีนี้หรือไม่ บัญชีจะใช้ทุกการติดตั้งไม่ได้และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
+      banned:
+        "แบนบัญชีนี้หรือไม่ บัญชีจะใช้ทุกการติดตั้งไม่ได้และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
+      active: "เปิดใช้บัญชีนี้อีกครั้งหรือไม่",
+    }[nextStatus];
+    if (!window.confirm(confirmation)) return;
     await run({ action: "set_user_status", userId: id, status: nextStatus });
     return;
   }
@@ -96,6 +119,11 @@ async function action(name, id) {
     await run({ action: "extend_license", licenseId: id, days });
     return;
   }
+  const targetLabel = [
+    row?.username,
+    row?.display_name || row?.device,
+    row?.product || row?.batch,
+  ].filter(Boolean).join(" / ");
   const labels = {
     revoke_license: "ยกเลิก License นี้หรือไม่",
     revoke_installation:
@@ -104,7 +132,9 @@ async function action(name, id) {
     revoke_batch: "ยกเลิกคูปองทั้งชุดนี้หรือไม่",
     delete_batch: "ลบชุดคูปองนี้ถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้",
   };
-  if (!window.confirm(labels[name] || "ยืนยันคำสั่งนี้หรือไม่")) return;
+  const confirmation = `${labels[name] || "ยืนยันคำสั่งนี้หรือไม่"}${targetLabel ? `
+เป้าหมาย: ${targetLabel}` : ""}`;
+  if (!window.confirm(confirmation)) return;
   const payload = {
     revoke_license: { action: name, licenseId: id },
     revoke_installation: { action: name, installationId: id },
@@ -118,60 +148,78 @@ async function action(name, id) {
   }
 }
 
-function closePasswordResetDialog() {
-  if (passwordResetDialog) {
-    passwordResetDialog.temporaryPassword = "";
-    passwordResetDialog.error = "";
+function closeRecoveryCodeDialog() {
+  clearInterval(recoveryCountdownTimer);
+  recoveryCountdownTimer = null;
+  if (recoveryCodeDialog) {
+    recoveryCodeDialog.recoveryCode = "";
+    recoveryCodeDialog.error = "";
   }
-  passwordResetDialog = null;
+  recoveryCodeDialog = null;
   render();
 }
 
-async function submitPasswordReset(form) {
-  if (!passwordResetDialog || passwordResetDialog.phase === "submitting") return;
+function updateRecoveryCountdown() {
+  if (!recoveryCodeDialog?.expiresAt) return;
+  const remaining = Math.max(0, Date.parse(recoveryCodeDialog.expiresAt) - Date.now());
+  const seconds = Math.ceil(remaining / 1000);
+  recoveryCodeDialog.countdown = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  render();
+}
+
+async function submitRecoveryCode(form) {
+  if (!recoveryCodeDialog || recoveryCodeDialog.phase === "submitting") return;
   const formData = new FormData(form);
   const confirmUsername = String(formData.get("confirmUsername") || "")
     .trim()
     .toLowerCase();
-  if (confirmUsername !== passwordResetDialog.username) {
-    passwordResetDialog.error = "Username ที่ยืนยันไม่ตรงกับบัญชี";
+  if (confirmUsername !== recoveryCodeDialog.username) {
+    recoveryCodeDialog.error = "Username ที่ยืนยันไม่ตรงกับบัญชี";
     render();
     return;
   }
-  passwordResetDialog.phase = "submitting";
-  passwordResetDialog.error = "";
+  recoveryCodeDialog.phase = "submitting";
+  recoveryCodeDialog.error = "";
   render();
   try {
     const result = await api.runAction({
-      action: "reset_user_password",
-      userId: passwordResetDialog.userId,
+      action: "generate_recovery_code",
+      userId: recoveryCodeDialog.userId,
       confirmUsername,
     });
-    passwordResetDialog.phase = "success";
-    passwordResetDialog.temporaryPassword = String(result.temporaryPassword || "");
-    if (!passwordResetDialog.temporaryPassword) {
-      throw new Error("เซิร์ฟเวอร์ไม่ส่งรหัสผ่านชั่วคราวกลับมา");
+    recoveryCodeDialog.phase = "success";
+    recoveryCodeDialog.recoveryCode = String(result.recovery_code || "");
+    recoveryCodeDialog.expiresAt = String(result.expires_at || "");
+    if (!recoveryCodeDialog.recoveryCode || !Number.isFinite(Date.parse(recoveryCodeDialog.expiresAt))) {
+      throw new Error("เซิร์ฟเวอร์ไม่ส่ง Recovery Code ที่ถูกต้องกลับมา");
     }
-    render();
+    updateRecoveryCountdown();
+    recoveryCountdownTimer = setInterval(updateRecoveryCountdown, 1000);
     await load("users");
   } catch (error) {
-    passwordResetDialog.phase = "confirm";
-    passwordResetDialog.temporaryPassword = "";
-    passwordResetDialog.error =
-      error instanceof Error ? error.message : "ตั้งรหัสผ่านใหม่ไม่สำเร็จ";
+    if (await handleUnauthorized(error)) return;
+    recoveryCodeDialog.phase = "confirm";
+    recoveryCodeDialog.recoveryCode = "";
+    recoveryCodeDialog.error =
+      error instanceof Error ? error.message : "สร้าง Recovery Code ไม่สำเร็จ";
     render();
   }
 }
 
 async function run(payload) {
+  if (actionInFlight) return false;
+  actionInFlight = true;
   try {
     await api.runAction(payload);
     toast("ดำเนินการสำเร็จ", "success");
     await load();
     return true;
   } catch (error) {
+    if (await handleUnauthorized(error)) return false;
     toast(error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ", "error");
     return false;
+  } finally {
+    actionInFlight = false;
   }
 }
 
@@ -191,6 +239,8 @@ async function copyArchivedCoupons(batchId) {
 }
 
 async function submitCoupon(form) {
+  if (actionInFlight) return;
+  actionInFlight = true;
   const formData = new FormData(form);
   try {
     const result = await api.runAction({
@@ -214,7 +264,10 @@ async function submitCoupon(form) {
     }
     await load("coupons");
   } catch (error) {
+    if (await handleUnauthorized(error)) return;
     toast(error instanceof Error ? error.message : "สร้างคูปองไม่สำเร็จ", "error");
+  } finally {
+    actionInFlight = false;
   }
 }
 
@@ -240,8 +293,8 @@ root.addEventListener("submit", async (event) => {
     }
   } else if (event.target.id === "coupon-form") {
     await submitCoupon(event.target);
-  } else if (event.target.id === "password-reset-form") {
-    await submitPasswordReset(event.target);
+  } else if (event.target.id === "recovery-code-form") {
+    await submitRecoveryCode(event.target);
   }
 });
 
@@ -249,27 +302,31 @@ root.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-section], [data-action]");
   if (!target) return;
   if (target.dataset.section) {
-    closePasswordResetDialog();
+    closeRecoveryCodeDialog();
     store.patch({ active: target.dataset.section, couponFormOpen: false });
     await load(target.dataset.section);
     return;
   }
   const name = target.dataset.action;
   if (name === "logout") {
-    passwordResetDialog = null;
-    await session.logout().catch(() => {});
-    return;
-  }
-  if (name === "close_password_reset") {
-    closePasswordResetDialog();
-    return;
-  }
-  if (name === "copy_temporary_password") {
-    const password = passwordResetDialog?.temporaryPassword || "";
-    if (!password) return;
+    closeRecoveryCodeDialog();
     try {
-      await navigator.clipboard.writeText(password);
-      toast("คัดลอกรหัสผ่านชั่วคราวแล้ว", "success");
+      await session.logout();
+    } catch {
+      toast("ออกจากระบบไม่สำเร็จ กรุณาลองอีกครั้ง", "error");
+    }
+    return;
+  }
+  if (name === "close_recovery_code") {
+    closeRecoveryCodeDialog();
+    return;
+  }
+  if (name === "copy_recovery_code") {
+    const code = recoveryCodeDialog?.recoveryCode || "";
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast("คัดลอก Recovery Code แล้ว", "success");
     } catch {
       toast("คัดลอกอัตโนมัติไม่สำเร็จ กรุณาเลือกและคัดลอกรหัสด้วยตนเอง", "error");
     }

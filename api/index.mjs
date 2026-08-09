@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { authenticateAdmin } from "../server/auth.mjs";
 import { getResource, performAction } from "../server/admin.mjs";
+import { accountRecovery } from "../server/account-recovery.mjs";
 import { tableGet } from "../server/supabase.mjs";
 
 const configuredSessionTtlMs = Number(
@@ -40,9 +41,35 @@ async function bodyJson(request) {
   let text = "";
   for await (const chunk of request) {
     text += chunk;
-    if (text.length > 1024 * 1024) throw new Error("Request too large");
+    if (text.length > 1024 * 1024) {
+      const error = new Error("Request too large");
+      error.status = 413;
+      error.isSafe = true;
+      throw error;
+    }
   }
-  return text ? JSON.parse(text) : {};
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const error = new Error("Invalid JSON request");
+    error.status = 400;
+    error.isSafe = true;
+    throw error;
+  }
+}
+
+function hasTrustedMutationOrigin(request) {
+  if (request.headers["sec-fetch-site"] === "cross-site") return false;
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  const host = request.headers["x-forwarded-host"] || request.headers.host;
+  if (!host) return false;
+  try {
+    const protocol = request.headers["x-forwarded-proto"] || "https";
+    return new URL(origin).origin === `${protocol}://${host}`;
+  } catch {
+    return false;
+  }
 }
 
 function sessionSecret() {
@@ -137,6 +164,14 @@ function clearSessionCookie(request) {
   ].join("; ");
 }
 
+function requesterIdentity(request) {
+  return String(
+    request.headers["x-forwarded-for"]
+      || request.socket?.remoteAddress
+      || "unknown",
+  ).slice(0, 512);
+}
+
 export default async function handler(request, response) {
   try {
     const url = new URL(request.url, "https://neko-control.invalid");
@@ -158,15 +193,50 @@ export default async function handler(request, response) {
         "Set-Cookie": clearSessionCookie(request),
       });
     }
+    if (request.method === "POST" && url.pathname === "/api/account/recovery/verify") {
+      const body = await bodyJson(request);
+      return sendJson(response, 200, {
+        ok: true,
+        ...(await accountRecovery.verifyRecoveryCode({
+          username: body.username,
+          recoveryCode: body.recovery_code,
+          requester: requesterIdentity(request),
+        })),
+      });
+    }
+    if (
+      request.method === "POST"
+      && url.pathname === "/api/account/recovery/change-password"
+    ) {
+      const authorization = String(request.headers.authorization || "");
+      const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{40,200})$/);
+      if (!match) return sendError(response, 401, "Recovery session required");
+      const body = await bodyJson(request);
+      return sendJson(response, 200, {
+        ok: true,
+        ...(await accountRecovery.changePassword({
+          recoverySession: match[1],
+          newPassword: body.new_password,
+        })),
+      });
+    }
     if (url.pathname !== "/api/admin") return sendError(response, 404, "Not found");
 
     const session = await getSession(parseCookies(request).admin_session);
     if (!session) return sendError(response, 401, "Admin login required");
     if (request.method === "GET") {
       const resource = url.searchParams.get("resource") || "overview";
-      return sendJson(response, 200, { ok: true, resource, data: await getResource(resource) });
+      return sendJson(response, 200, {
+        ok: true,
+        viewer: session.viewer,
+        resource,
+        data: await getResource(resource),
+      });
     }
     if (request.method === "POST") {
+      if (!hasTrustedMutationOrigin(request)) {
+        return sendError(response, 403, "Cross-origin request rejected");
+      }
       return sendJson(response, 200, {
         ok: true,
         ...(await performAction(await bodyJson(request), session.viewer)),
@@ -175,10 +245,15 @@ export default async function handler(request, response) {
     return sendError(response, 405, "Method not allowed");
   } catch (error) {
     const status = error?.status || 500;
-    const safeMessage =
-      status < 500 || error?.isSafe
-        ? error?.message || "Request failed"
-        : "Server error";
+    const safeMessage = error?.isSafe
+      ? error?.message || "Request failed"
+      : status === 401
+        ? "Authentication failed"
+        : status === 403
+          ? "Request forbidden"
+          : status < 500
+            ? "Invalid request"
+            : "Server error";
     if (status >= 500) {
       console.error(error?.isSafe ? safeMessage : error);
     }

@@ -9,4 +9,5 @@ const required = (name) => {
 export const config = {
   supabaseUrl: required("SUPABASE_URL").replace(/\/$/, ""),
   supabaseSecretKey: required("SUPABASE_SECRET_KEY"),
+  accountRecoveryHmacSecret: required("ACCOUNT_RECOVERY_HMAC_SECRET"),
 };
