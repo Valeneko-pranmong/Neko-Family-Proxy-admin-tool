@@ -53,7 +53,7 @@ A prior Recovery Session can claim `auth_updating`; Admin can then generate a re
 Severity: high release gate.
 Primary OWNER = Launcher + Backend for hosted migration/catalog state, database concurrency, and Launcher takeover proof. Admin Web owns handler-to-real-DB/Auth integration evidence.
 
-Repository code references recovery, one-active-session, and permit/session-binding migrations, but repository presence is not hosted deployment proof. Before production use, compare live migration history and `pg_get_functiondef`, grants, RLS, indexes, triggers, and columns against approved migration artifacts. Launcher + Backend must prove real two-client takeover and database concurrency. Admin Web must prove recovery handlers against real disposable DB/Auth, including Auth failure/retry and supersession races.
+Current Admin Web code depends on recovery and one-active-session Backend contracts, but source references and external migration files are not hosted deployment proof. Before production use, compare live migration history and `pg_get_functiondef`, grants, RLS, indexes, triggers, and columns against approved Backend migration artifacts. Launcher + Backend must prove real two-client takeover and database concurrency. Admin Web must prove recovery handlers against real disposable DB/Auth, including Auth failure/retry and supersession races. Permit/session-binding work remains outside this freeze and is not claimed as implemented.
 
 ### BLOCKER-04 — Edge controls need deployed evidence
 
