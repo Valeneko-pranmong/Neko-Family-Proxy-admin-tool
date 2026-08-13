@@ -9,6 +9,7 @@
 - `api/index.mjs` — Vercel Node.js Function, Admin session และ Account Recovery endpoints
 - `server/` — Supabase, authentication และ trusted server operations
 - `docs/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md` — contract ที่ Launcher ต้องใช้
+- `docs/current/ADMIN_WEB_CURRENT_WORK_FREEZE.md` — current closure handoff, release blockers และ cross-team ownership
 - `docs/archive/` — เอกสาร/แผน superseded สำหรับอ้างอิงเท่านั้น ห้ามใช้เป็น current contract หรือ release gate
 - `tests/*.test.mjs` — API, RBAC, recovery และ UI regression
 

@@ -39,7 +39,13 @@ async function requestJson(path, options = {}) {
   if (!response.ok) {
     const detail =
       body && typeof body === "object" && "message" in body ? body.message : "";
-    throw new Error(`Supabase request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    const error = new Error(
+      `Supabase request failed (${response.status})${detail ? `: ${detail}` : ""}`,
+    );
+    error.supabaseCode =
+      body && typeof body === "object" && typeof body.code === "string" ? body.code : "";
+    error.supabaseMessage = typeof detail === "string" ? detail : "";
+    throw error;
   }
   return body;
 }

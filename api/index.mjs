@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { authenticateAdmin } from "../server/auth.mjs";
 import { getResource, performAction } from "../server/admin.mjs";
 import { accountRecovery } from "../server/account-recovery.mjs";
@@ -165,11 +166,13 @@ function clearSessionCookie(request) {
 }
 
 function requesterIdentity(request) {
-  return String(
-    request.headers["x-forwarded-for"]
-      || request.socket?.remoteAddress
-      || "unknown",
-  ).slice(0, 512);
+  const forwarded = request.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    const candidate = forwarded.trim();
+    if (!candidate.includes(",") && isIP(candidate)) return candidate;
+  }
+  const peer = String(request.socket?.remoteAddress || "").trim();
+  return isIP(peer) ? peer : "unknown";
 }
 
 export default async function handler(request, response) {

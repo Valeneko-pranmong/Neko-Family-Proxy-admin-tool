@@ -5,6 +5,7 @@ import {
   aggregateTrend,
   classifyLicense,
   countRecentlyOnlineSessions,
+  formatAuditEvent,
   isCouponBatchUsable,
   normalizeTrendRange,
   summarizeCurrentSessions,
@@ -142,6 +143,23 @@ test("stale section refresh notice exposes progress and escapes errors", () => {
   assert.match(error, /อัปเดตไม่สำเร็จ/);
   assert.doesNotMatch(error, /<img/);
   assert.match(error, /&lt;img/);
+});
+
+test("audit formatter recognizes effective Backend event names and safe metadata", () => {
+  const event = formatAuditEvent({
+    id: "event-1",
+    event_type: "admin_license_extended",
+    metadata: {
+      license_id: "license-1",
+      days_added: 30,
+      internal_secret: "must-not-render",
+    },
+    created_at: now.toISOString(),
+  });
+  assert.equal(event.title, "ต่ออายุ License");
+  assert.match(event.detail, /license id: license-1/);
+  assert.match(event.detail, /days added: 30/);
+  assert.doesNotMatch(event.detail, /internal_secret|must-not-render/);
 });
 
 test("stale API 401 cannot clear a newer authenticated session", async () => {

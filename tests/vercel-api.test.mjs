@@ -43,6 +43,7 @@ function createFakeSupabase() {
     falseRpcs: new Set(),
     invalidBooleanRpcs: new Set(),
     invalidTimestampRpcs: new Set(),
+    errorRpcs: new Map(),
     events: [],
   };
   const server = createServer(async (request, response) => {
@@ -338,6 +339,14 @@ function createFakeSupabase() {
       assert.equal(request.headers["content-profile"], "launcher");
       if (rpc.startsWith("admin_")) assert.equal(body.p_actor_id, adminId);
       control.events.push({ type: "rpc", rpc, body });
+      if (control.errorRpcs.has(rpc)) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({
+          code: "P0001",
+          message: control.errorRpcs.get(rpc),
+        }));
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
       if (control.falseRpcs.has(rpc)) {
         response.end("false");
@@ -691,6 +700,34 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       fakeSupabase.control.falseRpcs.delete(rpc);
     }
 
+    const exceptionRpcCases = [
+      ["set_user_status", "admin_set_user_status", "user_not_found", { userId: missingId, status: "suspended" }],
+      ["revoke_license", "admin_revoke_license", "license_not_found", { licenseId }],
+      ["extend_license", "admin_extend_license", "license_not_found", { licenseId, days: 30 }],
+      ["revoke_session", "admin_revoke_session", "session_not_found", { sessionId }],
+    ];
+    for (const [action, rpc, backendMessage, fields] of exceptionRpcCases) {
+      fakeSupabase.control.errorRpcs.set(rpc, backendMessage);
+      const response = await fetch(`${base}/api/admin`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...fields }),
+      });
+      assert.equal(response.status, 404, `${action} SQL exception should map to safe 404`);
+      assert.equal((await response.json()).ok, false);
+      fakeSupabase.control.errorRpcs.delete(rpc);
+    }
+
+    fakeSupabase.control.errorRpcs.set("admin_revoke_license", "unexpected_backend_failure");
+    const unknownRpcException = await fetch(`${base}/api/admin`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revoke_license", licenseId }),
+    });
+    assert.equal(unknownRpcException.status, 500);
+    assert.deepEqual(await unknownRpcException.json(), { ok: false, error: "Server error" });
+    fakeSupabase.control.errorRpcs.delete("admin_revoke_license");
+
     for (const [action, rpc, fields] of falseRpcCases) {
       fakeSupabase.control.invalidBooleanRpcs.add(rpc);
       const response = await fetch(`${base}/api/admin`, {
@@ -810,6 +847,43 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     const verifiedBody = await verified.json();
     assert.equal(verifiedBody.scope, "change_password");
     assert.match(verifiedBody.recovery_session, /^[A-Za-z0-9_-]{40,}$/);
+    const firstVerify = fakeSupabase.control.events.find(
+      (event) => event.rpc === "verify_recovery_code",
+    );
+    const ambiguousForwarded = await fetch(`${base}/api/account/recovery/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-For": "198.51.100.10, 203.0.113.20",
+      },
+      body: JSON.stringify({
+        username: "test_customer",
+        recovery_code: recoveryBody.recovery_code,
+      }),
+    });
+    assert.equal(ambiguousForwarded.status, 200);
+    const noForwarded = await fetch(`${base}/api/account/recovery/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "test_customer",
+        recovery_code: recoveryBody.recovery_code,
+      }),
+    });
+    assert.equal(noForwarded.status, 200);
+    const verifyEvents = fakeSupabase.control.events.filter(
+      (event) => event.rpc === "verify_recovery_code",
+    );
+    assert.notEqual(
+      verifyEvents.at(-2).body.p_requester_verifier,
+      firstVerify.body.p_requester_verifier,
+      "ambiguous forwarded chains must not select a listed address",
+    );
+    assert.equal(
+      verifyEvents.at(-2).body.p_requester_verifier,
+      verifyEvents.at(-1).body.p_requester_verifier,
+      "ambiguous forwarded chains must fall back to the server-observed peer",
+    );
 
     const missingRecoveryBearer = await fetch(
       `${base}/api/account/recovery/change-password`,

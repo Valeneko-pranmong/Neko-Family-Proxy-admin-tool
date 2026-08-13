@@ -52,6 +52,17 @@ function requireRpcBoolean(value, notFoundMessage) {
   if (value !== true) throw actionError("Backend ตอบกลับไม่ถูกต้อง", 502);
 }
 
+async function rpcPostWithNotFound(functionName, payload, backendMessage, safeMessage) {
+  try {
+    return await rpcPost(functionName, payload);
+  } catch (error) {
+    if (error?.supabaseCode === "P0001" && error?.supabaseMessage === backendMessage) {
+      throw actionError(safeMessage, 404);
+    }
+    throw error;
+  }
+}
+
 async function recordAudit(eventType, actor, metadata = {}, { required = false } = {}) {
   try {
     await tablePost("audit_events", {
@@ -471,21 +482,21 @@ export async function performAction(body, actor) {
     if (userId === actor.userId && status !== "active") {
       throw actionError("ไม่สามารถระงับบัญชีผู้ดูแลที่กำลังใช้งานอยู่", 403);
     }
-    const updated = await rpcPost("admin_set_user_status", {
+    const updated = await rpcPostWithNotFound("admin_set_user_status", {
       p_actor_id: actor.userId,
       p_user_id: userId,
       p_status: status,
-    });
+    }, "user_not_found", "ไม่พบบัญชีสมาชิก");
     requireRpcBoolean(updated, "ไม่พบบัญชีสมาชิก");
     return {};
   }
   if (action === "revoke_license") {
     const licenseId = String(body.licenseId);
     if (!UUID_PATTERN.test(licenseId)) throw actionError("รหัส License ไม่ถูกต้อง");
-    const revoked = await rpcPost("admin_revoke_license", {
+    const revoked = await rpcPostWithNotFound("admin_revoke_license", {
       p_actor_id: actor.userId,
       p_license_id: licenseId,
-    });
+    }, "license_not_found", "ไม่พบ License");
     requireRpcBoolean(revoked, "ไม่พบ License");
     return {};
   }
@@ -496,11 +507,11 @@ export async function performAction(body, actor) {
     if (!Number.isInteger(days) || days < 1 || days > 3650) {
       throw actionError("จำนวนวันต่ออายุไม่ถูกต้อง");
     }
-    const validUntil = await rpcPost("admin_extend_license", {
+    const validUntil = await rpcPostWithNotFound("admin_extend_license", {
       p_actor_id: actor.userId,
       p_license_id: licenseId,
       p_days: days,
-    });
+    }, "license_not_found", "ไม่พบ License");
     if (validUntil === false) throw actionError("ไม่พบ License", 404);
     if (
       typeof validUntil !== "string"
@@ -514,10 +525,10 @@ export async function performAction(body, actor) {
   if (action === "revoke_session") {
     const sessionId = String(body.sessionId);
     if (!UUID_PATTERN.test(sessionId)) throw actionError("รหัส session ไม่ถูกต้อง");
-    const revoked = await rpcPost("admin_revoke_session", {
+    const revoked = await rpcPostWithNotFound("admin_revoke_session", {
       p_actor_id: actor.userId,
       p_session_id: sessionId,
-    });
+    }, "session_not_found", "ไม่พบ session");
     requireRpcBoolean(revoked, "ไม่พบ session");
     return {};
   }

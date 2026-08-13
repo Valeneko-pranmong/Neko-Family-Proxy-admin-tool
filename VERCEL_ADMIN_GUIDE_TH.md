@@ -13,7 +13,7 @@ ADMIN_SESSION_SECRET=ค่าสุ่มลับอย่างน้อย 3
 ACCOUNT_RECOVERY_HMAC_SECRET=ค่าสุ่มลับอิสระอย่างน้อย 32 bytes
 ```
 
-ห้ามใช้ค่าเดียวกันระหว่าง session secret และ recovery HMAC secret ห้ามเปิดเผยผ่าน browser environment หรือ logs จากนั้น apply forward-only Backend migration `20260809120000_account_recovery_codes.sql` ใน staging ก่อน production
+ห้ามใช้ค่าเดียวกันระหว่าง session secret และ recovery HMAC secret ห้ามเปิดเผยผ่าน browser environment หรือ logs จากนั้นยืนยันว่า Backend apply migration chain `20260809120000_account_recovery_codes.sql`, `20260809124500_fix_recovery_verify_column_ambiguity.sql` และ `20260810040000_revoke_superseded_recovery_sessions.sql` ใน staging แล้วก่อน production ห้ามแก้ migration เก่าที่ production apply แล้ว
 
 ## สร้าง Recovery Code
 

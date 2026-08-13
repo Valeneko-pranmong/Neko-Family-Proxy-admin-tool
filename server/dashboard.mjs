@@ -117,10 +117,14 @@ export function aggregateTrend({ range, now = new Date(), sessions, redemptions,
 const EVENT_TITLES = Object.freeze({
   revoke_session: "ยุติ Launcher session",
   admin_revoke_session: "ยุติ Launcher session",
+  admin_session_revoked: "ยุติ Launcher session",
   admin_set_user_status: "เปลี่ยนสถานะสมาชิก",
+  admin_user_status_changed: "เปลี่ยนสถานะสมาชิก",
   set_user_status: "เปลี่ยนสถานะสมาชิก",
   coupon_redeemed: "ใช้คูปองสำเร็จ",
   admin_revoke_license: "ยกเลิก License",
+  admin_license_revoked: "ยกเลิก License",
+  admin_license_extended: "ต่ออายุ License",
   revoke_license: "ยกเลิก License",
   admin_revoke_coupon_batch: "ยกเลิกชุดคูปอง",
   account_password_recovered: "เปลี่ยนรหัสผ่านผ่าน Recovery",
@@ -134,6 +138,12 @@ const SAFE_METADATA_FIELDS = [
   "reason",
   "error_code",
   "device_name",
+  "target_user_id",
+  "previous_status",
+  "new_status",
+  "license_id",
+  "session_id",
+  "days_added",
 ];
 
 export function formatAuditEvent(event) {
