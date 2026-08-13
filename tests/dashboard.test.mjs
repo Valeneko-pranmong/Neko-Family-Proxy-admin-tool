@@ -146,20 +146,38 @@ test("stale section refresh notice exposes progress and escapes errors", () => {
 });
 
 test("audit formatter recognizes effective Backend event names and safe metadata", () => {
-  const event = formatAuditEvent({
-    id: "event-1",
-    event_type: "admin_license_extended",
-    metadata: {
-      license_id: "license-1",
-      days_added: 30,
-      internal_secret: "must-not-render",
-    },
-    created_at: now.toISOString(),
-  });
-  assert.equal(event.title, "ต่ออายุ License");
-  assert.match(event.detail, /license id: license-1/);
-  assert.match(event.detail, /days added: 30/);
-  assert.doesNotMatch(event.detail, /internal_secret|must-not-render/);
+  const cases = [
+    ["admin_session_revoked", { session_id: "session-1" }, "ยุติ Launcher session", "red"],
+    ["admin_license_revoked", { license_id: "license-1" }, "ยกเลิก License", "red"],
+    ["admin_license_extended", { license_id: "license-1", days_added: 30 }, "ต่ออายุ License", "blue"],
+    [
+      "admin_user_status_changed",
+      { target_user_id: "user-1", previous_status: "active", new_status: "banned" },
+      "เปลี่ยนสถานะสมาชิก",
+      "red",
+    ],
+    [
+      "admin_user_status_changed",
+      { target_user_id: "user-1", previous_status: "suspended", new_status: "active" },
+      "เปลี่ยนสถานะสมาชิก",
+      "green",
+    ],
+  ];
+
+  for (const [eventType, metadata, title, tone] of cases) {
+    const event = formatAuditEvent({
+      id: `event-${eventType}`,
+      event_type: eventType,
+      metadata: { ...metadata, internal_secret: "must-not-render" },
+      created_at: now.toISOString(),
+    });
+    assert.equal(event.title, title);
+    assert.equal(event.tone, tone);
+    for (const [field, value] of Object.entries(metadata)) {
+      assert.match(event.detail, new RegExp(`${field.replaceAll("_", " ")}: ${value}`));
+    }
+    assert.doesNotMatch(event.detail, /internal_secret|must-not-render/);
+  }
 });
 
 test("stale API 401 cannot clear a newer authenticated session", async () => {

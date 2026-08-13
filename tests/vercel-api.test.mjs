@@ -340,10 +340,11 @@ function createFakeSupabase() {
       if (rpc.startsWith("admin_")) assert.equal(body.p_actor_id, adminId);
       control.events.push({ type: "rpc", rpc, body });
       if (control.errorRpcs.has(rpc)) {
+        const rpcError = control.errorRpcs.get(rpc);
         response.writeHead(400, { "Content-Type": "application/json" });
         response.end(JSON.stringify({
-          code: "P0001",
-          message: control.errorRpcs.get(rpc),
+          code: typeof rpcError === "object" ? rpcError.code : "P0001",
+          message: typeof rpcError === "object" ? rpcError.message : rpcError,
         }));
         return;
       }
@@ -701,12 +702,12 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     }
 
     const exceptionRpcCases = [
-      ["set_user_status", "admin_set_user_status", "user_not_found", { userId: missingId, status: "suspended" }],
-      ["revoke_license", "admin_revoke_license", "license_not_found", { licenseId }],
-      ["extend_license", "admin_extend_license", "license_not_found", { licenseId, days: 30 }],
-      ["revoke_session", "admin_revoke_session", "session_not_found", { sessionId }],
+      ["set_user_status", "admin_set_user_status", "user_not_found", "ไม่พบบัญชีสมาชิก", { userId: missingId, status: "suspended" }],
+      ["revoke_license", "admin_revoke_license", "license_not_found", "ไม่พบ License", { licenseId }],
+      ["extend_license", "admin_extend_license", "license_not_found", "ไม่พบ License", { licenseId, days: 30 }],
+      ["revoke_session", "admin_revoke_session", "session_not_found", "ไม่พบ session", { sessionId }],
     ];
-    for (const [action, rpc, backendMessage, fields] of exceptionRpcCases) {
+    for (const [action, rpc, backendMessage, safeMessage, fields] of exceptionRpcCases) {
       fakeSupabase.control.errorRpcs.set(rpc, backendMessage);
       const response = await fetch(`${base}/api/admin`, {
         method: "POST",
@@ -714,7 +715,19 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
         body: JSON.stringify({ action, ...fields }),
       });
       assert.equal(response.status, 404, `${action} SQL exception should map to safe 404`);
-      assert.equal((await response.json()).ok, false);
+      assert.deepEqual(await response.json(), { ok: false, error: safeMessage });
+      fakeSupabase.control.errorRpcs.delete(rpc);
+    }
+
+    for (const [action, rpc, backendMessage, , fields] of exceptionRpcCases) {
+      fakeSupabase.control.errorRpcs.set(rpc, { code: "42501", message: backendMessage });
+      const response = await fetch(`${base}/api/admin`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...fields }),
+      });
+      assert.equal(response.status, 500, `${action} wrong SQL code must fail closed`);
+      assert.deepEqual(await response.json(), { ok: false, error: "Server error" });
       fakeSupabase.control.errorRpcs.delete(rpc);
     }
 
@@ -836,7 +849,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Forwarded-For": "198.51.100.10",
+        "X-Vercel-Forwarded-For": "198.51.100.10",
       },
       body: JSON.stringify({
         username: "test_customer",
@@ -850,11 +863,49 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     const firstVerify = fakeSupabase.control.events.find(
       (event) => event.rpc === "verify_recovery_code",
     );
+    const vercelForwarded = await fetch(`${base}/api/account/recovery/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Vercel-Forwarded-For": "198.51.100.10",
+        "X-Forwarded-For": "203.0.113.20",
+      },
+      body: JSON.stringify({
+        username: "test_customer",
+        recovery_code: recoveryBody.recovery_code,
+      }),
+    });
+    assert.equal(vercelForwarded.status, 200);
+    const vercelVerify = fakeSupabase.control.events.filter(
+      (event) => event.rpc === "verify_recovery_code",
+    ).at(-1);
+    assert.equal(
+      vercelVerify.body.p_requester_verifier,
+      firstVerify.body.p_requester_verifier,
+      "Vercel client address must take precedence over generic forwarded address",
+    );
+    const vercelIpv6 = await fetch(`${base}/api/account/recovery/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Vercel-Forwarded-For": "2001:db8::10",
+      },
+      body: JSON.stringify({
+        username: "test_customer",
+        recovery_code: recoveryBody.recovery_code,
+      }),
+    });
+    assert.equal(vercelIpv6.status, 200);
+    const ipv6Verify = fakeSupabase.control.events.filter(
+      (event) => event.rpc === "verify_recovery_code",
+    ).at(-1);
+    assert.notEqual(ipv6Verify.body.p_requester_verifier, firstVerify.body.p_requester_verifier);
     const ambiguousForwarded = await fetch(`${base}/api/account/recovery/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Forwarded-For": "198.51.100.10, 203.0.113.20",
+        "X-Vercel-Forwarded-For": "198.51.100.10, 203.0.113.20",
+        "X-Forwarded-For": "203.0.113.20",
       },
       body: JSON.stringify({
         username: "test_customer",
@@ -862,6 +913,9 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       }),
     });
     assert.equal(ambiguousForwarded.status, 200);
+    const ambiguousVerify = fakeSupabase.control.events.filter(
+      (event) => event.rpc === "verify_recovery_code",
+    ).at(-1);
     const noForwarded = await fetch(`${base}/api/account/recovery/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -871,18 +925,18 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       }),
     });
     assert.equal(noForwarded.status, 200);
-    const verifyEvents = fakeSupabase.control.events.filter(
+    const noForwardedVerify = fakeSupabase.control.events.filter(
       (event) => event.rpc === "verify_recovery_code",
-    );
+    ).at(-1);
     assert.notEqual(
-      verifyEvents.at(-2).body.p_requester_verifier,
+      ambiguousVerify.body.p_requester_verifier,
       firstVerify.body.p_requester_verifier,
-      "ambiguous forwarded chains must not select a listed address",
+      "malformed Vercel address must not select a listed address",
     );
     assert.equal(
-      verifyEvents.at(-2).body.p_requester_verifier,
-      verifyEvents.at(-1).body.p_requester_verifier,
-      "ambiguous forwarded chains must fall back to the server-observed peer",
+      ambiguousVerify.body.p_requester_verifier,
+      noForwardedVerify.body.p_requester_verifier,
+      "malformed Vercel address must fall back to peer instead of generic header",
     );
 
     const missingRecoveryBearer = await fetch(

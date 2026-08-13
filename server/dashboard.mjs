@@ -158,6 +158,10 @@ export function formatAuditEvent(event) {
     title: EVENT_TITLES[type] || type.replaceAll("_", " "),
     detail: details.join(" · ") || "ไม่มีรายละเอียดเพิ่มเติม",
     time: event?.created_at ?? null,
-    tone: /rejected|revoked|failed|banned/.test(type) ? "red" : /success|redeemed|active/.test(type) ? "green" : "blue",
+    tone: /rejected|revoked|failed|banned/.test(type) || /suspended|banned/.test(String(metadata.new_status || ""))
+      ? "red"
+      : /success|redeemed|active/.test(type) || metadata.new_status === "active"
+        ? "green"
+        : "blue",
   };
 }

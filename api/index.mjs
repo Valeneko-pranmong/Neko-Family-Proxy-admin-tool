@@ -166,7 +166,8 @@ function clearSessionCookie(request) {
 }
 
 function requesterIdentity(request) {
-  const forwarded = request.headers["x-forwarded-for"];
+  const headerName = process.env.VERCEL ? "x-vercel-forwarded-for" : "x-forwarded-for";
+  const forwarded = request.headers[headerName];
   if (typeof forwarded === "string") {
     const candidate = forwarded.trim();
     if (!candidate.includes(",") && isIP(candidate)) return candidate;

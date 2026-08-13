@@ -14,7 +14,7 @@ Implemented and locally verified:
 - Server-only Supabase privileged key and recovery HMAC secret boundaries.
 - Realistic PostgREST SQL exception mapping for missing users, licenses, and sessions.
 - Effective Backend audit event names and allowlisted metadata rendering.
-- Strict single-IP recovery requester normalization with malformed or multi-value forwarded chains rejected in favor of server-observed peer identity.
+- Strict single-IP recovery requester normalization: Vercel uses canonical `x-vercel-forwarded-for`; malformed or multi-value values fall back to server-observed peer identity without trusting generic forwarded input.
 
 Intentionally absent from current approved scope:
 
@@ -51,16 +51,16 @@ A prior Recovery Session can claim `auth_updating`; Admin can then generate a re
 ### BLOCKER-03 — Hosted migration and runtime state not proven
 
 Severity: high release gate.
-OWNER = Launcher + Backend.
+Primary OWNER = Launcher + Backend for hosted migration/catalog state, database concurrency, and Launcher takeover proof. Admin Web owns handler-to-real-DB/Auth integration evidence.
 
-Repository code references recovery, one-active-session, and permit/session-binding migrations, but repository presence is not hosted deployment proof. Before production use, compare live migration history and `pg_get_functiondef`, grants, RLS, indexes, triggers, and columns against approved migration artifacts. Then run real two-client takeover, recovery concurrency, Auth failure/retry, and handler-to-real-DB tests.
+Repository code references recovery, one-active-session, and permit/session-binding migrations, but repository presence is not hosted deployment proof. Before production use, compare live migration history and `pg_get_functiondef`, grants, RLS, indexes, triggers, and columns against approved migration artifacts. Launcher + Backend must prove real two-client takeover and database concurrency. Admin Web must prove recovery handlers against real disposable DB/Auth, including Auth failure/retry and supersession races.
 
 ### BLOCKER-04 — Edge controls need deployed evidence
 
 Severity: medium operational gate.
 Owner: Admin Web operations.
 
-Verify Vercel Firewall/WAF throttling for login, Admin mutations, recovery verification, and password change. Vercel documentation states `x-forwarded-for` is overwritten with public client IP to prevent spoofing; verify this behavior on deployed project because local normalization tests do not prove project edge-header behavior.
+Verify Vercel Firewall/WAF throttling for login, Admin mutations, recovery verification, and password change. Vercel documentation identifies `x-vercel-forwarded-for` as canonical when a proxy sits above Vercel. Verify deployed project behavior because local normalization tests do not prove edge-header delivery.
 
 ## External dependencies
 
