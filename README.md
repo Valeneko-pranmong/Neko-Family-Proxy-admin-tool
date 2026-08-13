@@ -9,6 +9,7 @@
 - `api/index.mjs` — Vercel Node.js Function, Admin session และ Account Recovery endpoints
 - `server/` — Supabase, authentication และ trusted server operations
 - `docs/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md` — contract ที่ Launcher ต้องใช้
+- `docs/archive/` — เอกสาร/แผน superseded สำหรับอ้างอิงเท่านั้น ห้ามใช้เป็น current contract หรือ release gate
 - `tests/*.test.mjs` — API, RBAC, recovery และ UI regression
 
 ## Environment Variables บน Vercel
@@ -49,4 +50,4 @@ Recovery Code ไม่ใช่ Supabase password Admin ไม่ตั้ง�
 
 ดู endpoint, error semantics, password policy และ retry behavior ที่ `docs/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md`
 
-ต้อง apply forward-only migration `20260809120000_account_recovery_codes.sql` จาก Backend repository ก่อนเปิดใช้ Web API ห้ามแก้ migration เก่าที่ production apply แล้ว
+ก่อนเปิดใช้ Recovery Web API ต้องยืนยันว่า Backend apply migration chain `20260809120000_account_recovery_codes.sql`, `20260809124500_fix_recovery_verify_column_ambiguity.sql` และ `20260810040000_revoke_superseded_recovery_sessions.sql` แล้ว ห้ามแก้ migration เก่าที่ production apply แล้ว

@@ -1,6 +1,6 @@
 # Authoritative Launcher Account Recovery Contract
 
-Status: working-tree contract for Admin repository `main@549a42f01de8532bded0bbd02a3d84f05599737b` plus the current uncommitted recovery fixes, and Backend worktree `agent/password-reset-saga@0c930ddc980021126e02e29f3f0082ee6616ec34` plus the untracked forward migration. No production deployment is implied.
+Status: current tracked Admin repository recovery contract. Backend authority is the committed forward migration chain `20260809120000_account_recovery_codes.sql`, `20260809124500_fix_recovery_verify_column_ambiguity.sql`, and `20260810040000_revoke_superseded_recovery_sessions.sql`; repository presence does not establish hosted deployment state.
 
 This flow replaces Admin-assisted temporary passwords. A Recovery Code is not a Supabase password. A Recovery Session is not a normal Launcher session and has only the `change_password` scope.
 
@@ -158,6 +158,9 @@ Admin Web/API repository:
 Backend/Supabase worktree:
 
 - `supabase/migrations/20260809120000_account_recovery_codes.sql` — forward-only schema/RPC/audit/grants contract
-- `launcher/tests/test_account_recovery_migration.py` — static migration contract tests
+- `supabase/migrations/20260809124500_fix_recovery_verify_column_ambiguity.sql` — verification RPC ambiguity fix
+- `supabase/migrations/20260810040000_revoke_superseded_recovery_sessions.sql` — recovery-generation supersession boundary
+- `launcher/tests/test_account_recovery_migration.py` — static base migration contract tests
+- `launcher/tests/test_recovery_session_supersession_migration.py` — supersession contract tests
 
-The migration is not deployed by this implementation session. Before production, compile/apply it in staging, inspect live function definitions/grants/RLS, and run real failure-injection E2E.
+This repository does not establish hosted migration state. Before enabling recovery against a hosted environment, verify the full chain above, inspect live function definitions/grants/RLS, and run real failure-injection E2E.

@@ -1,5 +1,11 @@
 # Admin Tool Single-Active-Session Hardening Implementation Plan
 
+> **ARCHIVED HISTORICAL PLAN — DO NOT USE AS CURRENT POLICY.** Current Admin Web
+> permits multiple remembered installations, one active Launcher session per
+> user, newest login replacing previous session, and no permanent installation
+> lock merely because active authority moved. See current source/tests and
+> `README.md`.
+
 > **For Hermes:** Implement this plan task-by-task using strict RED → GREEN → REFACTOR. Preserve all concurrent working-tree changes and never edit the generated standalone HTML by hand.
 
 **Goal:** ทำให้ `Neko-Family-Proxy-admin-tool` บริหารนโยบาย “จดจำได้หลาย installation แต่ active ได้ครั้งละ 1 Launcher session และ login ล่าสุดแทน session เดิม” อย่างถูกต้อง โดยทุกคำสั่งที่เปลี่ยน account/license/installation/session ใช้ trusted, actor-checked, transactional Backend RPC และ UI แยก installation history ออกจาก current active session อย่างชัดเจน

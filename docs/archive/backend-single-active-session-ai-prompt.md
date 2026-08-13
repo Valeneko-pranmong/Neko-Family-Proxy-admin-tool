@@ -7,6 +7,8 @@
 > and Admin operations terminate sessions rather than ban installations. The
 > authoritative forward migration is
 > `Neko-Family-Proxy/supabase/migrations/20260809133000_remove_permanent_installation_lock.sql`.
+> Archived for reference only; never use its unchecked acceptance criteria as a
+> current release gate.
 > **Target team:** Backend / Supabase / Admin Web  
 > **Consumer:** Neko Family Launcher desktop client  
 > **Repository context:** Verify all paths and deployed database definitions before editing.  

@@ -24,10 +24,13 @@ const scriptMarker = '<script type="module" src="./main.js"></script>';
 if (!template.includes("</head>") || !template.includes(scriptMarker)) {
   throw new Error("Standalone template is missing a required build marker");
 }
-const html = template
-  .replace("</head>", `<style>${css}</style></head>`)
+const carriageReturn = String.fromCharCode(13);
+const normalizedTemplate = template.replaceAll(carriageReturn, "");
+const normalizedCss = css.replaceAll(carriageReturn, "");
+const html = normalizedTemplate
+  .replace("</head>", `<style>${normalizedCss}</style></head>`)
   .replace(scriptMarker, `<script>${script}</script>`);
-if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(css)) {
+if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(normalizedCss)) {
   throw new Error("Standalone build output is incomplete");
 }
 

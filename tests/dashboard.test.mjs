@@ -155,3 +155,11 @@ test("stale API 401 cannot clear a newer authenticated session", async () => {
     "stale responses must be discarded before a 401 can clear the active session",
   );
 });
+
+test("standalone build output uses repository-normalized LF line endings", async () => {
+  const bundle = await readFile(
+    new URL("../standalone/dist/neko-control.html", import.meta.url),
+    "utf8",
+  );
+  assert.equal(bundle.includes(String.fromCharCode(13)), false);
+});
