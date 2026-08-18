@@ -58,7 +58,7 @@ The Admin Web is powered by two distinct, decoupled authority channels:
 |  │       ▼ (Admin Query API)                                                  |
 |  │  Admin Web Dashboard [ Server Health Panel ]                               |
 |  │                                                                            |
-|  └─ Discord Worker (`neko-discord-worker.service` / `.timer`) [Phase T7 V1]   |
+|  └─ Discord Worker (`neko-discord-worker.service`) [Phase T7 V1 — Production Deployed]|
 |          │                                                                    |
 |          ▼ (Local Metric Evaluation & Direct Webhook Push)                    |
 |     Discord Channel Status, Traffic Summary & Transition Alerts               |

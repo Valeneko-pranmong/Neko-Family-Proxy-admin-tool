@@ -1,44 +1,49 @@
-# NEKO FAMILY PROXY — DISCORD SERVER STATUS & ALERTING HANDOFF (PHASE T7 V1B)
+# NEKO FAMILY PROXY — DISCORD SERVER STATUS & ALERTING HANDOFF (PHASE T7 V1C)
 
 ```text
 DOCUMENT:               docs/current/discord-server-status-handoff.md
-STATUS:                 AUTHORITATIVE HANDOFF (T7 V1B Candidate Complete & Tested)
-CLASSIFICATION:         PHASE TRANSITION & IMPLEMENTATION HANDOFF RECORD
-PHASE:                  T7 V1B (Unified Lightsail Discord Worker Implementation & Tests)
-PREVIOUS_PHASE:         T7 V1A (Legacy Discord Discovery & Unified Architecture Freeze — CLOSED)
-SUCCESSOR_PHASE:        T7 V1C (Lightsail Production Cutover & Live Proof)
+STATUS:                 AUTHORITATIVE HANDOFF (Phase T7 V1 Fully Closed & Production Verified)
+CLASSIFICATION:         PHASE TRANSITION & PRODUCTION HANDOFF RECORD
+PHASE:                  T7 V1C (AWS Lightsail Production Cutover & Live Proof)
+PREVIOUS_PHASE:         T7 V1B (Unified Lightsail Discord Worker Implementation & Tests — CLOSED)
+SUCCESSOR_PHASE:        NONE (Phase T7 V1 Fully Closed)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
-PRODUCTION_DISCORD:     LEGACY PUBLISHER ACTIVE (neko-traffic-monitor.service)
-UNIFIED_WORKER_STATUS:  CANDIDATE COMMITTED & TESTED (Planned for T7 V1C Deploy)
+PRODUCTION_DISCORD:     UNIFIED WORKER ACTIVE (neko-discord-worker.service)
+LEGACY_PUBLISHER:       DISABLED / INACTIVE (Rollback Artifacts Retained)
+UNIFIED_WORKER_STATUS:  PRODUCTION DEPLOYED & VERIFIED
 DATE:                   2026-08-18
-T7_V1B_EXIT_GATE:       PASS
+T7_V1C_EXIT_GATE:       PASS
 ```
 
 ---
 
-## 1. Executive Summary & Phase T7 V1B Outcome
+## 1. Executive Summary & Phase T7 V1 Outcome
 
-Phase **T7 V1B (Unified Discord Worker Local Candidate)** has implemented, packaged, and deterministically tested the unified AWS Lightsail Discord Worker candidate in `D:\Github\Neko-Family-Proxy`.
+Phase **T7 V1C (AWS Lightsail Production Cutover & Proof)** has deployed, verified, and stabilized the unified Discord status worker on the live AWS Lightsail Japan VPS:
 
 ```text
 =============================================================================
-T7 V1B CANDIDATE ARTIFACT AUTHORITY
+T7 V1 PRODUCTION ARTIFACT & DEPLOYMENT RECORD
 =============================================================================
 BACKEND_COMMIT:               5ad8e693e549b7d8b5b178f7269f9b1b737ac8bf
 ADMIN_ARCH_COMMIT:            a35311d059e591430f99cb74bf70dca0f31cb435
+ADMIN_DOC_COMMIT:             b33db64e2b480b5851943b15f396779dca77917b
 
-WORKER_SOURCE_PATH:           agent/neko_discord_worker.py
-WORKER_SOURCE_SHA256:         f95f7bcc3bf70a6eedf2f616b4edcf3293306b7d62f3a43fb003bc75afd106f4
+DEPLOYED_WORKER_PATH:         /opt/neko/neko_discord_worker.py (0755 root:root)
+DEPLOYED_WORKER_SHA256:       f95f7bcc3bf70a6eedf2f616b4edcf3293306b7d62f3a43fb003bc75afd106f4
 
-SYSTEMD_UNIT_PATH:            agent/systemd/neko-discord-worker.service
+SYSTEMD_UNIT_PATH:            /etc/systemd/system/neko-discord-worker.service
 SYSTEMD_UNIT_SHA256:          74de7d37b7b90bd2f962fb61d5237e73c1cd102e01361ba83bd8944294a9eb94
 
-ENV_EXAMPLE_PATH:             agent/neko-discord-worker.env.example
-TEST_SUITE_PATH:              agent/tests/test_discord_worker.py
-TEST_SUITE_STATUS:            29 / 29 TESTS PASS (100% Deterministic)
+PROTECTED_ENV_PATH:           /etc/neko/discord.env (0600 root:root, reused secret)
+STATE_FILE_PATH:              /var/lib/neko/discord-state.json (0600 root:root)
+
+ACTIVE_SERVICE:               neko-discord-worker.service (ACTIVE & ENABLED)
+LEGACY_SERVICE:               neko-traffic-monitor.service (INACTIVE & DISABLED)
+DISCORD_PUBLISHER_COUNT:      1
 =============================================================================
 ```
 
@@ -49,7 +54,7 @@ TEST_SUITE_STATUS:            29 / 29 TESTS PASS (100% Deterministic)
 |  Original T7A: Vercel Cron / DB Status Design      | SUPERSEDED (Commit d242c598...)              |
 |  Phase T7 V1A: Legacy Discovery & Architecture     | CLOSED / FROZEN (Commit 6a59900a...)         |
 |  Phase T7 V1B: Unified Lightsail Worker Candidate  | CLOSED / CANDIDATE READY (Commit 5ad8e693...)|
-|  Phase T7 V1C: Production Staging & Cutover        | NEXT / PLANNED                               |
+|  Phase T7 V1C: Production Staging & Cutover        | CLOSED / PRODUCTION VERIFIED (LIVE PROOF)    |
 +---------------------------------------------------------------------------------------------------+
 ```
 

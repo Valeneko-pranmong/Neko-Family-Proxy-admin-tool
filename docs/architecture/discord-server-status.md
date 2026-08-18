@@ -10,8 +10,9 @@ PUBLISHER_AUTHORITY:    AWS_LIGHTSAIL (Local-Only Daemon / Scheduler)
 CONSUMERS:              DISCORD WORKER ON JAPAN VPS
 TEAM_CORE SCOPE:        NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER SCOPE:    NO ACTION (Frozen at Phase T3)
-CURRENT_DEPLOYMENT:     LEGACY PUBLISHER ACTIVE (neko-traffic-monitor.service)
-UNIFIED_T7_V1_STATUS:   CANDIDATE_COMPLETED (Phase T7 V1B Candidate Committed & Tested)
+CURRENT_DEPLOYMENT:     UNIFIED WORKER ACTIVE (neko-discord-worker.service)
+LEGACY_DEPLOYMENT:      DISABLED / ROLLBACK ONLY (neko-traffic-monitor.service)
+UNIFIED_T7_V1_STATUS:   PRODUCTION_DEPLOYED_AND_VERIFIED (Phase T7 V1C Complete)
 SUPERSEDED_COMMIT:      d242c5981d04b2b11fdbae79aa908bd646275eb7 (Original T7A Vercel-Side Plan)
 DATE:                   2026-08-18
 ```
@@ -451,7 +452,7 @@ PRODUCTION CUTOVER SEQUENCE (PHASE T7 V1C)
 |               - Develop unified Python worker, time-weighted average calc,    |
 |                 state machine, systemd units, unit tests, mock Discord tests. |
 |                                                                               |
-| Phase T7 V1C: Production Staging & Legacy Cutover                [NEXT]       |
+| Phase T7 V1C: Production Staging & Legacy Cutover                [COMPLETED]  |
 |               - Stage worker on Lightsail, live proof, legacy retirement.     |
 +-------------------------------------------------------------------------------+
 ```

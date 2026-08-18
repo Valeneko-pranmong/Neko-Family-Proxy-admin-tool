@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T7 V1B COMPLETED — UNIFIED DISCORD WORKER LOCAL CANDIDATE
-LAST_CLOSED_PHASE:      T7 V1B (Unified Lightsail Discord Worker Implementation & Tests)
-ACTIVE_PHASE:           T7 V1B (Completed Local Candidate)
-NEXT_PHASE:             T7 V1C (Production Deployment & Legacy Cutover)
+CURRENT_PHASE:          T7 V1C COMPLETED — PRODUCTION CUTOVER & PROOF CLOSED
+LAST_CLOSED_PHASE:      T7 V1C (AWS Lightsail Production Cutover & Proof)
+ACTIVE_PHASE:           T7 V1 (PRODUCTION / CLOSED)
+NEXT_PHASE:             NONE (T7 Completed — Final Remote Evidence Closure)
 DATE:                   2026-08-18
 ```
 
@@ -17,13 +17,14 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1A (Discovery & Architecture Freeze)**, and **Phase T7 V1B (Unified Discord Worker Local Candidate)**:
+The project has completed **Phase T6 (Historical Server Metrics)** and all milestones of **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 Original Design (Superseded)**: The initial T7A plan (Vercel Cron + Backend Active Users query + Supabase persistence) was **superseded by Owner Decision** in favor of a low-maintenance, resilient, AWS Lightsail-local architecture (**T7 V1**).
 - **Phase T7 V1A (Closed / Authority Frozen)**: Discovered existing legacy Lightsail Discord integration (`neko-traffic-monitor.service`), classified its traffic source (`AF_PACKET` on `ens5:8388`) and calculation (`TOTAL_BYTES_DURING_WINDOW`), froze the unified Lightsail Discord Worker architecture, redefined Traffic Summary as time-weighted average throughput, removed Active Users/Backend/Vercel dependencies, and established local state persistence.
 - **Phase T7 V1B (Closed / Candidate Completed)**: Implemented the unified long-running systemd worker candidate (`agent/neko_discord_worker.py` in Backend repo), preserving proven `AF_PACKET` :8388 packet accounting, calculating time-weighted average throughput, managing persistent status embed (~60s) and transition alerts with anti-flap 2-sample confirmation and 300s cooldown, atomic local state persistence (`/var/lib/neko/discord-state.json`), candidate systemd service unit (`agent/systemd/neko-discord-worker.service`), and 29 deterministic unit tests (all passing).
+- **Phase T7 V1C (Closed / Production Verified)**: Staged worker (`/opt/neko/neko_discord_worker.py`), installed systemd service (`neko-discord-worker.service`), safely reused existing webhook in `/etc/neko/discord.env` (0600 root:root), performed controlled cutover (legacy stopped, unified started), verified persistent message creation and periodic PATCH in-place edits, verified 30m epoch boundary threshold gating, disabled legacy service while retaining rollback files, verified 1-publisher authority, and confirmed zero regression on Shadowsocks and Monitoring Agent.
 
 ---
 
@@ -43,7 +44,7 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 | **Original T7A** | Vercel Cron / Backend Discord Architecture | **SUPERSEDED** | Commit `d242c598...` (Superseded by Owner Decision in favor of T7 V1) |
 | **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | Admin `6a59900a...` / Discovery & Architecture Freeze |
 | **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **CLOSED (CANDIDATE COMPLETE)**| Backend `5ad8e693...` / 29 Unit Tests Passing / Systemd Candidate |
-| **Phase T7 V1C** | Production Deployment & Legacy Cutover | **PLANNED / NEXT** | Staging on Lightsail, legacy publisher retirement, live proof |
+| **Phase T7 V1C** | Production Deployment & Legacy Cutover | **CLOSED (PRODUCTION PROOF)**  | Live Proof Verified / 1 Publisher Active / Legacy Disabled |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
@@ -55,6 +56,7 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Original T7A Baseline Commit**: `d242c5981d04b2b11fdbae79aa908bd646275eb7`
 - **Admin T7 V1B Architecture Correction**: `a35311d059e591430f99cb74bf70dca0f31cb435`
+- **Admin T7 V1B Doc Record Commit**: `b33db64e2b480b5851943b15f396779dca77917b`
 
 ---
 
@@ -166,4 +168,6 @@ A new engineer joining the project should read documents in the following order:
 9. **[docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md)**
    *Phase T6D production verification evidence, Supabase migrations, pg_cron retention, and live VPS proof.*
 10. **[docs/current/discord-server-status-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/discord-server-status-handoff.md)**
-    *Phase T7 V1A legacy discovery & architecture freeze handoff, discovered services/counters, and T7 V1B implementation roadmap.*
+    *Phase T7 V1 complete architecture, discovery findings, artifact authority hashes, and operational transition handoff.*
+11. **[docs/current/discord-server-status-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/discord-server-status-production-proof.md)**
+    *Phase T7 V1C live production verification proof, persistent status message ID proof, 30m summary threshold gating, and single-publisher verification.*
