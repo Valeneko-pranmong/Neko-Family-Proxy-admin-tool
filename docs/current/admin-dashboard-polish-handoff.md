@@ -121,3 +121,38 @@ Because `public.server_metrics_latest` stores only `LATEST_ONLY` snapshots, T5 i
 | **Standalone Web Build** | **PASS** | `standalone/dist/neko-control.html` (73,355 bytes) |
 | **Privacy Check** | **PASS** | No secrets (`SERVER_METRICS_INGEST_SECRET`, `SUPABASE_SECRET_KEY`) in client bundle |
 | **Diff Check** | **PASS** | Clean LF line endings and whitespace |
+
+---
+
+## 8. Production Deployment & Live Validation Evidence
+
+### 8.1 Remote Authority & Deployment Target
+- **Published T5 Authority**: `840adc18da08cd3af284c5e2cbffbb20d5ef5d6a` (`origin/main`)
+- **Vercel Production Deployment**: `neko-control-room` (`https://neko-control-room.vercel.app`)
+- **Remote Proof**: Deployed live HTML bundle verified matching T5 layout, SVG live chart, glyph badges, and 5s auto-polling loop.
+
+### 8.2 Live Japan VPS Data Plane Verification
+- **Target**: AWS Lightsail Japan (`18.178.140.8`, Ubuntu 22.04 LTS).
+- **Services**:
+  - `neko-server-monitor.service`: `active (running)`, pushing samples every ~5s.
+  - `shadowsocks-libev.service`: `active (running)`, listening on `0.0.0.0:8388`.
+- **Live Telemetry**: Verified live ping RTT (~1.7ms to generic upstream target `1.1.1.1`), network rates (`rx_bps` / `tx_bps` bits/sec), and cumulative byte totals.
+
+### 8.3 Live Stale Isolation & Recovery Proof
+1. **Stale Transition**:
+   - `neko-server-monitor.service` stopped on Japan VPS while `shadowsocks-libev.service` remained active.
+   - After $> 30\text{s}$ without ingest updates, dashboard state transitioned to `STALE` with prominent `◷ ข้อมูลค้าง (>30s)` chip.
+   - Graph did not append fake 0 points or synthetic flat lines during the stale window.
+2. **Online Recovery**:
+   - `neko-server-monitor.service` restarted.
+   - Ingest resumed immediately with new `observed_at` timestamps.
+   - Dashboard status recovered to `ONLINE`.
+   - Graph resumed appending only fresh samples without interpolating or backfilling the missing ~35s interval.
+
+### 8.4 Responsive & Accessibility Validation
+- Verified layout adapts fluidly across Desktop ($\ge 1200\text{px}$), Laptop ($900\text{px} - 1199\text{px}$), Tablet ($600\text{px} - 899\text{px}$), and Mobile ($< 600\text{px}$) with zero primary horizontal overflow.
+- Status badges include explicit shape glyphs (`●`, `▲`, `◷`, `■`, `○`) and high-contrast semantic tones for accessibility.
+
+### 8.5 Current Architecture Limitations
+- **Backend Snapshot Authority**: Backend stores only `LATEST_ONLY` snapshot in `public.server_metrics_latest`. No historical time-series database is stored or fabricated.
+- **Rolling Graph Buffer**: Live graph is strictly browser-local rolling memory (maximum 60 samples / ~5 minutes). Refreshing or closing the tab resets the graph buffer to begin fresh from the current snapshot.
