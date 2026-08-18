@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T8C COMPLETED — PRODUCTION HARDENING DEPLOYED & VERIFIED
+CURRENT_PHASE:          T9A CANDIDATE COMPLETE — WEEKLY MAINTENANCE AUTOMATION & SEGA DISCOVERY
 LAST_CLOSED_PHASE:      T8C (Controlled Production Operations Hardening Rollout + Proof)
-ACTIVE_PHASE:           T8 (PRODUCTION OPERATIONS & HEALTH HARDENING — DEPLOYED)
-NEXT_PHASE:             T8_FINAL_REMOTE_EVIDENCE_CLOSURE (Admin Docs Evidence Push)
+ACTIVE_PHASE:           T9A (Weekly Maintenance Automation & SEGA Discovery — CANDIDATE)
+NEXT_PHASE:             T9B (Controlled Weekly Maintenance Production Rollout)
 DATE:                   2026-08-18
 ```
 
@@ -17,15 +17,13 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**, and **Phase T8 (Production Operations & Health Hardening)**:
+The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**, and **Phase T8 (Production Operations & Health Hardening)**, and has now completed candidate implementation for **Phase T9A (Weekly Maintenance Automation & SEGA Probe Authority Discovery)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 V1 (Closed & Production Verified)**: Unified Discord status embed (~60s), transition alerts with anti-flap 2-sample confirmation and 300s cooldown, time-weighted average throughput Traffic Summary (30m epoch boundary, 1 MiB threshold gating), and local atomic state persistence (`/var/lib/neko/discord-state.json`) into a single long-running Lightsail daemon (`neko-discord-worker.service`). Controlled production cutover completed with zero dual-publishing and legacy service safely disabled.
-- **Phase T8 (Closed & Production Verified)**: Hardened VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure:
-  - **Phase T8A (Closed / Audit & Design Frozen)**: Conducted live read-only empirical audit of AWS Lightsail JP host and service daemons. Established exact resource baselines, confirmed zero secret leaks, verified independent failure domains and boot readiness. Owner review elevated Shadowsocks `Restart=no` to a **P1 Reliability Gap**, targeted by a minimal systemd drop-in (`10-neko-recovery.conf`).
-  - **Phase T8B (Closed / Candidate Implementation)**: Local Backend repository implementation and testing of Shadowsocks recovery drop-in, Discord Worker unit hardening (`Restart=always`, `MemoryMax=128M`, `TasksMax=16`), atomic state temp cleanup, `--check-config` pre-flight CLI, single sanitized operator diagnostic tool (`neko_ops_status.py`), journal disk cap drop-in (`500M`), and 51 passing unit tests.
-  - **Phase T8C (Closed / Production Rollout & Proof)**: Controlled staging, non-disruptive Shadowsocks recovery drop-in activation, journald 500M capacity cap, Discord Worker source and unit deployment, pre-flight `--check-config` validation, atomic state verification, operator diagnostics confirmation, and 15m+ production soak on AWS Lightsail Japan.
+- **Phase T8 (Closed & Production Verified)**: Hardened VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure.
+- **Phase T9A (Candidate Complete / Discovery Frozen)**: Designed and implemented source-controlled weekly maintenance controller (`agent/neko_weekly_maintenance.py`), systemd oneshot service (`agent/systemd/neko-weekly-maintenance.service`), and systemd timer (`agent/systemd/neko-weekly-maintenance.timer`) executing every Tuesday at 02:00 Asia/Bangkok with `Persistent=false` and `AccuracySec=1s`. Implemented bounded duplicate message protection (no blind POST on missing state ID) and in-place Discord `🛠️ กำลังซ่อมบำรุง` status editing. Completed deep read-only inspection of legacy JP AES project, freezing `SEGA_PROBE_AUTHORITY = BLOCKED_PENDING_AUTHORITY` and strictly preserving `Ping (Proxy VPS → Upstream)` probing `1.1.1.1`. 62 deterministic unit tests passing.
 
 ---
 
@@ -49,6 +47,7 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 | **Phase T8A** | Production Operations Baseline Audit & Hardening Design | **CLOSED (AUDIT & DESIGN FROZEN)** | Admin Doc Commit `e810ee8b...` / Live VPS Audit Verified |
 | **Phase T8B** | Local Operations Hardening Candidate Implementation | **CLOSED (CANDIDATE COMPLETE)** | Backend `3ce6ccdb...` / Admin `077e523c...` / 51 Tests PASS |
 | **Phase T8C** | Controlled Production Hardening Rollout & Proof | **CLOSED (PRODUCTION PROOF)** | Live Proof Verified / Restart=always / Journal 500M / Ops Status Live |
+| **Phase T9A** | Weekly Maintenance Automation & SEGA Discovery | **CLOSED (CANDIDATE COMPLETE)** | `docs/current/weekly-maintenance-automation-handoff.md` / 62 Tests PASS |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
@@ -66,6 +65,7 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 - **Admin T7 V1C Production Proof Commit**: `683cb99724e9dffbf342875031f0e0a4abbc6172`
 - **Admin T8A Baseline Audit Commit**: `e810ee8ba07a5f45d05da75aaf1d34c50d139494`
 - **Admin T8B Implementation Handoff Commit**: `077e523c9511b48b47c4e45720b448d0445399cf`
+- **Backend Git T9A Server Commit**: `8832429a7546ab57dd8ac3a48b40b93387cb9f19`
 
 ---
 
