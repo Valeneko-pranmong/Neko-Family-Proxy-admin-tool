@@ -2,18 +2,18 @@
 
 ```text
 DOCUMENT:               docs/architecture/production-operations-hardening.md
-STATUS:                 AUTHORITATIVE ARCHITECTURE CONTRACT & HARDENING DESIGN (T8B CANDIDATE READY)
+STATUS:                 AUTHORITATIVE ARCHITECTURE CONTRACT & PRODUCTION VERIFIED SPECIFICATION
 CLASSIFICATION:         OPERATIONAL RELIABILITY & RECOVERY GOVERNANCE
-PHASE:                  T8B (Local Operations Hardening Candidate Implementation)
+PHASE:                  T8C (Controlled Production Hardening Rollout & Proof)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 PRODUCTION_TARGET:      AWS Lightsail Japan VPS (ap-northeast-1 / 18.178.140.8)
 SERVER_AUTHORITY:       3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
-ADMIN_DOC_AUTHORITY:    e810ee8ba07a5f45d05da75aaf1d34c50d139494
+ADMIN_DOC_AUTHORITY:    077e523c9511b48b47c4e45720b448d0445399cf
 DATE:                   2026-08-18
-T8B_STATUS:             LOCAL CANDIDATE COMPLETE / TESTS PASSING (51/51)
+T8_STATUS:              DESIGNED = YES / IMPLEMENTED = YES / DEPLOYED = YES / PRODUCTION VERIFIED = YES
 ```
 
 ---
@@ -418,5 +418,41 @@ TEST SUITE EXECUTION:
   Total Tests:              51
   Passing:                  51 (100% Pass)
   Failures / Errors:        0
+=============================================================================
+```
+
+---
+
+## 12. Phase T8C Production Rollout & Verification Summary
+
+```text
+=============================================================================
+PHASE T8 PRODUCTION HARDENING VERIFICATION RECORD
+=============================================================================
+DESIGNED:                   YES
+IMPLEMENTED:                YES
+DEPLOYED:                   YES
+PRODUCTION_VERIFIED:        YES
+
+FINAL PRODUCTION CONTROLS:
+  SHADOWSOCKS_RECOVERY:     Restart=always | RestartSec=5s | StartLimit=60s/5 (Drop-in 10-neko-recovery.conf)
+  DISCORD_RECOVERY:         Restart=always | RestartSec=5s | StartLimit=60s/5 (neko-discord-worker.service)
+  DISCORD_RESOURCE_CAPS:    MemoryMax=128M | TasksMax=16 | CAP_NET_RAW preserved
+  JOURNALD_STORAGE_CAP:     SystemMaxUse=500M (Drop-in 10-neko-journal-cap.conf)
+  CONFIG_PREFLIGHT_CHECK:   DEPLOYED (ExecStartPre /opt/neko/neko_discord_worker.py --check-config)
+  OPERATOR_DIAGNOSTICS:     DEPLOYED (/opt/neko/neko_ops_status.py — 0_HEALTHY)
+  STATE_TEMP_CLEANUP:       DEPLOYED (Atomic try...finally unlinking in save_state_atomic)
+
+DEPLOYED ARTIFACT SHA256 HASHES:
+  /opt/neko/neko_discord_worker.py:
+    86b3bcc378b95ec1831f8abe0cd86da065d5353196b1950244bd4c4e1a33f49c
+  /opt/neko/neko_ops_status.py:
+    cc66e117de1fad9ce15e2c8b3cd0acf3bba20278c8bfac96d0bd15f87383d7af
+  /etc/systemd/system/neko-discord-worker.service:
+    3f3fe986dd7f2125df866d2b4c60070cc820f1383ecabb4232a7f45608da8d5b
+  /etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf:
+    b1f2612271176cc57581c316d4ecac702d5250a5ff3611a6381edb5a5687f8cb
+  /etc/systemd/journald.conf.d/10-neko-journal-cap.conf:
+    e5dc26483ddeb63f62e13e4ad7ea11ca7ea233b428419811831a574c21d16a84
 =============================================================================
 ```

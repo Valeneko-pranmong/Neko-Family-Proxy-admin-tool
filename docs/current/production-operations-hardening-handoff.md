@@ -1,169 +1,213 @@
-# NEKO FAMILY PROXY — PRODUCTION OPERATIONS & HEALTH HARDENING HANDOFF (PHASE T8B)
+# NEKO FAMILY PROXY — PRODUCTION OPERATIONS & HEALTH HARDENING HANDOFF (PHASE T8)
 
 ```text
 DOCUMENT:               docs/current/production-operations-hardening-handoff.md
-STATUS:                 AUTHORITATIVE HANDOFF (Phase T8B Local Candidate Complete)
-CLASSIFICATION:         OPERATIONAL HARDENING CANDIDATE & PHASE T8C HANDOFF RECORD
-PHASE:                  T8B (Local Operations Hardening Candidate Implementation)
-PREVIOUS_PHASE:         T8A (Production Operations Baseline Audit + Hardening Design — CLOSED)
-SUCCESSOR_PHASE:        T8C (Controlled Production Hardening Rollout & Proof)
+STATUS:                 AUTHORITATIVE PRODUCTION ROLLOUT & LIFECYCLE RECORD
+CLASSIFICATION:         OPERATIONAL HARDENING & PRODUCTION PROOF RECORD
+PHASE:                  T8C (Controlled Production Operations Hardening Rollout + Proof)
+PREVIOUS_PHASES:        T8A (Audit & Design — CLOSED) | T8B (Candidate Implementation — CLOSED)
+CURRENT_PHASE:          T8C (Controlled Production Rollout & Proof — CLOSED)
+SUCCESSOR_PHASE:        T8_FINAL_REMOTE_EVIDENCE_CLOSURE (Admin Docs Remote Push)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 PRODUCTION_TARGET:      AWS Lightsail Japan VPS (ap-northeast-1 / 18.178.140.8)
 BACKEND_COMMIT:         3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
-ADMIN_DOC_COMMIT:       e810ee8ba07a5f45d05da75aaf1d34c50d139494
+ADMIN_DOC_COMMIT:       077e523c9511b48b47c4e45720b448d0445399cf
 DATE:                   2026-08-18
-T8B_EXIT_GATE:          PASS
+T8_EXIT_GATE:           PASS
 ```
 
 ---
 
-## 1. Executive Summary & Phase T8B Outcome
+## 1. Executive Summary & Phase T8 Lifecycle Closure
 
-Phase **T8B (Local Operations Hardening Candidate Implementation)** has designed, implemented, and verified local candidates for all approved production reliability controls in the server repository (`D:\Github\Neko-Family-Proxy` at commit `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`):
-
-1. **Shadowsocks Self-Recovery Drop-in** (`agent/systemd/shadowsocks-libev.service.d/10-neko-recovery.conf`):
-   - Overcomes distro vendor unit's `Restart=no` gap (reclassified as **P1 Reliability Gap**).
-   - Configures `Restart=always`, `RestartSec=5s`, `StartLimitIntervalSec=60s`, `StartLimitBurst=5` without altering vendor unit files, port bindings, or configurations.
-2. **Discord Worker Systemd Unit Hardening** (`agent/systemd/neko-discord-worker.service`):
-   - Migrates `Restart=on-failure` to `Restart=always` with `RestartSec=5s`.
-   - Adds restart storm protection: `StartLimitIntervalSec=60s`, `StartLimitBurst=5`.
-   - Adds conservative resource safety ceilings: `MemoryMax=128M`, `TasksMax=16`.
-   - Integrates static pre-flight configuration validation via `ExecStartPre=/usr/bin/python3 /opt/neko/neko_discord_worker.py --check-config`.
-   - Preserves `CAP_NET_RAW` bounding capability and strict filesystem isolation.
-3. **Journal Storage Capacity Drop-in** (`agent/systemd/journald.conf.d/10-neko-journal-cap.conf`):
-   - Bounds system journal storage to `SystemMaxUse=500M`.
-4. **State File Atomic Cleanup** (`agent/neko_discord_worker.py`):
-   - Implements `try ... finally` exception-safe unlinking of `.tmp` files in `save_state_atomic()` upon write or rename failure, preventing orphaned temp files under full disk conditions while preserving existing state files.
-5. **Static Config Validation CLI** (`agent/neko_discord_worker.py --check-config`):
-   - Validates required env keys, port range (1..65535), interface, intervals, state path, and timezone without opening network connections or leaking webhook secrets.
-6. **Read-Only Operator Diagnostics Script** (`agent/neko_ops_status.py`):
-   - Single, zero-dependency, read-only Python 3.10 CLI providing host metrics, service statuses, listener probes, state validation, and disk thresholds with deterministic exit codes (`0_HEALTHY`, `1_DEGRADED`, `2_ERROR`).
-7. **Comprehensive Unit Tests** (`agent/tests/test_operations_hardening.py`):
-   - 22 new deterministic tests added. Full test suite executes 51 tests with 100% pass rate.
+Phase **T8 (Production Operations & Health Hardening)** has completed all milestones across audit, implementation, and production deployment:
+- **Phase T8A (CLOSED)**: Empirical baseline discovery audit on AWS Lightsail Japan host; identified and classified the Shadowsocks `Restart=no` vendor gap as a **P1 Reliability Gap**, journal retention unpinned as P2, state atomic cleanup as P2, missing operator diagnostics as P2.
+- **Phase T8B (CLOSED)**: Local Backend candidate implementation in `D:\Github\Neko-Family-Proxy` (commit `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`), implementing drop-ins, static config check CLI, state cleanup, `neko_ops_status.py`, and 51 passing unit tests.
+- **Phase T8C (CLOSED)**: Controlled non-destructive rollout to AWS Lightsail Japan VPS (`18.178.140.8`), static validation, daemon-reload, verified effective systemd recovery policies (`Restart=always`), journald 500M cap, single-publisher Discord Worker restart, 0_HEALTHY operator diagnostics, and 15m+ production soak.
 
 ---
 
-## 2. Candidate Deliverables & Authority Hashes
+## 2. Artifact Authority & Hashes Record
 
 ```text
 =============================================================================
-T8B CANDIDATE ARTIFACT AUTHORITY RECORD
+PRODUCTION ARTIFACT AUTHORITY & SHA256 VERIFICATION
 =============================================================================
 BACKEND_COMMIT:               3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
-BACKEND_BRANCH:               feature/neko-auth-lite-v1-launcher-backend
+ADMIN_DOC_COMMIT:             077e523c9511b48b47c4e45720b448d0445399cf
 
-CANDIDATE DELIVERABLE SHA256 HASHES:
-  agent/neko_discord_worker.py:
-    86b3bcc378b95ec1831f8abe0cd86da065d5353196b1950244bd4c4e1a33f49c
+ARTIFACT HASHE MATRIX:
+1. Discord Worker Source:
+   Path:                      /opt/neko/neko_discord_worker.py (0755 root:root)
+   Pre-T8C SHA256:            f95f7bcc3bf70a6eedf2f616b4edcf3293306b7d62f3a43fb003bc75afd106f4
+   Post-T8C SHA256:           86b3bcc378b95ec1831f8abe0cd86da065d5353196b1950244bd4c4e1a33f49c
+   Expected SHA256:           86b3bcc378b95ec1831f8abe0cd86da065d5353196b1950244bd4c4e1a33f49c
+   Match:                     EXACT
 
-  agent/neko_ops_status.py:
-    cc66e117de1fad9ce15e2c8b3cd0acf3bba20278c8bfac96d0bd15f87383d7af
+2. Operator Diagnostics Tool:
+   Path:                      /opt/neko/neko_ops_status.py (0755 root:root)
+   Post-T8C SHA256:           cc66e117de1fad9ce15e2c8b3cd0acf3bba20278c8bfac96d0bd15f87383d7af
+   Expected SHA256:           cc66e117de1fad9ce15e2c8b3cd0acf3bba20278c8bfac96d0bd15f87383d7af
+   Match:                     EXACT
 
-  agent/systemd/neko-discord-worker.service:
-    3f3fe986dd7f2125df866d2b4c60070cc820f1383ecabb4232a7f45608da8d5b
+3. Discord Worker Systemd Unit:
+   Path:                      /etc/systemd/system/neko-discord-worker.service (0644 root:root)
+   Pre-T8C SHA256:            74de7d37b7b90bd2f962fb61d5237e73c1cd102e01361ba83bd8944294a9eb94
+   Post-T8C SHA256:           3f3fe986dd7f2125df866d2b4c60070cc820f1383ecabb4232a7f45608da8d5b
+   Expected SHA256:           3f3fe986dd7f2125df866d2b4c60070cc820f1383ecabb4232a7f45608da8d5b
+   Match:                     EXACT
 
-  agent/systemd/shadowsocks-libev.service.d/10-neko-recovery.conf:
-    b1f2612271176cc57581c316d4ecac702d5250a5ff3611a6381edb5a5687f8cb
+4. Shadowsocks Recovery Drop-in:
+   Path:                      /etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf (0644 root:root)
+   Post-T8C SHA256:           b1f2612271176cc57581c316d4ecac702d5250a5ff3611a6381edb5a5687f8cb
+   Expected SHA256:           b1f2612271176cc57581c316d4ecac702d5250a5ff3611a6381edb5a5687f8cb
+   Match:                     EXACT
 
-  agent/systemd/journald.conf.d/10-neko-journal-cap.conf:
-    e5dc26483ddeb63f62e13e4ad7ea11ca7ea233b428419811831a574c21d16a84
-
-TEST EXECUTION:
-  Total Unit Tests:           51
-  Existing T7 Tests:          29 (All PASS)
-  New T8 Hardening Tests:     22 (All PASS)
-  Failures / Regressions:     0
+5. Journal Storage Capacity Drop-in:
+   Path:                      /etc/systemd/journald.conf.d/10-neko-journal-cap.conf (0644 root:root)
+   Post-T8C SHA256:           e5dc26483ddeb63f62e13e4ad7ea11ca7ea233b428419811831a574c21d16a84
+   Expected SHA256:           e5dc26483ddeb63f62e13e4ad7ea11ca7ea233b428419811831a574c21d16a84
+   Match:                     EXACT
 =============================================================================
 ```
 
 ---
 
-## 3. Findings Classification Correction (T8A -> T8B)
+## 3. Production Service Authority & Recovery Configuration
 
 ```text
 =============================================================================
-FINDINGS CLASSIFICATION
+PRODUCTION SERVICE MATRIX
 =============================================================================
-P0 FINDINGS: 0 (No active outages, data corruption, or secret leaks)
+1. shadowsocks-libev.service:
+   ActiveState:               active (running)
+   SubState:                  running
+   MainPID:                   431 (Uninterrupted process across rollout)
+   Restart Policy:            Restart=always
+   RestartSec:                5s (RestartUSec=5s)
+   StartLimitInterval:        60s (StartLimitIntervalUSec=1min)
+   StartLimitBurst:           5
+   DropInPaths:               /etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf
+   Recovery Policy Proof:     VERIFIED_BY_SYSTEMD_EFFECTIVE_CONFIG
+   Destructive Crash Test:    NOT_PERFORMED (Data-plane protection invariant)
+   TCP/UDP Port 8388:         LISTENING & UNBROKEN
 
-P1 FINDINGS: 1 (Elevated by Owner Review)
-  P1_1: Shadowsocks `Restart=no` lacks automatic crash recovery.
-        Resolved by candidate drop-in `10-neko-recovery.conf` setting `Restart=always`.
+2. neko-discord-worker.service:
+   ActiveState:               active (running)
+   SubState:                  running
+   MainPID:                   55258
+   Restart Policy:            Restart=always
+   RestartSec:                5s (RestartUSec=5s)
+   StartLimitInterval:        60s (StartLimitIntervalUSec=1min)
+   StartLimitBurst:           5
+   MemoryMax:                 128M (134217728 bytes)
+   TasksMax:                  16
+   CapabilityBoundingSet:     cap_net_raw
+   ExecStartPre:              /usr/bin/python3 /opt/neko/neko_discord_worker.py --check-config (PASS)
+   State File:                /var/lib/neko/discord-state.json (0600 root:root)
+   State Temp Files:          0 (Clean atomic replacement)
+   Persistent Msg ID:         1539165666089762837 (PRESERVED & EDITED IN-PLACE)
 
-P2 FINDINGS: 4 (Resolved in T8B Candidate)
-  P2_1: Discord Worker `Restart=on-failure` clean exit recovery gap -> `Restart=always`.
-  P2_2: Journald unpinned default retention -> `SystemMaxUse=500M` drop-in.
-  P2_3: State atomic write temporary file cleanup -> `try...finally` in save_state_atomic.
-  P2_4: Missing single-command operator diagnostic & pre-flight check -> `neko_ops_status.py` & `--check-config`.
+3. neko-server-monitor.service:
+   ActiveState:               active (running)
+   MainPID:                   46806 (Uninterrupted telemetry pipeline)
+   Restart Policy:            Restart=always
 
-P3 FINDINGS: 1 (Resolved in T8B Candidate)
-  P3_1: Resource bounds unpinned -> Added `MemoryMax=128M`, `TasksMax=16` to Worker unit.
+4. neko-traffic-monitor.service:
+   ActiveState:               inactive (dead)
+   UnitFileState:             disabled (Rollback authority preserved)
+
+5. systemd-journald.service:
+   ActiveState:               active (running)
+   Effective SystemMaxUse:    500M
+   Current Journal Usage:     368.0M (Within 500M limit; no manual vacuum needed)
 =============================================================================
 ```
 
 ---
 
-## 4. Planned Phase T8C Production Rollout Protocol
+## 4. Operator Diagnostics Tooling (`/opt/neko/neko_ops_status.py`)
 
-> [!NOTE]
-> Phase T8B changes are strictly local candidates. Production AWS Lightsail VPS has NOT been modified.
+A single read-only diagnostics script is deployed at `/opt/neko/neko_ops_status.py`:
 
-When Phase T8C is initiated by the Owner, deployment will follow this controlled non-disruptive sequence:
+- **Execution Command**: `sudo /opt/neko/neko_ops_status.py`
+- **Output Sample**:
+```text
+=============================================================================
+NEKO FAMILY PROXY — PRODUCTION OPS DIAGNOSTICS
+=============================================================================
+HOST:               ip-172-26-29-162 (Ubuntu 22.04.5 LTS / 6.8.0-1061-aws)
+UPTIME:             9d 15h 2m | Load: 0.10, 0.04, 0.01
+RAM USAGE:          376.7 MiB / 914.0 MiB (537.3 MiB available)
+DISK USAGE:         3.66 GiB / 38.58 GiB (9.5% used, 34.91 GiB free)
+JOURNAL USAGE:      368.0M
 
-1. **Pre-flight & Authority Verification**:
-   - Verify server commit `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a` pushed to remote.
-   - Verify SHA256 hashes of staged candidate files on Japan VPS.
-2. **Journal Capacity Drop-in Staging**:
-   - Copy `10-neko-journal-cap.conf` to `/etc/systemd/journald.conf.d/10-neko-journal-cap.conf`.
-   - Run `sudo systemctl restart systemd-journald`.
-3. **Shadowsocks Recovery Drop-in Staging**:
-   - Create `/etc/systemd/system/shadowsocks-libev.service.d/`.
-   - Copy `10-neko-recovery.conf` to `/etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf`.
-4. **Discord Worker Script & Unit Staging**:
-   - Stage updated `neko_discord_worker.py` to `/opt/neko/neko_discord_worker.py` (0755 root:root).
-   - Stage `neko_ops_status.py` to `/opt/neko/neko_ops_status.py` (0755 root:root).
-   - Stage updated `neko-discord-worker.service` to `/etc/systemd/system/neko-discord-worker.service`.
-5. **Pre-flight Execution**:
-   - Run `python3 /opt/neko/neko_discord_worker.py --check-config`.
-   - Run `systemd-analyze verify /etc/systemd/system/neko-discord-worker.service`.
-6. **Controlled Activation**:
-   - Run `sudo systemctl daemon-reload`.
-   - Run `sudo systemctl restart neko-discord-worker.service`.
-7. **Verification & Proof**:
-   - Execute `sudo python3 /opt/neko/neko_ops_status.py` (Verify exit 0 and all healthy).
-   - Verify Shadowsocks TCP listener `:8388` and UDP relay intact.
-   - Verify persistent Discord status embed advances smoothly without duplicate messages.
-   - Verify `systemctl show neko-discord-worker.service -p Restart,MemoryMax,TasksMax`.
-   - Verify `systemctl show shadowsocks-libev.service -p Restart,StartLimitIntervalUSec`.
+SERVICES:
+  shadowsocks-libev:    ACTIVE (PID: 431, Restarts: 0, Mem: 5.3 MiB)
+  neko-server-monitor:  ACTIVE (PID: 46806, Restarts: 0, Mem: 10.6 MiB)
+  neko-discord-worker:  ACTIVE (PID: 55258, Restarts: 0, Mem: 13.8 MiB)
+  neko-traffic-monitor: INACTIVE (Enabled: disabled, Rollback Authority)
 
----
+NETWORK & LISTENERS:
+  TCP Listener :8388:  LISTENING
 
-## 5. Rollback Procedures
-
-If an unexpected regression occurs during T8C:
-
-- **Rollback Discord Worker**:
-  Revert `/opt/neko/neko_discord_worker.py` and `/etc/systemd/system/neko-discord-worker.service` to Phase T7 V1 authority (Commit `5ad8e693...`), run `sudo systemctl daemon-reload && sudo systemctl restart neko-discord-worker.service`.
-- **Rollback Shadowsocks Drop-in**:
-  Remove `/etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf`, run `sudo systemctl daemon-reload`.
-- **Rollback Journal Drop-in**:
-  Remove `/etc/systemd/journald.conf.d/10-neko-journal-cap.conf`, run `sudo systemctl restart systemd-journald`.
-- **Rollback to Legacy Discord Publisher**:
-  Stop `neko-discord-worker.service`, enable and start `neko-traffic-monitor.service` (retained on VPS).
+STATE INTEGRITY:
+  discord-state.json:   VALID (Size: 397 B, Mode: 0o600, Status: ONLINE)
+  Persistent Msg ID:    PRESENT
+  Orphan Temp Files:    0
+=============================================================================
+OVERALL STATUS:         ALL SYSTEMS HEALTHY (0_HEALTHY)
+=============================================================================
+```
+- **Exit Code**: `0` (`0_HEALTHY`).
+- **Safety Audit**: Contains zero secrets, passwords, or webhook tokens. 100% read-only with zero process or file mutations.
 
 ---
 
-## 6. Operational Invariant Checkpoint
+## 5. Production Rollback Authority Snapshot
+
+Before overwriting production binaries, a protected rollback snapshot was captured on the VPS:
+
+- **Rollback Directory**: `/opt/neko/rollback/t8c-20260818073350/` (0700 root:root)
+- **Snapshot Contents**:
+  - `neko_discord_worker.py.pre-t8c` (SHA256: `f95f7bcc3bf70a6eedf2f616b4edcf3293306b7d62f3a43fb003bc75afd106f4`)
+  - `neko-discord-worker.service.pre-t8c` (SHA256: `74de7d37b7b90bd2f962fb61d5237e73c1cd102e01361ba83bd8944294a9eb94`)
+
+### Rollback Runbook:
+1. **Rollback Discord Worker**:
+   ```bash
+   sudo cp /opt/neko/rollback/t8c-20260818073350/neko_discord_worker.py.pre-t8c /opt/neko/neko_discord_worker.py
+   sudo cp /opt/neko/rollback/t8c-20260818073350/neko-discord-worker.service.pre-t8c /etc/systemd/system/neko-discord-worker.service
+   sudo systemctl daemon-reload
+   sudo systemctl restart neko-discord-worker.service
+   ```
+2. **Rollback Shadowsocks Drop-in**:
+   ```bash
+   sudo rm -f /etc/systemd/system/shadowsocks-libev.service.d/10-neko-recovery.conf
+   sudo systemctl daemon-reload
+   ```
+3. **Rollback Journald Drop-in**:
+   ```bash
+   sudo rm -f /etc/systemd/journald.conf.d/10-neko-journal-cap.conf
+   sudo systemctl kill -s HUP systemd-journald.service
+   ```
+4. **Rollback to Legacy Publisher**:
+   ```bash
+   sudo systemctl stop neko-discord-worker.service
+   sudo systemctl enable --now neko-traffic-monitor.service
+   ```
+
+---
+
+## 6. Architectural Invariants & Limitations
 
 ```text
-SERVER_SOURCE_CHANGED:          YES (Local Candidate in Backend repo)
-SERVER_COMMIT:                  3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
-ADMIN_RUNTIME_CHANGED:          NO
-SUPABASE_CHANGED:               NO
-VPS_CHANGED:                    NO
-PRODUCTION_RUNTIME_CHANGED:     NO
-T8B_EXIT_GATE:                  PASS
+FULL_HOST_OUTAGE_EXTERNAL_DETECTION = NOT_PROVIDED (Frozen Architectural Non-Goal)
+DATA_PLANE_MUTATION                 = ZERO (Uninterrupted port 8388 proxying)
+ACTIVE_USERS_TRACKING               = ZERO (Removed in Phase T7 V1)
+SESSION_DATA_LEAKAGE                = ZERO
+SECRET_LEAKAGE                      = ZERO
 ```

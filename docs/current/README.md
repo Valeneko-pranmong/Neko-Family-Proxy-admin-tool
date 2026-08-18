@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T8B IN PROGRESS — LOCAL OPERATIONS HARDENING CANDIDATE
-LAST_CLOSED_PHASE:      T8A (Production Operations Baseline Audit + Hardening Design)
-ACTIVE_PHASE:           T8 (PRODUCTION OPERATIONS & HEALTH HARDENING)
-NEXT_PHASE:             T8C (Controlled Production Hardening Rollout & Proof)
+CURRENT_PHASE:          T8C COMPLETED — PRODUCTION HARDENING DEPLOYED & VERIFIED
+LAST_CLOSED_PHASE:      T8C (Controlled Production Operations Hardening Rollout + Proof)
+ACTIVE_PHASE:           T8 (PRODUCTION OPERATIONS & HEALTH HARDENING — DEPLOYED)
+NEXT_PHASE:             T8_FINAL_REMOTE_EVIDENCE_CLOSURE (Admin Docs Evidence Push)
 DATE:                   2026-08-18
 ```
 
@@ -17,15 +17,15 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)**, all milestones of **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**, and **Phase T8A (Production Operations Baseline Audit + Hardening Design)**:
+The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**, and **Phase T8 (Production Operations & Health Hardening)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 V1 (Closed & Production Verified)**: Unified Discord status embed (~60s), transition alerts with anti-flap 2-sample confirmation and 300s cooldown, time-weighted average throughput Traffic Summary (30m epoch boundary, 1 MiB threshold gating), and local atomic state persistence (`/var/lib/neko/discord-state.json`) into a single long-running Lightsail daemon (`neko-discord-worker.service`). Controlled production cutover completed with zero dual-publishing and legacy service safely disabled.
-- **Phase T8 (Active — Production Operations & Health Hardening)**: Hardens VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure.
-  - **Phase T8A (Closed / Audit & Design Frozen)**: Conducted live read-only empirical audit of AWS Lightsail JP host and service daemons. Established exact resource baselines, confirmed zero secret leaks, verified independent failure domains and boot readiness. Owner review corrected finding classification to elevate Shadowsocks `Restart=no` to a **P1 Reliability Gap**, targeted by a minimal systemd drop-in (`10-neko-recovery.conf`).
-  - **Phase T8B (Active / Local Candidate Implementation)**: Local Backend repository implementation and testing of Shadowsocks recovery drop-in, Discord Worker unit hardening (`Restart=always`, `MemoryMax=128M`, `TasksMax=16`), atomic state temp cleanup, `--check-config` pre-flight CLI, single sanitized operator diagnostic tool (`neko_ops_status.py`), journal disk cap drop-in (`500M`), and comprehensive unit tests.
-  - **Phase T8C (Planned / Production Rollout & Proof)**: Controlled staging, verification, and proof on AWS Lightsail Japan.
+- **Phase T8 (Closed & Production Verified)**: Hardened VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure:
+  - **Phase T8A (Closed / Audit & Design Frozen)**: Conducted live read-only empirical audit of AWS Lightsail JP host and service daemons. Established exact resource baselines, confirmed zero secret leaks, verified independent failure domains and boot readiness. Owner review elevated Shadowsocks `Restart=no` to a **P1 Reliability Gap**, targeted by a minimal systemd drop-in (`10-neko-recovery.conf`).
+  - **Phase T8B (Closed / Candidate Implementation)**: Local Backend repository implementation and testing of Shadowsocks recovery drop-in, Discord Worker unit hardening (`Restart=always`, `MemoryMax=128M`, `TasksMax=16`), atomic state temp cleanup, `--check-config` pre-flight CLI, single sanitized operator diagnostic tool (`neko_ops_status.py`), journal disk cap drop-in (`500M`), and 51 passing unit tests.
+  - **Phase T8C (Closed / Production Rollout & Proof)**: Controlled staging, non-disruptive Shadowsocks recovery drop-in activation, journald 500M capacity cap, Discord Worker source and unit deployment, pre-flight `--check-config` validation, atomic state verification, operator diagnostics confirmation, and 15m+ production soak on AWS Lightsail Japan.
 
 ---
 
@@ -47,14 +47,16 @@ The project has completed **Phase T6 (Historical Server Metrics)**, all mileston
 | **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **CLOSED (CANDIDATE COMPLETE)**| Backend `5ad8e693...` / 29 Unit Tests Passing / Systemd Candidate |
 | **Phase T7 V1C** | Production Deployment & Legacy Cutover | **CLOSED (PRODUCTION PROOF)**  | Live Proof Verified / 1 Publisher Active / Legacy Disabled |
 | **Phase T8A** | Production Operations Baseline Audit & Hardening Design | **CLOSED (AUDIT & DESIGN FROZEN)** | Admin Doc Commit `e810ee8b...` / Live VPS Audit Verified |
-| **Phase T8B** | Local Operations Hardening Candidate Implementation | **IN PROGRESS** | Local Systemd Drop-ins, State Cleanup, Ops Tool |
-| **Phase T8C** | Controlled Production Hardening Rollout & Proof | **PLANNED** | Pending Phase T8B Completion & Owner Approval |
+| **Phase T8B** | Local Operations Hardening Candidate Implementation | **CLOSED (CANDIDATE COMPLETE)** | Backend `3ce6ccdb...` / Admin `077e523c...` / 51 Tests PASS |
+| **Phase T8C** | Controlled Production Hardening Rollout & Proof | **CLOSED (PRODUCTION PROOF)** | Live Proof Verified / Restart=always / Journal 500M / Ops Status Live |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
 - **Backend Git T6B Migration Commit**: `94f389c5c3dfd6c919dcbdb54955ebc621345b5f`
 - **Backend Git T6D Retention Commit**: `852bfb67e482d264729fc83aa862340c732df7db`
 - **Backend Git T7 V1B Server Commit**: `5ad8e693e549b7d8b5b178f7269f9b1b737ac8bf`
+- **Backend Git T8B Server Commit**: `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`
+- **Backend Git T8C Server Remote Authority**: `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
 - **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
@@ -62,6 +64,8 @@ The project has completed **Phase T6 (Historical Server Metrics)**, all mileston
 - **Admin T7 V1B Architecture Correction**: `a35311d059e591430f99cb74bf70dca0f31cb435`
 - **Admin T7 V1B Doc Record Commit**: `b33db64e2b480b5851943b15f396779dca77917b`
 - **Admin T7 V1C Production Proof Commit**: `683cb99724e9dffbf342875031f0e0a4abbc6172`
+- **Admin T8A Baseline Audit Commit**: `e810ee8ba07a5f45d05da75aaf1d34c50d139494`
+- **Admin T8B Implementation Handoff Commit**: `077e523c9511b48b47c4e45720b448d0445399cf`
 
 ---
 
@@ -76,9 +80,13 @@ PRODUCTION_HISTORY_API          = LIVE (GET /api/server/metrics/history?range=1h
 PRODUCTION_HISTORICAL_CHARTS    = LIVE (Interactive range switching, gap splitting, degradation markers)
 HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database scheduled job launcher.prune_server_metrics_history)
 DISCORD_PRODUCTION_STATE        = UNIFIED WORKER ACTIVE (neko-discord-worker.service on AWS Lightsail)
-UNIFIED_T7_V1_DISCORD_WORKER    = PRODUCTION VERIFIED & LIVE (PID 50924 / 1 Publisher Authority)
+UNIFIED_T7_V1_DISCORD_WORKER    = PRODUCTION HARDENED & LIVE (Restart=always / MemoryMax=128M / TasksMax=16)
 LEGACY_DISCORD_SERVICE          = INACTIVE & DISABLED (Rollback Artifacts Preserved)
-OPERATIONS_HARDENING_STATE      = T8A AUDIT COMPLETED / DESIGN FROZEN (T8B Candidate Next)
+SHADOWSOCKS_RECOVERY_POLICY     = ACTIVE (Restart=always / 5s / 60s burst 5 drop-in)
+JOURNALD_STORAGE_POLICY         = ACTIVE (SystemMaxUse=500M drop-in)
+OPERATOR_DIAGNOSTICS_TOOL       = LIVE (/opt/neko/neko_ops_status.py — 0_HEALTHY)
+CONFIG_PREFLIGHT_CHECK          = ACTIVE (ExecStartPre /opt/neko/neko_discord_worker.py --check-config)
+OPERATIONS_HARDENING_STATE      = T8C PRODUCTION DEPLOYED & VERIFIED
 ```
 
 ---
@@ -182,4 +190,6 @@ A new engineer joining the project should read documents in the following order:
 12. **[docs/current/discord-server-status-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/discord-server-status-production-proof.md)**
     *Phase T7 V1C live production verification proof, persistent status message ID proof, 30m summary threshold gating, and single-publisher verification.*
 13. **[docs/current/production-operations-hardening-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/production-operations-hardening-handoff.md)**
-    *Phase T8A production operations baseline discovery findings, empirical resource measurements, hardening matrix, and T8B candidate handoff.*
+    *Phase T8 complete operations hardening handoff, baseline audit findings, candidate artifact authority, and production cutover record.*
+14. **[docs/current/production-operations-hardening-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/production-operations-hardening-production-proof.md)**
+    *Phase T8C live production verification proof, Shadowsocks recovery drop-in, journald 500M cap, hardened Worker daemon, ops status tooling, and 15m+ soak evidence.*
