@@ -108,3 +108,43 @@ sudo journalctl -u neko-server-monitor.service -f
   - Privacy boundary regression test: PASS
   - Admin overview & server metrics read APIs: PASS
 - Standalone HTML UI Build (`scripts/build-standalone.mjs`): **SUCCESS (59,530 bytes)**
+
+---
+
+## 5. Production Deployment & Live Verification Evidence (T4B Closure)
+
+### 5.1 Authority Commit Identifiers & Infrastructure Targets
+- **Backend/Database Authority**: `bc34b5b1e70228f3c007ba077e72d3650602bd34` (`origin/feature/neko-auth-lite-v1-launcher-backend`)
+- **Admin/Monitoring Authority**: `2aac10282bb9af9d6bba62585bddab55f7e263d2` (`origin/main`)
+- **Supabase Target**: `miikoutrnxsunbndecqh` (Migration `20260818090000_server_monitoring_latest_snapshot.sql` applied successfully)
+- **Vercel Production Project**: `neko-control-room` (`https://neko-control-room.vercel.app`)
+- **Japan VPS Infrastructure**: Ubuntu 22.04 LTS (`ens5`, Shadowsocks `shadowsocks-libev.service` listening on `0.0.0.0:8388`)
+
+### 5.2 Production Configuration & Authentication Boundary Proof
+- **Dedicated Ingest Secret**: Provisioned in `/etc/neko/server-agent.env` (`mode 600`, `root:root`) and configured in Vercel Production environment.
+- **Local Secret Storage**: `D:\Github\docs\Server\.env` (NTFS ACL restricted, strictly untracked by Git).
+- **Authentication Boundary Verification**:
+  - Unauthenticated Ingest (`POST /api/server/metrics/ingest` without Authorization): **HTTP 401 Unauthorized (`DENIED`)**
+  - Invalid Bearer (`POST /api/server/metrics/ingest` with wrong token): **HTTP 401 Unauthorized (`DENIED`)**
+  - Valid Secret (`POST /api/server/metrics/ingest` with valid Bearer + `{}`): **HTTP 400 Bad Request (Validation failure, authentication passed)**
+
+### 5.3 Live VPS Ingest & Snapshot Monotonicity
+- **Sample Cadence**: 5 seconds.
+- **Ingest Progression**: Verified consecutive samples with strictly advancing timestamps (`observed_at_1 < observed_at_2 < observed_at_3`).
+- **Telemetry Invariants**:
+  - `rx_bytes_total` / `tx_bytes_total`: Positive, monotonically tracking interface totals.
+  - `rx_bps` / `tx_bps`: Non-negative live transfer rates.
+  - `host_uptime_seconds`: Verified host uptime in seconds.
+  - `shadowsocks_service_status`: `active` (systemd authority).
+  - `shadowsocks_listener_status`: `listening` (TCP probe on `0.0.0.0:8388`).
+  - `ping_status`: `AVAILABLE` (~1.7ms latency to `1.1.1.1`, label: `VPS → Upstream`).
+
+### 5.4 Operational Failure Isolation & Recovery Proof
+- **Process Isolation**: When stopping `neko-server-monitor.service`, `shadowsocks-libev.service` remained active and continued listening on port 8388 without interruption.
+- **Stale State Transition**: After waiting $> 30\text{s}$ with agent stopped, dashboard status transitioned to `STALE` (did NOT declare server `OFFLINE`).
+- **Live Recovery**: Upon starting `neko-server-monitor.service`, new `observed_at` snapshots immediately resumed and status transitioned from `STALE` back to `ONLINE`.
+
+### 5.5 Privacy & Security Invariant Audit
+- **Zero Client Telemetry**: Verified complete absence of client identifiers, process PIDs (`core_pid`, `game_pid`, `v2ray_pid`), packet flows, and client network counters.
+- **Active User Authority**: Derived exclusively from `public.launcher_sessions` ($\le 120\text{s}$ freshness) and independent of VPS socket counts.
+- **Secret Audit**: Zero credentials or Authorization headers in agent logs, Vercel logs, or Git history.
