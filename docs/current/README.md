@@ -4,9 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-PHASE:                  T6D COMPLETED — PRODUCTION CLOSED
+CURRENT_PHASE:          T7A COMPLETED — DISCORD SERVER STATUS & ALERTING DESIGN
 LAST_CLOSED_PHASE:      T6D (Production Deployment & Historical Metrics Proof)
-NEXT_PHASE:             OWNER_DECISION
+ACTIVE_PHASE:           T7A (Design Frozen / Contract Complete)
+NEXT_PHASE:             T7B (Server-Side Discord Integration Implementation & Tests)
 DATE:                   2026-08-18
 ```
 
@@ -16,13 +17,11 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)** in its entirety:
+The project has completed **Phase T6 (Historical Server Metrics)** in its entirety and has designed **Phase T7A (Discord Server Status & Alerting)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
-- **Phase T6A (Closed / Design Frozen)** designed the authoritative server-side historical time-series storage, retention, query contract, and UI downsampling model (`7168bf65...`).
-- **Phase T6B (Closed)** implemented the forward-only database migration (`public.server_metrics_history`, atomic ingest RPC `launcher.store_server_metrics_sample`, pruning function `launcher.prune_server_metrics_history`), and the Admin Historical Query API (`GET /api/server/metrics/history`).
-- **Phase T6C (Closed)** implemented the Admin Dashboard historical chart UI (Live, 1h, 24h, 7d tabs) with gap preservation, degradation markers, and async race protections.
-- **Phase T6D (Closed)** applied the Supabase migrations, configured hourly automated database pruning via `pg_cron`, deployed to Vercel, and verified against the live Japan VPS monitoring daemon.
+- **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
+- **Phase T7A (Closed / Design Frozen)** designed the authoritative Discord Server Status & Alerting integration contract (`docs/architecture/discord-server-status.md`), specifying persistent status embeds edited every ~60s, state-transition alerts, anti-flap confirmation, and strict session-only privacy boundaries.
 
 ---
 
@@ -39,6 +38,9 @@ The project has completed **Phase T6 (Historical Server Metrics)** in its entire
 | **Phase T6B** | Historical Persistence & Admin History API | **CLOSED** | Backend `94f389c5...` / Admin `2662193e...` |
 | **Phase T6C** | Admin Dashboard Historical Charts UI | **CLOSED** | Commit `6b5940bd...` / UI Range Selectors & Gap Splitting |
 | **Phase T6D** | Production Deployment & Historical Proof | **CLOSED** | Backend `852bfb67...` / Retention `pg_cron` / Remote Proof Verified |
+| **Phase T7A** | Discord Server Status & Alerting Design | **CLOSED (DESIGN FROZEN)** | `docs/architecture/discord-server-status.md` / `docs/current/discord-server-status-handoff.md` |
+| **Phase T7B** | Discord Server Integration & Automated Tests | **PLANNED / NEXT** | Server-side worker, state persistence migration, unit/state tests |
+| **Phase T7C** | Discord Production Secret & Live Proof | **PLANNED** | Vercel production webhook configuration, live Discord proof |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
@@ -47,6 +49,7 @@ The project has completed **Phase T6 (Historical Server Metrics)** in its entire
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
 - **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
+- **Admin Pre-T7 Evidence HEAD**: `54dfaf9bc00884a5072706e181d5a21caa40ab28`
 
 ---
 
@@ -60,6 +63,8 @@ PRODUCTION_HISTORY              = LIVE (7-day bounded rolling raw telemetry)
 PRODUCTION_HISTORY_API          = LIVE (GET /api/server/metrics/history?range=1h|24h|7d)
 PRODUCTION_HISTORICAL_CHARTS    = LIVE (Interactive range switching, gap splitting, degradation markers)
 HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database scheduled job launcher.prune_server_metrics_history)
+DISCORD_STATUS_INTEGRATION      = DESIGNED / NOT YET IMPLEMENTED (Phase T7A Contract Frozen)
+DISCORD_WEBHOOK_PRODUCTION      = NOT YET CONFIGURED (Pending Phase T7C)
 ```
 
 ---
@@ -78,6 +83,9 @@ HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database schedul
    - **Backend Location**: Vercel Environment Variables only. Never leaked to client.
 3. **Admin Cookie HMAC Secret (`ADMIN_SESSION_SECRET`)**:
    - **Backend Location**: Vercel Environment Variables only.
+4. **Discord Webhook Secret (`DISCORD_SERVER_STATUS_WEBHOOK_URL`) [Planned T7C]**:
+   - **Backend Location**: Vercel Production Environment Variables only (`SERVER_SIDE_ONLY`).
+   - **Browser Bundle**: Zero access (`WEBHOOK_IN_FRONTEND = NO`).
 
 ---
 
@@ -85,7 +93,7 @@ HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database schedul
 
 1. **Team Core Scope**: `NO ACTION` — Local diagnostics engine frozen.
 2. **Team Launcher Scope**: `NO ACTION` — Desktop launcher UI frozen.
-3. **Client Privacy Boundary**: Frozen. The backend and Admin Web never receive Core PID, Game PID (`pso2.exe`), local SOCKS state, packet payloads, DNS queries, destination IPs, or hardware serials.
+3. **Client Privacy Boundary**: Frozen. The backend, Admin Web, and Discord never receive Core PID, Game PID (`pso2.exe`), local SOCKS state, packet payloads, DNS queries, destination IPs, user emails, usernames, or hardware serials.
 4. **Applied Database Migrations**: Immutable. `20260818090000_server_monitoring_latest_snapshot.sql`, `20260818120000_server_monitoring_history.sql`, and `20260818130000_server_monitoring_history_retention_schedule.sql` must never be modified. All future changes must use forward-only migrations.
 
 ---
@@ -93,12 +101,12 @@ HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database schedul
 ## 6. Guardrails: What NOT to Do
 
 - **DO NOT** rebuild or recompile `NekoProxyCore` for Web monitoring tasks.
-- **DO NOT** launch or retest PSO2 JP game sessions for Web-only historical metrics work.
+- **DO NOT** launch or retest PSO2 JP game sessions for Web-only historical metrics or Discord work.
 - **DO NOT** rotate or alter `SERVER_METRICS_INGEST_SECRET` unless there is a verified credential compromise.
 - **DO NOT** edit existing applied migrations in `supabase/migrations/`.
-- **DO NOT** send client-side telemetry or desktop metrics to the Backend.
-- **DO NOT** treat the T5 browser-local live graph as a persistent historical database.
-- **DO NOT** fabricate historical data during initial deployment (no fake past points).
+- **DO NOT** send client-side telemetry or desktop metrics to the Backend or Discord.
+- **DO NOT** paste Discord webhook URLs into chat, Git, or client code.
+- **DO NOT** use `@everyone` or `@here` mass mentions in Discord integrations.
 - **DO NOT** push code directly to `origin/main` without explicit owner approval.
 
 ---
@@ -139,13 +147,17 @@ A new engineer joining the project should read documents in the following order:
    *Foundational server monitoring architecture, two-plane decoupling, and privacy boundary.*
 3. **[docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md)**
    *Phase T6 historical server metrics architecture, database model, retention, and query API contract.*
-4. **[docs/current/server-monitoring-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/server-monitoring-implementation-handoff.md)**
+4. **[docs/architecture/discord-server-status.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/discord-server-status.md)**
+   *Phase T7 Discord server status & alerting architecture, message contracts, anti-spam rules, and state persistence.*
+5. **[docs/current/server-monitoring-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/server-monitoring-implementation-handoff.md)**
    *Phase T4B implementation handoff and live VPS production deployment evidence.*
-5. **[docs/current/admin-dashboard-polish-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/admin-dashboard-polish-handoff.md)**
+6. **[docs/current/admin-dashboard-polish-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/admin-dashboard-polish-handoff.md)**
    *Phase T5 Admin Dashboard polish, UI hierarchy, and browser-local live graph contract.*
-6. **[docs/current/historical-server-metrics-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-implementation-handoff.md)**
+7. **[docs/current/historical-server-metrics-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-implementation-handoff.md)**
    *Phase T6B implementation handoff, RPC definitions, testing evidence, and T6C UI handoff.*
-7. **[docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md)**
+8. **[docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md)**
    *Phase T6C UI implementation handoff, range switcher, gap splitting, and race condition protections.*
-8. **[docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md)**
+9. **[docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md)**
    *Phase T6D production verification evidence, Supabase migrations, pg_cron retention, and live VPS proof.*
+10. **[docs/current/discord-server-status-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/discord-server-status-handoff.md)**
+    *Phase T7A architecture handoff, state persistence design, test plan matrix, and T7B implementation roadmap.*
