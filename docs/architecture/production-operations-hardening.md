@@ -2,18 +2,18 @@
 
 ```text
 DOCUMENT:               docs/architecture/production-operations-hardening.md
-STATUS:                 AUTHORITATIVE ARCHITECTURE CONTRACT & HARDENING DESIGN (T8A FROZEN)
+STATUS:                 AUTHORITATIVE ARCHITECTURE CONTRACT & HARDENING DESIGN (T8B CANDIDATE READY)
 CLASSIFICATION:         OPERATIONAL RELIABILITY & RECOVERY GOVERNANCE
-PHASE:                  T8A (Production Operations Baseline Audit + Hardening Design)
-PRIMARY_TEAM:           TEAM_COORDINATION
-SUPPORT_TEAM:           TEAM_WEB
+PHASE:                  T8B (Local Operations Hardening Candidate Implementation)
+PRIMARY_TEAM:           TEAM_WEB
+SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 PRODUCTION_TARGET:      AWS Lightsail Japan VPS (ap-northeast-1 / 18.178.140.8)
-SERVER_AUTHORITY:       5ad8e693e549b7d8b5b178f7269f9b1b737ac8bf
-ADMIN_DOC_AUTHORITY:    683cb99724e9dffbf342875031f0e0a4abbc6172
+SERVER_AUTHORITY:       3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
+ADMIN_DOC_AUTHORITY:    e810ee8ba07a5f45d05da75aaf1d34c50d139494
 DATE:                   2026-08-18
-T8A_STATUS:             AUDIT COMPLETE / DESIGN FROZEN
+T8B_STATUS:             LOCAL CANDIDATE COMPLETE / TESTS PASSING (51/51)
 ```
 
 ---
@@ -100,8 +100,9 @@ RESTART POLICY SELECTION: Restart=always vs Restart=on-failure
 =============================================================================
 Current Discord Worker Setting:  Restart=on-failure
 Current Monitor Agent Setting:   Restart=always
+Current Shadowsocks Setting:     Restart=no (Vendor package default)
 
-EVALUATION:
+EVALUATION & CLASSIFICATION:
 1. `Restart=on-failure` only restarts if the process exits with a non-zero return code
    or is terminated by an unhandled signal. If Python encounters an unexpected clean exit
    (e.g., an unhandled loop break returning code 0), systemd considers it a clean exit
@@ -110,11 +111,16 @@ EVALUATION:
    WHILE STILL HONORING manual maintenance stops (`sudo systemctl stop <service>`).
    When stopped manually via systemctl, systemd marks the stop as deliberate and does
    NOT trigger auto-restart.
+3. Shadowsocks `Restart=no` (P1 Finding Correction):
+   Because Shadowsocks is the primary proxy data-plane, leaving it at `Restart=no` creates
+   a single point of failure where a process crash on an active VPS never recovers.
+   This was elevated from P2 to P1 (SERVICE SELF-RECOVERY GAP).
+   Target: Minimal systemd drop-in override (10-neko-recovery.conf) without modifying vendor unit.
 
-RECOMMENDATION:
-- Discord Worker:   Migrate from `Restart=on-failure` to `Restart=always`
+RECOMMENDATIONS:
+- Discord Worker:   Migrate from `Restart=on-failure` to `Restart=always` + StartLimitIntervalSec=60s
 - Monitoring Agent: Maintain `Restart=always`
-- Shadowsocks:      Maintain distro vendor unit (`Restart=no` / vendor-managed)
+- Shadowsocks:      Add drop-in override: `Restart=always`, `RestartSec=5s`, `StartLimitIntervalSec=60s`
 =============================================================================
 ```
 
@@ -351,6 +357,7 @@ T8 HARDENING CONTROLS EVALUATION MATRIX
 CONTROL                     CURRENT STATUS          RISK / IMPACT               RECOMMENDED TARGET      PRIORITY   T8B ACTION
 ------------------------------------------------------------------------------------------------------------------------
 Boot Enablement             Enabled for all 3 svcs  None (Verified boot ready)  Maintain enabled        -          NONE (VERIFIED)
+Shadowsocks Recovery        Restart=no (vendor)     Single point of failure     Restart=always drop-in  P1         CREATE_DROPIN
 Discord Restart Policy      Restart=on-failure      Clean exit 0 not restarted  Restart=always          P2         UPDATE_UNIT
 Restart Backoff             5s default              Storm prevention            5s delay, 5/60s burst   P2         UPDATE_UNIT
 Restart Burst Protection    StartLimitBurst=5/10s   Short interval              StartLimitInterval=60s  P2         UPDATE_UNIT
@@ -369,16 +376,47 @@ Legacy Rollback Retention   Retained (disabled)     None (Rollback preserved)   
 
 ### 10.1 Change Classification Summary
 
-- **REQUIRED**: None (Production is completely stable and healthy with zero P0/P1 defects).
-- **RECOMMENDED (P2 Improvements for T8B)**:
-  1. Update `neko-discord-worker.service` to `Restart=always` with `StartLimitIntervalSec=60s`.
-  2. Add `/etc/systemd/journald.conf.d/00-journal-size.conf` with `SystemMaxUse=500M`.
-  3. Add `try ... finally` temp file cleanup in `save_state_atomic`.
-  4. Create read-only operator diagnostic script `agent/neko_ops_status.py`.
-  5. Add `--check-config` pre-flight CLI to `agent/neko_discord_worker.py`.
-- **OPTIONAL / COSMETIC (P3)**:
-  1. Add `MemoryMax=128M` and `TasksMax=16` to service units.
+- **P0 FINDINGS**: 0 findings (No active outages, no data corruption, no secret leaks).
+- **P1 FINDINGS (Elevated by Owner Review)**:
+  1. `shadowsocks-libev.service` `Restart=no` lacks automatic crash recovery. **Target**: Create minimal systemd drop-in `agent/systemd/shadowsocks-libev.service.d/10-neko-recovery.conf` setting `Restart=always`, `RestartSec=5s`, `StartLimitIntervalSec=60s`, `StartLimitBurst=5`.
+- **P2 IMPROVEMENTS (Implemented in T8B Candidate)**:
+  1. Update `agent/systemd/neko-discord-worker.service` to `Restart=always` with `StartLimitIntervalSec=60s`, `StartLimitBurst=5`, `MemoryMax=128M`, `TasksMax=16`, and `ExecStartPre` config check.
+  2. Create journal cap drop-in `agent/systemd/journald.conf.d/10-neko-journal-cap.conf` with `SystemMaxUse=500M`.
+  3. Add `try ... finally` exception-safe temporary file cleanup to `save_state_atomic()` in `agent/neko_discord_worker.py`.
+  4. Create zero-dependency read-only operator diagnostics utility `agent/neko_ops_status.py`.
+  5. Add static `--check-config` pre-flight CLI flag to `agent/neko_discord_worker.py`.
 - **DEFERRED / NOT NEEDED**:
-  1. `WatchdogSec` + `sd_notify` (Deferred / Not Needed — unnecessary complexity).
-  2. Dedicated non-root user migration for Worker (Deferred — `CAP_NET_RAW` bounding already provides equivalent security isolation with zero permission fragility).
-  3. Lograte limiting directives `LogRateLimitIntervalSec` (Deferred — daemons log < 1 line/minute).
+  1. `WatchdogSec` + `sd_notify` (Deferred — unnecessary complexity for linear event-loop daemons).
+  2. Dedicated non-root Worker user (Deferred — `CAP_NET_RAW` bounding already provides equivalent privilege containment).
+  3. Log rate limiting directives (Deferred — log output is naturally low-frequency).
+
+---
+
+## 11. Phase T8B Candidate Deliverables & Authority Hashes
+
+```text
+=============================================================================
+PHASE T8B LOCAL CANDIDATE AUTHORITY RECORD
+=============================================================================
+SERVER_CANDIDATE_COMMIT:    3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a
+SERVER_BRANCH:              feature/neko-auth-lite-v1-launcher-backend
+ADMIN_DOC_COMMIT:           e810ee8ba07a5f45d05da75aaf1d34c50d139494
+
+CANDIDATE DELIVERABLE HASHES:
+  agent/neko_discord_worker.py:
+    86b3bcc378b95ec1831f8abe0cd86da065d5353196b1950244bd4c4e1a33f49c
+  agent/neko_ops_status.py:
+    cc66e117de1fad9ce15e2c8b3cd0acf3bba20278c8bfac96d0bd15f87383d7af
+  agent/systemd/neko-discord-worker.service:
+    3f3fe986dd7f2125df866d2b4c60070cc820f1383ecabb4232a7f45608da8d5b
+  agent/systemd/shadowsocks-libev.service.d/10-neko-recovery.conf:
+    b1f2612271176cc57581c316d4ecac702d5250a5ff3611a6381edb5a5687f8cb
+  agent/systemd/journald.conf.d/10-neko-journal-cap.conf:
+    e5dc26483ddeb63f62e13e4ad7ea11ca7ea233b428419811831a574c21d16a84
+
+TEST SUITE EXECUTION:
+  Total Tests:              51
+  Passing:                  51 (100% Pass)
+  Failures / Errors:        0
+=============================================================================
+```

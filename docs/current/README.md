@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T8A COMPLETED — AUDIT & HARDENING DESIGN CLOSED
+CURRENT_PHASE:          T8B IN PROGRESS — LOCAL OPERATIONS HARDENING CANDIDATE
 LAST_CLOSED_PHASE:      T8A (Production Operations Baseline Audit + Hardening Design)
 ACTIVE_PHASE:           T8 (PRODUCTION OPERATIONS & HEALTH HARDENING)
-NEXT_PHASE:             T8B (Local Operations Hardening Candidate Implementation)
+NEXT_PHASE:             T8C (Controlled Production Hardening Rollout & Proof)
 DATE:                   2026-08-18
 ```
 
@@ -23,8 +23,8 @@ The project has completed **Phase T6 (Historical Server Metrics)**, all mileston
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 V1 (Closed & Production Verified)**: Unified Discord status embed (~60s), transition alerts with anti-flap 2-sample confirmation and 300s cooldown, time-weighted average throughput Traffic Summary (30m epoch boundary, 1 MiB threshold gating), and local atomic state persistence (`/var/lib/neko/discord-state.json`) into a single long-running Lightsail daemon (`neko-discord-worker.service`). Controlled production cutover completed with zero dual-publishing and legacy service safely disabled.
 - **Phase T8 (Active — Production Operations & Health Hardening)**: Hardens VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure.
-  - **Phase T8A (Closed / Audit & Design Frozen)**: Conducted live read-only empirical audit of AWS Lightsail JP host and service daemons. Established exact resource baselines, confirmed zero secret leaks, verified independent failure domains and boot readiness, formulated `Restart=always` + 60s burst limit design, `SystemMaxUse=500M` journal bounds, and designed sanitized read-only operator diagnostic tooling (`neko_ops_status.py`, `--check-config`).
-  - **Phase T8B (Planned / Local Candidate Implementation)**: Local Backend repository implementation and testing of hardened unit definitions, state temp cleanup, and diagnostic CLI tools.
+  - **Phase T8A (Closed / Audit & Design Frozen)**: Conducted live read-only empirical audit of AWS Lightsail JP host and service daemons. Established exact resource baselines, confirmed zero secret leaks, verified independent failure domains and boot readiness. Owner review corrected finding classification to elevate Shadowsocks `Restart=no` to a **P1 Reliability Gap**, targeted by a minimal systemd drop-in (`10-neko-recovery.conf`).
+  - **Phase T8B (Active / Local Candidate Implementation)**: Local Backend repository implementation and testing of Shadowsocks recovery drop-in, Discord Worker unit hardening (`Restart=always`, `MemoryMax=128M`, `TasksMax=16`), atomic state temp cleanup, `--check-config` pre-flight CLI, single sanitized operator diagnostic tool (`neko_ops_status.py`), journal disk cap drop-in (`500M`), and comprehensive unit tests.
   - **Phase T8C (Planned / Production Rollout & Proof)**: Controlled staging, verification, and proof on AWS Lightsail Japan.
 
 ---
@@ -46,8 +46,8 @@ The project has completed **Phase T6 (Historical Server Metrics)**, all mileston
 | **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | Admin `6a59900a...` / Discovery & Architecture Freeze |
 | **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **CLOSED (CANDIDATE COMPLETE)**| Backend `5ad8e693...` / 29 Unit Tests Passing / Systemd Candidate |
 | **Phase T7 V1C** | Production Deployment & Legacy Cutover | **CLOSED (PRODUCTION PROOF)**  | Live Proof Verified / 1 Publisher Active / Legacy Disabled |
-| **Phase T8A** | Production Operations Baseline Audit & Hardening Design | **CLOSED (AUDIT & DESIGN FROZEN)** | Admin Doc Commit `683cb997...` / Live VPS Audit Verified |
-| **Phase T8B** | Local Operations Hardening Candidate Implementation | **PLANNED** | Next: Unit Updates, State Cleanup, Ops Tool |
+| **Phase T8A** | Production Operations Baseline Audit & Hardening Design | **CLOSED (AUDIT & DESIGN FROZEN)** | Admin Doc Commit `e810ee8b...` / Live VPS Audit Verified |
+| **Phase T8B** | Local Operations Hardening Candidate Implementation | **IN PROGRESS** | Local Systemd Drop-ins, State Cleanup, Ops Tool |
 | **Phase T8C** | Controlled Production Hardening Rollout & Proof | **PLANNED** | Pending Phase T8B Completion & Owner Approval |
 
 ### Git Authority Identifiers:
