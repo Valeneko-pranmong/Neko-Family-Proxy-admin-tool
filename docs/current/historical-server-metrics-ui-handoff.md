@@ -2,15 +2,18 @@
 
 ```text
 DOCUMENT:               docs/current/historical-server-metrics-ui-handoff.md
-STATUS:                 COMPLETED_LOCAL_CANDIDATE (T6C UI Implemented & Verified Locally)
+STATUS:                 CLOSED_AUTHORITY (T6C UI Implemented, Deployed & Verified in Production)
 CLASSIFICATION:         OPERATIONAL HANDOFF & UI AUTHORITY
 PHASE:                  T6C (Admin Dashboard Historical Charts UI)
 PREVIOUS_PHASE:         T6B (Historical Server Metrics Persistence & Admin History API)
-NEXT_PHASE:             T6D (Production Migration Apply, Cron Retention & Remote Deployment)
+NEXT_PHASE:             T6D (Production Deployment & Historical Proof Closed)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
+PRODUCTION_DEPLOYMENT:  PASS (Deployed to neko-control-room.vercel.app)
+HISTORICAL_UI_RANGES:   LIVE (PASS), 1H (PASS), 24H (PASS), 7D (PASS)
+SERVER_HISTORY_RELOAD:  PASS (Survives browser reload & second context verified)
 DATE:                   2026-08-18
 ```
 
@@ -18,21 +21,20 @@ DATE:                   2026-08-18
 
 ## 1. Executive Summary & Production Status Clarification
 
-> [!IMPORTANT]
-> **Production State Warning**:
-> **History implemented locally $\neq$ History deployed to production.**
-> Phase T6C completes the full frontend chart UI, range switching, gap visualization, and race condition protections locally. However, historical metrics on the live production Admin Dashboard will only become active after **Phase T6D** executes the database migration `20260818120000_server_monitoring_history.sql`, configures the retention pruning job, and deploys the updated Admin Web code to Vercel.
+Phase **T6C** completed the full frontend chart UI, range switching, gap visualization, and race condition protections. In **Phase T6D**, the feature was successfully deployed to Vercel production, linked with live Supabase time-series data, and verified against genuine Japan VPS telemetry.
 
 ```text
 +---------------------------------------------------------------------------------------------------+
 |                                      PHASE STATUS SUMMARY                                         |
 +---------------------------------------------------------------------------------------------------+
-|  Phase T6A: Architecture & Contract Design         | COMPLETED & FROZEN (Commit 7168bf65...)     |
-|  Phase T6B: Persistence & Admin History API        | COMPLETED LOCALLY (Candidate for T6D)        |
-|  Phase T6C: Admin Dashboard Historical Charts UI   | COMPLETED LOCALLY (Candidate for T6D)        |
-|  Phase T6D: Supabase Migration & Production Proof  | FINAL DEPLOYMENT (Next in Queue)             |
+|  Phase T6A: Architecture & Contract Design         | CLOSED & FROZEN (Commit 7168bf65...)         |
+|  Phase T6B: Persistence & Admin History API        | CLOSED & DEPLOYED (Backend 94f389c5 / Admin 2662193)|
+|  Phase T6C: Admin Dashboard Historical Charts UI   | CLOSED & DEPLOYED (Admin 6b5940bd...)        |
+|  Phase T6D: Supabase Migration & Production Proof  | CLOSED / PASS (Verified in Production)       |
 +---------------------------------------------------------------------------------------------------+
 ```
+
+> **Successor Document**: See [docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md) for the authoritative production proof and audit record.
 
 ---
 
@@ -123,10 +125,11 @@ Built D:\Github\Neko-Family-Proxy-admin-tool\standalone\dist\neko-control.html (
 
 ---
 
-## 5. Phase T6D Deployment Checklist
+## 5. Phase T6D Production Deployment Checklist & Verification
 
-To deploy the historical server metrics feature to production:
-1. [ ] **Supabase Migration**: Apply `supabase/migrations/20260818120000_server_monitoring_history.sql` to live Supabase production.
-2. [ ] **Retention Setup**: Schedule `launcher.prune_server_metrics_history(7)` (hourly via `pg_cron` or Backend RPC scheduled trigger).
-3. [ ] **Deploy Admin Web**: Deploy updated Vercel Serverless API and standalone client.
-4. [ ] **Remote Verification**: Verify that the Japan VPS daemon feeds historical metrics continuously and the Admin Dashboard displays `1H`, `24H`, and `7D` aggregate graphs.
+All deployment milestones were completed and verified in **Phase T6D**:
+- [x] **Supabase Migration**: Applied `supabase/migrations/20260818120000_server_monitoring_history.sql` to live Supabase production.
+- [x] **Retention Setup**: Scheduled `launcher.prune_server_metrics_history(7)` (hourly via `pg_cron` migration `20260818130000_server_monitoring_history_retention_schedule.sql`).
+- [x] **Deploy Admin Web**: Deployed updated Vercel Serverless API and standalone client (`6b5940bd...`).
+- [x] **Remote Verification**: Verified that the Japan VPS daemon feeds historical metrics continuously and the Admin Dashboard displays `1H`, `24H`, and `7D` aggregate graphs.
+- [x] **Production Proof**: Documented in [docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md).

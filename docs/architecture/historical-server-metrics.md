@@ -3,19 +3,19 @@
 
 ```text
 DOCUMENT:               docs/architecture/historical-server-metrics.md
-STATUS:                 IMPLEMENTATION_CANDIDATE (T6B Persistence & T6C UI Implemented Locally — Production Proof in T6D)
+STATUS:                 DEPLOYED_AUTHORITY (Implemented, Deployed & Verified in Production)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & SYSTEM SPECIFICATION
-PHASE:                  T6C (Admin Dashboard Historical Charts UI Completed Locally)
-PREVIOUS_PHASE:         T6B (Historical Persistence & Admin History API)
-NEXT_PHASE:             T6D (Supabase Migration Apply, Scheduled Retention & Production Proof)
+PHASE:                  T6D (Production Deployment & Historical Metrics Proof Closed)
+PREVIOUS_PHASES:        T6A (Design Frozen), T6B (Persistence & API), T6C (Charts UI)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
-BACKEND_MIGRATION:      supabase/migrations/20260818120000_server_monitoring_history.sql
+BACKEND_MIGRATIONS:     supabase/migrations/20260818120000_server_monitoring_history.sql
+                        supabase/migrations/20260818130000_server_monitoring_history_retention_schedule.sql
 ADMIN_API_AUTHORITY:    server/server-metrics.mjs & api/index.mjs
 ADMIN_UI_AUTHORITY:     standalone/src/sections/render.js & standalone/src/main.js
-PRODUCTION_DEPLOYED:    NO (Local candidate — Production deployment in Phase T6D)
+PRODUCTION_DEPLOYED:    YES (Production Verified in Phase T6D)
 DATE:                   2026-08-18
 ```
 
@@ -30,10 +30,10 @@ While Phase T4B and T5 established the authoritative real-time pipeline:
 - **T4B**: Server monitoring data plane with dedicated ingest secret, systemd monitoring daemon on Japan VPS, and single-row snapshot persistence (`public.server_metrics_latest`).
 - **T5**: Accessible Admin Dashboard with an honest **browser-local rolling live buffer** (~5 minutes, 60 samples, resets on page reload).
 
-Phase **T6** implements:
-- **T6B (Implemented)**: Dedicated historical telemetry table (`public.server_metrics_history`), atomic ingest RPC (`launcher.store_server_metrics_sample`), 7-day retention pruning function (`launcher.prune_server_metrics_history`), and authenticated query-time downsampling API (`GET /api/server/metrics/history`).
-- **T6C (Planned)**: Admin Web Dashboard historical chart controls and time-range selectors (Live, 1h, 24h, 7d).
-- **T6D (Planned)**: Production Supabase migration application, automated hourly pruning configuration, and live VPS verification.
+Phase **T6** implements and deploys:
+- **T6B (Closed)**: Dedicated historical telemetry table (`public.server_metrics_history`), atomic ingest RPC (`launcher.store_server_metrics_sample`), 7-day retention pruning function (`launcher.prune_server_metrics_history`), and authenticated query-time downsampling API (`GET /api/server/metrics/history`).
+- **T6C (Closed)**: Admin Web Dashboard historical chart controls and time-range selectors (Live, 1h, 24h, 7d), gap splitting, and race condition protections.
+- **T6D (Closed)**: Production Supabase migrations applied, automated hourly database pruning configured via `pg_cron`, and end-to-end telemetry verified against the live Japan VPS daemon.
 
 ### 1.2 Non-Goals & Strict Exclusions
 1. **No Client Telemetry**: Historical monitoring remains 100% server-side aggregate. Client Core PIDs, Game PIDs (`pso2.exe`), local SOCKS state, packet payloads, DNS lookups, per-user traffic, and hardware identifiers are strictly prohibited.
@@ -103,8 +103,10 @@ T6 maintains two complementary, non-conflicting server monitoring storage author
 
 ### 3.1 Migration File Authority
 - **Repository**: `D:\Github\Neko-Family-Proxy`
-- **File**: `supabase/migrations/20260818120000_server_monitoring_history.sql`
-- **Applied Status**: Candidate (Forward-only; `20260818090000_server_monitoring_latest_snapshot.sql` remains immutable).
+- **Files**:
+  - `supabase/migrations/20260818120000_server_monitoring_history.sql` (Applied)
+  - `supabase/migrations/20260818130000_server_monitoring_history_retention_schedule.sql` (Applied)
+- **Applied Status**: Production Applied (`20260818090000_server_monitoring_latest_snapshot.sql` remains immutable).
 
 ### 3.2 Database Table: `public.server_metrics_history`
 
@@ -142,14 +144,14 @@ grant select on public.server_metrics_history to service_role;
 
 ---
 
-## 4. Contract Freezes & Exact Rules (Phase T6B Authority)
+## 4. Contract Freezes & Exact Rules (Phase T6 Authority)
 
 ### 4.1 Retention & Downsampling Freeze
 - **RAW_RETENTION**: `7 days`
 - **STORED_DOWNSAMPLE_TABLES**: `NONE`
 - **QUERY_TIME_BUCKETING**: `YES` (Dynamic bucketing via PostgreSQL `date_bin`)
 - **PRUNING_INTERVAL**: `1 hour`
-- **RETENTION_EXECUTOR**: `DATABASE_SCHEDULED_JOB` executing `launcher.prune_server_metrics_history(7)`
+- **RETENTION_EXECUTOR**: `DATABASE_SCHEDULED_JOB` (`pg_cron`) executing `launcher.prune_server_metrics_history(7)`
 
 ### 4.2 Exact Timestamp Acceptance Boundaries
 - `FUTURE_TOLERANCE`: `2 minutes` (120 seconds)
@@ -253,6 +255,10 @@ With push cadence $T = 5\text{ seconds}$ ($12\text{ samples/minute}$):
 
 | Decision Key | Frozen Implementation Authority |
 | :--- | :--- |
+| `DESIGNED` | `YES` |
+| `IMPLEMENTED` | `YES` |
+| `PRODUCTION_DEPLOYED` | `YES` |
+| `PRODUCTION_VERIFIED` | `YES` |
 | `HISTORY_TABLE_MODEL` | `public.server_metrics_history` |
 | `HISTORY_SAMPLE_IDENTITY` | `(server_id, observed_at)` |
 | `IDENTICAL_RETRY` | `IDEMPOTENT` (`is_idempotent_retry: true`) |
@@ -263,7 +269,7 @@ With push cadence $T = 5\text{ seconds}$ ($12\text{ samples/minute}$):
 | `RAW_RETENTION` | `7 days` |
 | `STORED_DOWNSAMPLED_HISTORY` | `NO` |
 | `QUERY_TIME_BUCKETING` | `YES` |
-| `RETENTION_EXECUTOR` | `DATABASE_SCHEDULED_JOB` (`launcher.prune_server_metrics_history`) |
+| `RETENTION_EXECUTOR` | `DATABASE_SCHEDULED_JOB` (`pg_cron` / `launcher.prune_server_metrics_history`) |
 | `PRUNING_INTERVAL` | `1 hour` |
 | `TIMESTAMP_VALIDATION` | `now() - 10 minutes <= observed_at <= now() + 2 minutes` |
 | `AGENT_PAYLOAD_CHANGE_REQUIRED` | `NO` |

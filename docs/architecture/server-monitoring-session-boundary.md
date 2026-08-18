@@ -3,14 +3,14 @@
 
 ```text
 DOCUMENT:               docs/architecture/server-monitoring-session-boundary.md
-STATUS:                 DEPLOYED_AUTHORITY (T4B/T5 Deployed — T6 Extension Planned)
+STATUS:                 DEPLOYED_AUTHORITY (T4B/T5/T6 Deployed & Production Verified)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & CONTRACT
 OWNER:                  TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 CONSUMERS:              ADMIN WEB, BACKEND API, SERVER INFRASTRUCTURE
 CORE / LAUNCHER SCOPE:  NO ACTION — READ-ONLY REFERENCE ONLY
-CURRENT_STORAGE_STATUS: LATEST_ONLY (Deployed in public.server_metrics_latest)
-PLANNED_T6_EXTENSION:   LATEST + HISTORY (Designed in docs/architecture/historical-server-metrics.md)
+CURRENT_STORAGE_STATUS: LATEST + HISTORY (Deployed in public.server_metrics_latest & public.server_metrics_history)
+T6_EXTENSION_STATUS:    DEPLOYED (Described in docs/architecture/historical-server-metrics.md & docs/current/historical-server-metrics-production-proof.md)
 DATE:                   2026-08-18
 ```
 
@@ -341,20 +341,16 @@ The Japan VPS agent periodically pushes metrics via HTTPS POST to the Backend In
 
 ### 7.3 Metrics Storage Authority
 
-#### CURRENT [DEPLOYED IN PRODUCTION (T4B/T5)]:
-- **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_ONLY`
-- **Storage Authority**: `SERVER_METRICS_STORAGE_AUTHORITY = PERSISTED_SNAPSHOT_TABLE` (Dedicated single-row persisted snapshot table per server in PostgreSQL: `public.server_metrics_latest`).
-- **Stateless Ingest Invariant**: Process memory in serverless functions (Vercel) is ephemeral and not durable across requests; therefore, authoritative metrics state is persisted in the database snapshot table.
+#### DEPLOYED IN PRODUCTION (T4B/T5/T6):
+- **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_AND_HISTORY`
+- **Storage Authority**:
+  - Current state: `public.server_metrics_latest` (Preserved for instant status evaluation, host health ONLINE/DEGRADED/STALE, and liveness).
+  - Historical state: `public.server_metrics_history` (Additive composite-key time-series table, 7-day rolling retention pruned hourly via `pg_cron`, query-time downsampling for 1h, 24h, and 7d).
+- **Stateless Ingest Invariant**: Process memory in serverless functions (Vercel) is ephemeral and not durable across requests; therefore, authoritative metrics state is persisted in PostgreSQL database tables via atomic RPC `launcher.store_server_metrics_sample`.
 - **Staleness Cadence**:
   - Push Cadence: 5s – 10s
   - Stale Threshold: 30s ($> 30\text{s}$ without report $\rightarrow$ `is_stale = true`, `host_status = STALE`)
-
-#### PLANNED [NOT YET IMPLEMENTED / DESIGNED IN T6A]:
-- **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_AND_HISTORY`
-- **Storage Authority**:
-  - Current state: `public.server_metrics_latest` (Preserved for instant status evaluation).
-  - Historical state: `public.server_metrics_history` (Additive composite-key time-series table, 7-day rolling retention, query-time aggregation).
-- **Design Specification**: See [docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md).
+- **Detailed Specification & Verification**: See [docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md) and [docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md).
 
 ---
 

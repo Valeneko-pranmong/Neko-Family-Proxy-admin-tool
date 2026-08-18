@@ -2,16 +2,18 @@
 
 ```text
 DOCUMENT:               docs/current/historical-server-metrics-implementation-handoff.md
-STATUS:                 IMPLEMENTATION_CANDIDATE (T6B Completed Locally — Ready for T6C UI & T6D Deploy)
+STATUS:                 CLOSED_AUTHORITY (T6B Implemented, Deployed & Verified in Production)
 CLASSIFICATION:         OPERATIONAL HANDOFF & IMPLEMENTATION AUTHORITY
 PHASE:                  T6B (Historical Server Metrics Persistence & Admin History API)
 PREVIOUS_PHASE:         T6A (Historical Server Metrics Architecture Authority)
 NEXT_PHASE:             T6C (Admin Dashboard Historical Charts UI)
-FINAL_VERIFICATION:     T6D (Production Deployment, Pruning Job Setup & Remote Proof)
+SUCCESSOR_PHASE:        T6D (Production Deployment & Verification Closed)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
+PRODUCTION_MIGRATION:   20260818120000_server_monitoring_history.sql (APPLIED)
+DATABASE_OBJECTS:       VERIFIED (public.server_metrics_history, RPCs, RLS, PK)
 DATE:                   2026-08-18
 ```
 
@@ -21,20 +23,20 @@ DATE:                   2026-08-18
 
 This document provides the authoritative implementation handoff for **Phase T6B: Historical Server Metrics Persistence & Admin History API**.
 
-All database schema migrations, ingestion and downsampling RPCs, API route registrations, and comprehensive test suites have been implemented and verified locally.
+All database schema migrations, ingestion and downsampling RPCs, API route registrations, and comprehensive test suites have been implemented, deployed, and verified in production.
 
 ```text
 +---------------------------------------------------------------------------------------------------+
 |                                      PHASE STATUS SUMMARY                                         |
 +---------------------------------------------------------------------------------------------------+
-|  Phase T6A: Architecture & Contract Design         | COMPLETED & FROZEN (Commit 7168bf65...)     |
-|  Phase T6B: Persistence & Admin History API        | COMPLETED LOCALLY (Candidate for T6D)        |
-|  Phase T6C: Admin Dashboard Historical Charts UI   | COMPLETED LOCALLY (Candidate for T6D)        |
-|  Phase T6D: Supabase Migration & Production Proof  | FINAL DEPLOYMENT (Next in Queue)             |
+|  Phase T6A: Architecture & Contract Design         | CLOSED & FROZEN (Commit 7168bf65...)         |
+|  Phase T6B: Persistence & Admin History API        | CLOSED & DEPLOYED (Backend 94f389c5 / Admin 2662193)|
+|  Phase T6C: Admin Dashboard Historical Charts UI   | CLOSED & DEPLOYED (Admin 6b5940bd...)        |
+|  Phase T6D: Supabase Migration & Production Proof  | CLOSED / PASS (Verified in Production)       |
 +---------------------------------------------------------------------------------------------------+
 ```
 
-> **Successor Document**: See [docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md) for the Phase T6C Dashboard UI Handoff.
+> **Successor Documents**: See [docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md) and [docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md).
 
 ---
 
@@ -146,10 +148,11 @@ Phase T6C should build the historical chart user interface consuming `GET /api/s
 
 ---
 
-## 6. Remaining Production Work (Phase T6D)
+## 6. Production Closure Evidence (Phase T6D)
 
-The following items are deferred to **Phase T6D (Production Deployment & Verification)**:
-1. Apply migration `20260818120000_server_monitoring_history.sql` to live Supabase production database.
-2. Configure database scheduled cron job (or backend scheduled trigger) to execute `launcher.prune_server_metrics_history(7)` hourly.
-3. Deploy Admin Web to Vercel production.
-4. Verify end-to-end ingestion and historical queries against the live Japan VPS daemon.
+The production deployment items were successfully executed and verified in **Phase T6D**:
+1. Applied migration `20260818120000_server_monitoring_history.sql` to live Supabase production database (`miikoutrnxsunbndecqh`).
+2. Applied retention migration `20260818130000_server_monitoring_history_retention_schedule.sql` and verified hourly `pg_cron` execution.
+3. Deployed Admin Web to Vercel production (`neko-control-room`).
+4. Verified end-to-end ingestion and historical queries against the live Japan VPS daemon.
+5. See [docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md) for complete production evidence.

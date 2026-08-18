@@ -4,9 +4,9 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-PHASE:                  T6C COMPLETED — LOCAL CANDIDATE (Ready for Phase T6D Production Gate)
-LAST_CLOSED_PHASE:      T5 (Admin Dashboard Polish & Live Visualization) / T6A (Design Frozen)
-NEXT_PHASE:             T6D (Production Deployment, Supabase Migration & Verification)
+PHASE:                  T6D COMPLETED — PRODUCTION CLOSED
+LAST_CLOSED_PHASE:      T6D (Production Deployment & Historical Metrics Proof)
+NEXT_PHASE:             OWNER_DECISION
 DATE:                   2026-08-18
 ```
 
@@ -16,13 +16,13 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project is currently executing **Phase T6 (Historical Server Metrics)**:
+The project has completed **Phase T6 (Historical Server Metrics)** in its entirety:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6A (Closed / Design Frozen)** designed the authoritative server-side historical time-series storage, retention, query contract, and UI downsampling model (`7168bf65...`).
-- **Phase T6B (Completed Locally)** implemented the forward-only database migration (`public.server_metrics_history`, atomic ingest RPC `launcher.store_server_metrics_sample`, pruning function `launcher.prune_server_metrics_history`), and the Admin Historical Query API (`GET /api/server/metrics/history`).
-- **Phase T6C (Completed Locally)** implemented the Admin Dashboard historical chart UI (Live, 1h, 24h, 7d tabs) with gap preservation, degradation markers, and async race protections.
-- **Phase T6D (Production Gate)** will apply the Supabase migration, configure hourly database pruning, and verify against the live Japan VPS daemon.
+- **Phase T6B (Closed)** implemented the forward-only database migration (`public.server_metrics_history`, atomic ingest RPC `launcher.store_server_metrics_sample`, pruning function `launcher.prune_server_metrics_history`), and the Admin Historical Query API (`GET /api/server/metrics/history`).
+- **Phase T6C (Closed)** implemented the Admin Dashboard historical chart UI (Live, 1h, 24h, 7d tabs) with gap preservation, degradation markers, and async race protections.
+- **Phase T6D (Closed)** applied the Supabase migrations, configured hourly automated database pruning via `pg_cron`, deployed to Vercel, and verified against the live Japan VPS monitoring daemon.
 
 ---
 
@@ -36,30 +36,30 @@ The project is currently executing **Phase T6 (Historical Server Metrics)**:
 | **Phase T4B** | Server Monitoring Data Plane & Production Deploy | **CLOSED** | Backend `bc34b5b1...` / Admin `2aac1028...` |
 | **Phase T5** | Admin Dashboard Polish & Live Visualization | **CLOSED** | Source: `840adc18...` / Evidence: `41067701...` |
 | **Phase T6A** | Historical Server Metrics Architecture | **CLOSED (DESIGN FROZEN)** | Commit `7168bf65...` / `docs/architecture/historical-server-metrics.md` |
-| **Phase T6B** | Historical Persistence & Admin History API | **COMPLETED (LOCAL CANDIDATE)** | Backend `94f389c5...` / Admin `2662193e...` |
-| **Phase T6C** | Admin Dashboard Historical Charts UI | **COMPLETED (LOCAL CANDIDATE)** | Range Selectors (Live/1h/24h/7d), Gap Splitting & Degradation Markers |
-| **Phase T6D** | Live VPS Production Proof & Retention Verification | **PLANNED (FINAL T6 GATE)** | Supabase Deploy + Pruning Cron + Live VPS Verification |
+| **Phase T6B** | Historical Persistence & Admin History API | **CLOSED** | Backend `94f389c5...` / Admin `2662193e...` |
+| **Phase T6C** | Admin Dashboard Historical Charts UI | **CLOSED** | Commit `6b5940bd...` / UI Range Selectors & Gap Splitting |
+| **Phase T6D** | Production Deployment & Historical Proof | **CLOSED** | Backend `852bfb67...` / Retention `pg_cron` / Remote Proof Verified |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
 - **Backend Git T6B Migration Commit**: `94f389c5c3dfd6c919dcbdb54955ebc621345b5f`
+- **Backend Git T6D Retention Commit**: `852bfb67e482d264729fc83aa862340c732df7db`
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
-- **Admin Runtime Source (T5 Baseline)**: `840adc18da08cd3af284c5e2cbffbb20d5ef5d6a`
+- **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
+- **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 
 ---
 
 ## 3. Monitoring System Operational State
 
 ```text
-CURRENT_PRODUCTION_MONITORING   = LIVE (T4B/T5)
-CURRENT_PRODUCTION_STORAGE      = LATEST_ONLY (public.server_metrics_latest)
+CURRENT_PRODUCTION_MONITORING   = LIVE (T4B/T5/T6)
+CURRENT_PRODUCTION_STORAGE      = LATEST + HISTORY (public.server_metrics_latest & public.server_metrics_history)
 CURRENT_LIVE_GRAPH              = BROWSER_LOCAL_ROLLING (~5 minutes, 60 samples, resets on reload)
-PRODUCTION_HISTORY              = NOT DEPLOYED (Pending T6D Production Gate)
-PRODUCTION_HISTORY_API          = NOT DEPLOYED (Pending T6D Production Gate)
-PRODUCTION_HISTORICAL_CHARTS    = NOT DEPLOYED (Pending T6D Production Gate)
-T6B_HISTORICAL_CODE_STATUS      = IMPLEMENTED & TESTED LOCALLY
-T6C_UI_CODE_STATUS              = IMPLEMENTED & TESTED LOCALLY
-HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via launcher.prune_server_metrics_history)
+PRODUCTION_HISTORY              = LIVE (7-day bounded rolling raw telemetry)
+PRODUCTION_HISTORY_API          = LIVE (GET /api/server/metrics/history?range=1h|24h|7d)
+PRODUCTION_HISTORICAL_CHARTS    = LIVE (Interactive range switching, gap splitting, degradation markers)
+HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database scheduled job launcher.prune_server_metrics_history)
 ```
 
 ---
@@ -86,7 +86,7 @@ HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via launcher.prune_s
 1. **Team Core Scope**: `NO ACTION` — Local diagnostics engine frozen.
 2. **Team Launcher Scope**: `NO ACTION` — Desktop launcher UI frozen.
 3. **Client Privacy Boundary**: Frozen. The backend and Admin Web never receive Core PID, Game PID (`pso2.exe`), local SOCKS state, packet payloads, DNS queries, destination IPs, or hardware serials.
-4. **Applied Database Migrations**: Immutable. `20260818090000_server_monitoring_latest_snapshot.sql` must never be modified. All new changes use forward-only migrations in the Backend repo.
+4. **Applied Database Migrations**: Immutable. `20260818090000_server_monitoring_latest_snapshot.sql`, `20260818120000_server_monitoring_history.sql`, and `20260818130000_server_monitoring_history_retention_schedule.sql` must never be modified. All future changes must use forward-only migrations.
 
 ---
 
@@ -137,11 +137,15 @@ A new engineer joining the project should read documents in the following order:
    *Current project status, phase boundaries, authoritative commits, and guardrails.*
 2. **[docs/architecture/server-monitoring-session-boundary.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/server-monitoring-session-boundary.md)**
    *Foundational server monitoring architecture, two-plane decoupling, and privacy boundary.*
-3. **[docs/current/server-monitoring-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/server-monitoring-implementation-handoff.md)**
-   *Phase T4B implementation handoff and live VPS production deployment evidence.*
-4. **[docs/current/admin-dashboard-polish-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/admin-dashboard-polish-handoff.md)**
-   *Phase T5 Admin Dashboard polish, UI hierarchy, and browser-local live graph contract.*
-5. **[docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md)**
+3. **[docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md)**
    *Phase T6 historical server metrics architecture, database model, retention, and query API contract.*
+4. **[docs/current/server-monitoring-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/server-monitoring-implementation-handoff.md)**
+   *Phase T4B implementation handoff and live VPS production deployment evidence.*
+5. **[docs/current/admin-dashboard-polish-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/admin-dashboard-polish-handoff.md)**
+   *Phase T5 Admin Dashboard polish, UI hierarchy, and browser-local live graph contract.*
 6. **[docs/current/historical-server-metrics-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-implementation-handoff.md)**
    *Phase T6B implementation handoff, RPC definitions, testing evidence, and T6C UI handoff.*
+7. **[docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md)**
+   *Phase T6C UI implementation handoff, range switcher, gap splitting, and race condition protections.*
+8. **[docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md)**
+   *Phase T6D production verification evidence, Supabase migrations, pg_cron retention, and live VPS proof.*
