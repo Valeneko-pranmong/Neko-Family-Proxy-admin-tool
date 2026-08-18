@@ -1,21 +1,21 @@
-# NEKO FAMILY PROXY — WEEKLY MAINTENANCE AUTOMATION & SEGA PROBE AUTHORITY (PHASE T9A)
+# NEKO FAMILY PROXY — WEEKLY MAINTENANCE AUTOMATION & SEGA PROBE AUTHORITY (PHASE T9)
 
 ```text
 DOCUMENT:               docs/current/weekly-maintenance-automation-handoff.md
-STATUS:                 AUTHORITATIVE CANDIDATE DESIGN & IMPLEMENTATION RECORD
+STATUS:                 AUTHORITATIVE SPECIFICATION & DESIGN RECORD (CLOSED & DEPLOYED)
 CLASSIFICATION:         OPERATIONAL AUTOMATION & DISCOVERY SPECIFICATION
-PHASE:                  T9A (Weekly Maintenance Automation + SEGA Probe Authority Discovery)
+PHASE:                  T9 (Weekly Maintenance Automation & SEGA Probe Discovery — COMPLETE)
 PREVIOUS_PHASE:         T8 (Production Operations & Health Hardening — CLOSED & DEPLOYED)
-CURRENT_PHASE:          T9A (Candidate Implementation & Discovery Audit — LOCAL COMPLETE)
-SUCCESSOR_PHASE:        T9B (Controlled Weekly Maintenance Production Rollout)
+CURRENT_PHASE:          T9 (Weekly Maintenance Lifecycle — CLOSED & VERIFIED IN PRODUCTION)
+SUCCESSOR_PHASE:        NONE / OWNER-DIRECTED NEXT PHASE
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 PRODUCTION_TARGET:      AWS Lightsail Japan VPS (ap-northeast-1 / 18.178.140.8)
 SERVER_AUTHORITY:       8832429a7546ab57dd8ac3a48b40b93387cb9f19
+PRODUCTION_PROOF:       docs/current/weekly-maintenance-automation-production-proof.md
 DATE:                   2026-08-18
-PRODUCTION_MUTATION:    NO (Local candidate & discovery only; zero production execution in T9A)
 ```
 
 ---

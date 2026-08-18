@@ -2,12 +2,11 @@
 
 ```text
 DOCUMENT:               docs/current/README.md
-STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
-CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T9C COMPLETED — CONTROLLED FIRST WEEKLY MAINTENANCE EXECUTION PROVEN
-LAST_CLOSED_PHASE:      T9C (Controlled First Weekly Maintenance Execution Proof — PROVEN)
-ACTIVE_PHASE:           T9 (Weekly Maintenance Automation Lifecycle — COMPLETE & LIVE)
-NEXT_PHASE:             T9_FINAL_REMOTE_EVIDENCE_CLOSURE
+STATUS:                 T9 CLOSED — PRODUCTION
+PHASE:                  T9 COMPLETE (Weekly Maintenance Automation Lifecycle)
+LAST_CLOSED_PHASE:      T9 (Weekly Maintenance Automation Lifecycle — CLOSED)
+ACTIVE_PHASE:           NONE (All T1-T9 Milestones Closed & Verified in Production)
+NEXT_PHASE:             NONE / OWNER-DIRECTED NEXT PHASE
 DATE:                   2026-08-18
 ```
 
@@ -17,15 +16,13 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1 (Unified AWS Lightsail Discord Integration)**, **Phase T8 (Production Operations & Health Hardening)**, and **Phase T9 (Weekly Maintenance Automation & Execution Proof)**:
+The project has completed all operational hardening, automated monitoring, historical time-series telemetry, unified Discord status integration, and automated weekly maintenance lifecycles (**Phases T1 through T9**):
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 V1 (Closed & Production Verified)**: Unified Discord status embed (~60s), transition alerts with anti-flap 2-sample confirmation and 300s cooldown, time-weighted average throughput Traffic Summary (30m epoch boundary, 1 MiB threshold gating), and local atomic state persistence (`/var/lib/neko/discord-state.json`) into a single long-running Lightsail daemon (`neko-discord-worker.service`). Controlled production cutover completed with zero dual-publishing and legacy service safely disabled.
 - **Phase T8 (Closed & Production Verified)**: Hardened VPS reliability, boot authority, restart backoff, journal hygiene, atomic state cleanup, and operator diagnostics without adding external SaaS dependencies, external watchdogs, or cloud scheduler infrastructure.
-- **Phase T9A (Closed / Candidate Complete)**: Designed and implemented source-controlled weekly maintenance controller (`agent/neko_weekly_maintenance.py`), systemd oneshot service (`agent/systemd/neko-weekly-maintenance.service`), and systemd timer (`agent/systemd/neko-weekly-maintenance.timer`) executing every Tuesday at 02:00 Asia/Bangkok with `Persistent=false` and `AccuracySec=1s`. Implemented bounded duplicate message protection (no blind POST on missing state ID) and in-place Discord `🛠️ กำลังซ่อมบำรุง` status editing. 62 deterministic unit tests passing.
-- **Phase T9B (Closed / Deployed & Live)**: Deployed exact reviewed artifacts to AWS Lightsail Japan host, verified SHA256 hashes, validated calendar syntax on Ubuntu systemd 249 (`systemd-analyze calendar`), ran pre-flight `--check-config` and `--dry-run`, enabled `neko-weekly-maintenance.timer`, and proved next scheduled execution (`Tue 2026-08-25 02:00:00 Asia/Bangkok` / `Mon 2026-08-24 19:00:00 UTC`).
-- **Phase T9C (Closed / Execution Proven)**: Performed owner-authorized controlled first execution proof using the exact systemd service (`neko-weekly-maintenance.service`). Verified entire maintenance sequence: Worker stopped -> in-place Discord `🛠️ กำลังซ่อมบำรุง` status published -> orderly host reboot triggered (16.4s downtime) -> post-boot daemons started cleanly -> Discord Worker recovered and edited SAME message in-place to real health (`ONLINE`) -> timer survived reboot with next trigger intact -> 5-minute soak 0_HEALTHY.
+- **Phase T9 (Closed & Production Verified)**: Automated weekly maintenance and reboot lifecycle. Deployed source-controlled maintenance controller (`/opt/neko/neko_weekly_maintenance.py`), systemd oneshot service (`neko-weekly-maintenance.service`), and weekly systemd timer (`neko-weekly-maintenance.timer`) executing every Tuesday at 02:00 Asia/Bangkok with `Persistent=false` and `AccuracySec=1s`. Verified bounded duplicate message protection, in-place Discord `🛠️ กำลังซ่อมบำรุง` status editing, real host reboot execution (16.4s downtime), clean post-boot service recovery, and in-place transition back to real health (`ONLINE`) on the same persistent message ID (`1539165666089762837`).
 
 ---
 
@@ -50,8 +47,9 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 | **Phase T8B** | Local Operations Hardening Candidate Implementation | **CLOSED (CANDIDATE COMPLETE)** | Backend `3ce6ccdb...` / Admin `077e523c...` / 51 Tests PASS |
 | **Phase T8C** | Controlled Production Hardening Rollout & Proof | **CLOSED (PRODUCTION PROOF)** | Live Proof Verified / Restart=always / Journal 500M / Ops Status Live |
 | **Phase T9A** | Weekly Maintenance Automation & SEGA Discovery | **CLOSED (CANDIDATE COMPLETE)** | Admin `ac5f6477...` / Backend `8832429a...` / 62 Tests PASS |
-| **Phase T9B** | Weekly Maintenance Production Scheduler Rollout | **CLOSED (DEPLOYED & LIVE)** | `docs/current/weekly-maintenance-automation-production-proof.md` |
-| **Phase T9C** | Controlled First Maintenance Execution Proof | **CLOSED (EXECUTION PROVEN)** | `docs/current/weekly-maintenance-automation-production-proof.md` |
+| **Phase T9B** | Weekly Maintenance Production Scheduler Rollout | **CLOSED (DEPLOYED & LIVE)** | Admin `d9bc4097...` / `weekly-maintenance-automation-production-proof.md` |
+| **Phase T9C** | Controlled First Maintenance Execution Proof | **CLOSED (EXECUTION PROVEN)** | Admin `99d68413...` / `weekly-maintenance-automation-production-proof.md` |
+| **Phase T9 Final** | Weekly Maintenance Final Documentation & Closure | **CLOSED (PRODUCTION VERIFIED)** | `docs/current/weekly-maintenance-automation-production-proof.md` |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
@@ -60,6 +58,7 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 - **Backend Git T7 V1B Server Commit**: `5ad8e693e549b7d8b5b178f7269f9b1b737ac8bf`
 - **Backend Git T8B Server Commit**: `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`
 - **Backend Git T8C Server Remote Authority**: `3ce6ccdb2d98eb5869ddfdbeb3946431d34eae4a`
+- **Backend Git T9A Server Remote Authority**: `8832429a7546ab57dd8ac3a48b40b93387cb9f19`
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
 - **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
@@ -69,11 +68,13 @@ The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V
 - **Admin T7 V1C Production Proof Commit**: `683cb99724e9dffbf342875031f0e0a4abbc6172`
 - **Admin T8A Baseline Audit Commit**: `e810ee8ba07a5f45d05da75aaf1d34c50d139494`
 - **Admin T8B Implementation Handoff Commit**: `077e523c9511b48b47c4e45720b448d0445399cf`
-- **Backend Git T9A Server Commit**: `8832429a7546ab57dd8ac3a48b40b93387cb9f19`
+- **Admin T9A Implementation Handoff Commit**: `ac5f64778f38406a257137f831afa7b733dc4f35`
+- **Admin T9B Scheduler Deployment Commit**: `d9bc4097babc05db32d3d6e153e4abea1708e0f5`
+- **Admin T9C Execution Proof Commit**: `99d6841346c7a53cfbe25be4c6e7dab160cb2c98`
 
 ---
 
-## 3. Monitoring System Operational State
+## 3. Monitoring & Maintenance Operational State
 
 ```text
 CURRENT_PRODUCTION_MONITORING   = LIVE (T4B/T5/T6)
@@ -90,7 +91,10 @@ SHADOWSOCKS_RECOVERY_POLICY     = ACTIVE (Restart=always / 5s / 60s burst 5 drop
 JOURNALD_STORAGE_POLICY         = ACTIVE (SystemMaxUse=500M drop-in)
 OPERATOR_DIAGNOSTICS_TOOL       = LIVE (/opt/neko/neko_ops_status.py — 0_HEALTHY)
 CONFIG_PREFLIGHT_CHECK          = ACTIVE (ExecStartPre /opt/neko/neko_discord_worker.py --check-config)
+WEEKLY_MAINTENANCE_AUTOMATION   = LIVE (neko-weekly-maintenance.timer / Tuesday 02:00 Asia/Bangkok)
+WEEKLY_MAINTENANCE_TIMER        = ACTIVE & ENABLED (Persistent=false, AccuracySec=1s)
 OPERATIONS_HARDENING_STATE      = T8C PRODUCTION DEPLOYED & VERIFIED
+WEEKLY_MAINTENANCE_STATE        = T9 CLOSED & VERIFIED IN PRODUCTION
 ```
 
 ---
