@@ -2,10 +2,11 @@
 
 ```text
 DOCUMENT:                       docs/current/README.md
-STATUS:                         PRE-T10 REPOSITORY HYGIENE
-PHASE:                          PRE-T10 (IN PROGRESS)
-COMPLETED_PHASES:               T1-T9 (Production Operations & Monitoring Hardening — CLOSED)
-NEXT_PRODUCT_PHASE:             T10 COMMERCIAL LAUNCHER UI/UX (NOT STARTED)
+STATUS:                         PRE-T10 CLOSED — T10 READY
+PHASE:                          PRE-T10 CLOSED
+COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
+NEXT_PRODUCT_PHASE:             T10 COMMERCIAL LAUNCHER UI/UX
+T10:                            NOT STARTED
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 DATE:                           2026-08-18
 ```
@@ -16,9 +17,9 @@ DATE:                           2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed all production operations hardening, automated monitoring, historical time-series telemetry, unified Discord status integration, and automated weekly maintenance lifecycles (**Phases T1 through T9**).
+The project has completed all production operations hardening, automated monitoring, historical time-series telemetry, unified Discord status integration, automated weekly maintenance lifecycles, and cross-repository Git hygiene (**Phases T1 through T9 and PRE-T10 Baseline**).
 
-All infrastructure is operational and verified in production on AWS Lightsail Japan (`18.178.140.8`). The current phase is **PRE-T10 (Repository Hygiene & Documentation Authority Freeze)** preparing for **Phase T10 (Commercial Launcher UI/UX)**.
+All infrastructure is operational and verified in production on AWS Lightsail Japan (`18.178.140.8`). The repository baseline is **`PRE-T10 CLOSED — T10 READY`** preparing for **Phase T10 (Commercial Launcher UI/UX)**.
 
 > [!IMPORTANT]
 > **Active Client Security Release Blocker:**
@@ -33,9 +34,9 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | `feature/neko-auth-lite-v1-launcher-backend` | `bf366035...` | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | Source Line Active; `main` is stale product branch (26 commits behind) |
+| **`Neko-Family-Proxy`** | **`main`** | `8d45435e...` | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | **CURRENT PRODUCT BASELINE** (CI Verified Green) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
-| **`Neko-Family-Proxy-admin-tool`** | `main` | `2d9b0e9a...` | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
+| **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
 ### Core Authority Distinction:
 - `CORE_BRANCH_HEAD`: `b592725f...`
