@@ -4,9 +4,9 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T7 V1B IN PROGRESS — UNIFIED LIGHTSAIL DISCORD WORKER
-LAST_CLOSED_PHASE:      T7 V1A (Legacy Discord Discovery & Unified Lightsail Architecture Freeze)
-ACTIVE_PHASE:           T7 V1B (Local Candidate Implementation & Tests — IN PROGRESS)
+CURRENT_PHASE:          T7 V1B COMPLETED — UNIFIED DISCORD WORKER LOCAL CANDIDATE
+LAST_CLOSED_PHASE:      T7 V1B (Unified Lightsail Discord Worker Implementation & Tests)
+ACTIVE_PHASE:           T7 V1B (Completed Local Candidate)
 NEXT_PHASE:             T7 V1C (Production Deployment & Legacy Cutover)
 DATE:                   2026-08-18
 ```
@@ -17,13 +17,13 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)** and **Phase T7 V1A (Discovery & Architecture Freeze)** and is actively executing **Phase T7 V1B (Unified Discord Worker Local Candidate)**:
+The project has completed **Phase T6 (Historical Server Metrics)**, **Phase T7 V1A (Discovery & Architecture Freeze)**, and **Phase T7 V1B (Unified Discord Worker Local Candidate)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 Original Design (Superseded)**: The initial T7A plan (Vercel Cron + Backend Active Users query + Supabase persistence) was **superseded by Owner Decision** in favor of a low-maintenance, resilient, AWS Lightsail-local architecture (**T7 V1**).
 - **Phase T7 V1A (Closed / Authority Frozen)**: Discovered existing legacy Lightsail Discord integration (`neko-traffic-monitor.service`), classified its traffic source (`AF_PACKET` on `ens5:8388`) and calculation (`TOTAL_BYTES_DURING_WINDOW`), froze the unified Lightsail Discord Worker architecture, redefined Traffic Summary as time-weighted average throughput, removed Active Users/Backend/Vercel dependencies, and established local state persistence.
-- **Phase T7 V1B (In Progress)**: Implementing the unified long-running systemd worker candidate (`neko_discord_worker.py`), preserving proven `AF_PACKET` :8388 packet accounting, calculating time-weighted average throughput, managing persistent status embed and transition alerts, and establishing deterministic unit tests.
+- **Phase T7 V1B (Closed / Candidate Completed)**: Implemented the unified long-running systemd worker candidate (`agent/neko_discord_worker.py` in Backend repo), preserving proven `AF_PACKET` :8388 packet accounting, calculating time-weighted average throughput, managing persistent status embed (~60s) and transition alerts with anti-flap 2-sample confirmation and 300s cooldown, atomic local state persistence (`/var/lib/neko/discord-state.json`), candidate systemd service unit (`agent/systemd/neko-discord-worker.service`), and 29 deterministic unit tests (all passing).
 
 ---
 
@@ -41,18 +41,20 @@ The project has completed **Phase T6 (Historical Server Metrics)** and **Phase T
 | **Phase T6C** | Admin Dashboard Historical Charts UI | **CLOSED** | Commit `6b5940bd...` / UI Range Selectors & Gap Splitting |
 | **Phase T6D** | Production Deployment & Historical Proof | **CLOSED** | Backend `852bfb67...` / Retention `pg_cron` / Remote Proof Verified |
 | **Original T7A** | Vercel Cron / Backend Discord Architecture | **SUPERSEDED** | Commit `d242c598...` (Superseded by Owner Decision in favor of T7 V1) |
-| **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | Commit `6a59900a...` / Discovery & Architecture Freeze |
-| **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **IN PROGRESS** | Long-running service, time-weighted average, state machine, tests |
-| **Phase T7 V1C** | Production Deployment & Legacy Cutover | **PLANNED** | Staging on Lightsail, legacy publisher retirement, live proof |
+| **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | Admin `6a59900a...` / Discovery & Architecture Freeze |
+| **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **CLOSED (CANDIDATE COMPLETE)**| Backend `5ad8e693...` / 29 Unit Tests Passing / Systemd Candidate |
+| **Phase T7 V1C** | Production Deployment & Legacy Cutover | **PLANNED / NEXT** | Staging on Lightsail, legacy publisher retirement, live proof |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
 - **Backend Git T6B Migration Commit**: `94f389c5c3dfd6c919dcbdb54955ebc621345b5f`
 - **Backend Git T6D Retention Commit**: `852bfb67e482d264729fc83aa862340c732df7db`
+- **Backend Git T7 V1B Server Commit**: `5ad8e693e549b7d8b5b178f7269f9b1b737ac8bf`
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
 - **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Original T7A Baseline Commit**: `d242c5981d04b2b11fdbae79aa908bd646275eb7`
+- **Admin T7 V1B Architecture Correction**: `a35311d059e591430f99cb74bf70dca0f31cb435`
 
 ---
 
