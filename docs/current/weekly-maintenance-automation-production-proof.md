@@ -1,15 +1,15 @@
-# NEKO FAMILY PROXY — WEEKLY MAINTENANCE SCHEDULER PRODUCTION PROOF (PHASE T9B)
+# NEKO FAMILY PROXY — WEEKLY MAINTENANCE AUTOMATION & EXECUTION PRODUCTION PROOF (PHASES T9B & T9C)
 
 ```text
 DOCUMENT:               docs/current/weekly-maintenance-automation-production-proof.md
 STATUS:                 AUTHORITATIVE PRODUCTION PROOF RECORD
-CLASSIFICATION:         LIVE ENVIRONMENT DEPLOYMENT EVIDENCE
-PHASE:                  T9B (Weekly Maintenance Production Scheduler Rollout)
+CLASSIFICATION:         LIVE ENVIRONMENT DEPLOYMENT & EXECUTION EVIDENCE
+PHASE:                  T9B (Production Scheduler Rollout) & T9C (Controlled First Maintenance Execution Proof)
 PREVIOUS_PHASES:        T9A (Candidate Implementation & Discovery — CLOSED)
-CURRENT_PHASE:          T9B (Controlled Production Deployment & Scheduler Proof — DEPLOYED)
-SUCCESSOR_PHASE:        T9C (First Natural Weekly Maintenance Execution & Evidence Closure)
-PRIMARY_TEAM:           TEAM_WEB
-SUPPORT_TEAM:           TEAM_COORDINATION
+CURRENT_PHASES:         T9B (Scheduler Deployed — PASS) & T9C (First Execution Proof — PASS)
+SUCCESSOR_PHASE:        T9_FINAL_REMOTE_EVIDENCE_CLOSURE
+PRIMARY_TEAM:           TEAM_COORDINATION
+SUPPORT_TEAM:           TEAM_WEB
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 PRODUCTION_TARGET:      AWS Lightsail Japan VPS (ap-northeast-1 / 18.178.140.8)
@@ -17,14 +17,18 @@ SERVER_COMMIT:          8832429a7546ab57dd8ac3a48b40b93387cb9f19
 ADMIN_T9A_COMMIT:       ac5f64778f38406a257137f831afa7b733dc4f35
 DATE:                   2026-08-18
 T9B_EXIT_GATE:          PASS
-T9_STATUS:              PRODUCTION SCHEDULER DEPLOYED & LIVE (First real execution pending natural schedule)
+T9C_EXIT_GATE:          PASS
+FIRST_MAINTENANCE_PROOF: CONTROLLED OWNER-AUTHORIZED SYSTEMD SERVICE EXECUTION (SAME SERVICE AS TIMER)
+WEEKLY_TIMER_STATE:     LIVE & ACTIVE (Next natural run: Tuesday 02:00 Asia/Bangkok)
 ```
 
 ---
 
-## 1. Executive Summary & Production Gate Verification
+## 1. Executive Summary & Verification Matrix
 
-Phase **T9B (Weekly Maintenance Production Scheduler Rollout)** has successfully staged, statically verified, installed, and enabled the automated weekly maintenance systemd timer on the live AWS Lightsail Japan VPS (`18.178.140.8`) with **zero unscheduled reboots**, **zero false maintenance Discord messages**, and **zero interruption to the data plane**:
+Phase **T9B (Scheduler Rollout)** and Phase **T9C (Controlled First Maintenance Execution Proof)** have successfully installed, enabled, and executed the automated weekly maintenance pipeline on the live AWS Lightsail Japan host (`18.178.140.8`).
+
+Owner authorization was granted to perform the first maintenance proof immediately via the authoritative systemd service (`neko-weekly-maintenance.service`) rather than waiting for the next natural Tuesday 02:00 window.
 
 ```text
 =============================================================================
@@ -62,12 +66,12 @@ ALL_PRODUCTION_HASHES:              PASS (3 / 3 Exact Match)
 
 ---
 
-## 2. Live Systemd Calendar Interpretation Proof (Ubuntu Systemd 249)
-
-Before enabling the timer, the schedule expression was verified on the host systemd engine (`systemd 249.11-0ubuntu3.22`):
+## 2. Phase T9B: Live Systemd Calendar & Timer Activation Proof
 
 ```bash
 systemd-analyze calendar "Tue *-*-* 02:00:00 Asia/Bangkok"
+systemctl list-timers neko-weekly-maintenance.timer --all
+systemctl show neko-weekly-maintenance.timer
 ```
 
 **Host Output**:
@@ -75,71 +79,7 @@ systemd-analyze calendar "Tue *-*-* 02:00:00 Asia/Bangkok"
 Normalized form: Tue *-*-* 02:00:00 Asia/Bangkok
     Next elapse: Mon 2026-08-24 19:00:00 UTC
        From now: 6 days left
-```
 
-```text
-=============================================================================
-CALENDAR & SCHEDULE INTERPRETATION PROOF
-=============================================================================
-SCHEDULED_DAY:                      Tuesday
-SCHEDULED_TIME:                     02:00:00
-SCHEDULED_TIMEZONE:                 Asia/Bangkok (Thailand UTC+7)
-UTC_EQUIVALENT_NEXT_TRIGGER:        Mon 2026-08-24 19:00:00 UTC
-LOCAL_EQUIVALENT_NEXT_TRIGGER:      Tue 2026-08-25 02:00:00 Asia/Bangkok
-SYSTEMD_CALENDAR_PARSER:            PASS (100% Native Timezone Parsing)
-=============================================================================
-```
-
----
-
-## 3. Pre-Flight Config Check & Dry-Run Verification
-
-Executed securely on AWS Lightsail Japan:
-
-```bash
-sudo /opt/neko/neko_weekly_maintenance.py --check-config
-sudo /opt/neko/neko_weekly_maintenance.py --dry-run
-```
-
-**Host Output**:
-```text
-===CHECK_CONFIG===
-[CONFIG_CHECK] SUCCESS: Weekly maintenance configuration is valid.
-===DRY_RUN===
-[2026-08-18 08:41:33 UTC] MAINTENANCE_SEQUENCE_START | mode=DRY_RUN
-[2026-08-18 08:41:33 UTC] DRY_RUN_STOP_WORKER | service=neko-discord-worker.service
-[2026-08-18 08:41:33 UTC] DRY_RUN_MAINTENANCE_STATUS | has_webhook=True | status_message_id=1539165666089762837
-[2026-08-18 08:41:33 UTC] DRY_RUN_REBOOT_INTENT | command=systemctl reboot
-[2026-08-18 08:41:33 UTC] MAINTENANCE_SEQUENCE_COMPLETE | reboot_status=TRIGGERED
-```
-
-```text
-=============================================================================
-PRE-FLIGHT DRY-RUN AUDIT
-=============================================================================
-CHECK_CONFIG_STATUS:                PASS (Zero secret leakage)
-DRY_RUN_STATUS:                     PASS
-DISCORD_HTTP_REQUEST_SENT:          NO
-WORKER_SERVICE_STOPPED:             NO (Remained active throughout dry-run)
-DISCORD_STATE_MUTATED:              NO (Persistent message ID 1539165666089762837 preserved)
-HOST_REBOOT_TRIGGERED:              NO
-SECRET_LOG_EXPOSURE:                NO
-=============================================================================
-```
-
----
-
-## 4. Live Timer Activation & Next-Execution Authority
-
-The timer was activated via `sudo systemctl enable --now neko-weekly-maintenance.timer`:
-
-```bash
-systemctl list-timers neko-weekly-maintenance.timer --all
-systemctl show neko-weekly-maintenance.timer
-```
-
-**Host Output**:
-```text
 NEXT                        LEFT        LAST PASSED UNIT                          ACTIVATES
 Mon 2026-08-24 19:00:00 UTC 6 days left n/a  n/a    neko-weekly-maintenance.timer neko-weekly-maintenance.service
 
@@ -152,26 +92,92 @@ ActiveState=active
 SubState=waiting
 ```
 
-```text
-=============================================================================
-LIVE SYSTEMD TIMER STATE
-=============================================================================
-TIMER_UNIT:                         neko-weekly-maintenance.timer
-ACTIVE_STATE:                       active (waiting)
-LOAD_STATE:                         loaded (enabled)
-ACTIVATES_SERVICE:                  neko-weekly-maintenance.service
-SERVICE_STATE_NOW:                  inactive (dead) — PENDING SCHEDULED TRIGGER
-PERSISTENT_POLICY:                  Persistent=false (Missed window = SKIP)
-ACCURACY:                           AccuracySec=1s (AccuracyUSec=1s)
-RANDOMIZED_DELAY:                   RandomizedDelaySec=0 (RandomizedDelayUSec=0)
-NEXT_TRIGGER_UTC:                   Mon 2026-08-24 19:00:00 UTC
-NEXT_TRIGGER_LOCAL:                 Tue 2026-08-25 02:00:00 Asia/Bangkok
-=============================================================================
+---
+
+## 3. Phase T9C: Controlled Maintenance Execution & Real Host Reboot Proof
+
+### 3.1 Pre-Reboot Baseline
+- **Host Uptime Before**: `9d 16h 15m`
+- **Kernel Boot ID Before**: `a1f67ac6-3f05-4e75-8209-d0c484972f4a`
+- **Discord Status Message ID**: `1539165666089762837` (PRESENT)
+- **Confirmed Status**: `ONLINE`
+- **Weekly Timer Before**: `Mon 2026-08-24 19:00:00 UTC` (`Tue 2026-08-25 02:00:00 Asia/Bangkok`)
+
+### 3.2 Maintenance Service Invocation
+Triggered via:
+```bash
+sudo systemctl start neko-weekly-maintenance.service
 ```
+
+**Host Journal Log Evidence (`neko-weekly-maintenance.service`)**:
+```text
+[2026-08-18 08:48:00 UTC] MAINTENANCE_SEQUENCE_START | mode=EXECUTE
+[2026-08-18 08:48:00 UTC] STOPPING_DISCORD_WORKER | service=neko-discord-worker.service
+[2026-08-18 08:48:00 UTC] WORKER_SERVICE_STATE | state=inactive
+[2026-08-18 08:48:00 UTC] EDITING_PERSISTENT_MAINTENANCE_STATUS | message_id=1539165666089762837
+[2026-08-18 08:48:00 UTC] MAINTENANCE_STATUS_PUBLISHED_IN_PLACE | message_id=1539165666089762837
+[2026-08-18 08:48:00 UTC] EXECUTING_ORDERLY_REBOOT | command=systemctl reboot
+[2026-08-18 08:48:00 UTC] MAINTENANCE_SEQUENCE_COMPLETE | reboot_status=TRIGGERED
+```
+
+### 3.3 Reboot Timing & Host Return
+- **Reboot Initiated**: `2026-08-18 08:48:09 UTC` (SSH connection closed by remote host)
+- **SSH Connectivity Returned**: `2026-08-18 08:48:25 UTC`
+- **Approximate Host Downtime**: **16.4 seconds**
+
+### 3.4 Real Host Reboot Proof
+- **Host Uptime After**: `0m` (19.14 seconds)
+- **Kernel Boot ID After**: `28c81f14-8c23-4e88-86b1-078a19831196` (**Changed — Real Reboot Proven**)
 
 ---
 
-## 5. Post-Deployment System Health & Diagnostics
+## 4. Post-Boot Service Recovery & Discord Real-Health Proof
+
+### 4.1 Daemon Startup & Listener Verification
+- `shadowsocks-libev.service`: **ACTIVE** (PID 444, enabled, 0 restarts)
+- `neko-server-monitor.service`: **ACTIVE** (PID 445, enabled, 0 restarts)
+- `neko-discord-worker.service`: **ACTIVE** (PID 602, enabled, 0 restarts)
+- `neko-weekly-maintenance.service`: **INACTIVE** (Oneshot completed cleanly)
+- `TCP / UDP Listener :8388`: **LISTENING**
+
+### 4.2 Discord Same-Message Real Health Recovery
+- **Discord Worker Startup Log**:
+  ```text
+  [CONFIG_CHECK] SUCCESS: Configuration is valid. (interface=ens5, port=8388, state=/var/lib/neko/discord-state.json)
+  [2026-08-18 08:48:18 UTC] STARTING_DISCORD_WORKER | interface=ens5 | port=8388
+  [2026-08-18 08:48:18 UTC] DISCORD_WORKER_READY | next_summary_epoch=1787043600
+  ```
+- **State Integrity (`/var/lib/neko/discord-state.json`)**:
+  - `status_message_id`: `1539165666089762837` (**EXACT SAME MESSAGE PRESERVED**)
+  - `confirmed_status`: `ONLINE` (**Derived from real probe health**)
+  - `last_status_edit_at`: `1787043144.2512956` (In-place edit confirmed)
+- **Duplicate Message Creation**: **NO** (Zero extra messages)
+- **False Alert Storm**: **NO** (Zero false degraded, recovery, or stale alerts dispatched)
+
+---
+
+## 5. Weekly Maintenance Timer Post-Reboot Survival
+
+```bash
+systemctl list-timers neko-weekly-maintenance.timer --all
+```
+
+**Host Output**:
+```text
+NEXT                        LEFT        LAST PASSED UNIT                          ACTIVATES
+Mon 2026-08-24 19:00:00 UTC 6 days left n/a  n/a    neko-weekly-maintenance.timer neko-weekly-maintenance.service
+
+1 timers listed.
+```
+
+- **Timer State**: `active (waiting)`
+- **Enabled on Boot**: `enabled`
+- **Next Scheduled Execution**: `Mon 2026-08-24 19:00:00 UTC` (= `Tue 2026-08-25 02:00:00 Asia/Bangkok`)
+- **Timer Settings Preserved**: `Persistent=no`, `AccuracySec=1s`, `RandomizedDelaySec=0`
+
+---
+
+## 6. Post-Reboot Soak & Operational Health (5-Minute Soak)
 
 ```bash
 sudo /opt/neko/neko_ops_status.py
@@ -183,22 +189,22 @@ sudo /opt/neko/neko_ops_status.py
 NEKO FAMILY PROXY — PRODUCTION OPS DIAGNOSTICS
 =============================================================================
 HOST:               ip-172-26-29-162 (Ubuntu 22.04.5 LTS / 6.8.0-1061-aws)
-UPTIME:             9d 16h 9m | Load: 0.00, 0.00, 0.00
-RAM USAGE:          384.8 MiB / 914.0 MiB (529.2 MiB available)
-DISK USAGE:         3.66 GiB / 38.58 GiB (9.5% used, 34.91 GiB free)
+UPTIME:             5m | Load: 0.00, 0.02, 0.00
+RAM USAGE:          385.3 MiB / 914.0 MiB (528.7 MiB available)
+DISK USAGE:         3.65 GiB / 38.58 GiB (9.5% used, 34.91 GiB free)
 JOURNAL USAGE:      368.0M
 
 SERVICES:
-  shadowsocks-libev:    ACTIVE (PID: 431, Restarts: 0, Mem: 5.3 MiB)
-  neko-server-monitor:  ACTIVE (PID: 46806, Restarts: 0, Mem: 10.3 MiB)
-  neko-discord-worker:  ACTIVE (PID: 55258, Restarts: 0, Mem: 15.1 MiB)
+  shadowsocks-libev:    ACTIVE (PID: 444, Restarts: 0, Mem: 1.7 MiB)
+  neko-server-monitor:  ACTIVE (PID: 445, Restarts: 0, Mem: 10.0 MiB)
+  neko-discord-worker:  ACTIVE (PID: 602, Restarts: 0, Mem: 14.5 MiB)
   neko-traffic-monitor: INACTIVE (Enabled: disabled, Rollback Authority)
 
 NETWORK & LISTENERS:
   TCP Listener :8388:  LISTENING
 
 STATE INTEGRITY:
-  discord-state.json:   VALID (Size: 397 B, Mode: 0o600, Status: ONLINE)
+  discord-state.json:   VALID (Size: 396 B, Mode: 0o600, Status: ONLINE)
   Persistent Msg ID:    PRESENT
   Orphan Temp Files:    0
 =============================================================================
@@ -208,7 +214,7 @@ OVERALL STATUS:         ALL SYSTEMS HEALTHY (0_HEALTHY)
 
 ---
 
-## 6. Active Proxy & Probe Authority Confirmation
+## 7. Active Proxy & Probe Infrastructure Authority
 
 ```text
 =============================================================================
@@ -230,27 +236,14 @@ CLIENT_TELEMETRY_ADDED:             NO
 
 ---
 
-## 7. Rollback Runbook (If Ever Needed)
-
-To disable and remove the weekly maintenance automation:
-```bash
-sudo systemctl disable --now neko-weekly-maintenance.timer
-sudo rm -f /etc/systemd/system/neko-weekly-maintenance.timer
-sudo rm -f /etc/systemd/system/neko-weekly-maintenance.service
-sudo rm -f /opt/neko/neko_weekly_maintenance.py
-sudo systemctl daemon-reload
-```
-
----
-
-## 8. Phase T9 Status Semantics
+## 8. Final Status Classification
 
 ```text
-T9A:                                CLOSED (Candidate Implementation Complete)
-T9B:                                CLOSED (Production Scheduler Deployed & Active)
-WEEKLY_MAINTENANCE_TIMER:           LIVE & WAITING
-FIRST_REAL_MAINTENANCE_EXECUTION:   PENDING NATURAL SCHEDULE (Tue 2026-08-25 02:00 Asia/Bangkok)
-REAL_MAINTENANCE_DISCORD_PROOF:     PENDING NATURAL SCHEDULE
-REAL_POST_BOOT_RECOVERY_PROOF:      PENDING NATURAL SCHEDULE
-T9_FULL_CLOSURE:                    PENDING (Will be closed in Phase T9C after first natural execution)
+T9A (Controller & Unit Candidate):             CLOSED
+T9B (Production Scheduler Rollout):             CLOSED & LIVE
+T9C (Controlled First Maintenance Execution):   CLOSED (FULL LIFECYCLE PROVEN)
+WEEKLY_MAINTENANCE_TIMER:                       LIVE (Next trigger: Tuesday 02:00 Asia/Bangkok)
+DISCORD_STATUS_RECOVERY:                        PROVEN (In-place edit 🛠️ MAINTENANCE -> ONLINE)
+REBOOT_DOWNTIME_OBSERVED:                       16.4 seconds
+PRODUCTION_HEALTH:                              0_HEALTHY
 ```
