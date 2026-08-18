@@ -44,6 +44,7 @@ function createFakeSupabase() {
     invalidBooleanRpcs: new Set(),
     invalidTimestampRpcs: new Set(),
     errorRpcs: new Map(),
+    serverMetrics: null,
     events: [],
   };
   const server = createServer(async (request, response) => {
@@ -417,6 +418,35 @@ function createFakeSupabase() {
         response.end("true");
         return;
       }
+      if (rpc === "upsert_server_metrics_latest") {
+        if (control.serverMetrics && body.p_observed_at <= control.serverMetrics.observed_at) {
+          response.end("false");
+          return;
+        }
+        control.serverMetrics = {
+          server_id: body.p_server_id,
+          observed_at: body.p_observed_at,
+          host_uptime_seconds: body.p_host_uptime_seconds,
+          shadowsocks_service_status: body.p_shadowsocks_service_status,
+          shadowsocks_listener_status: body.p_shadowsocks_listener_status,
+          ping_ms: body.p_ping_ms,
+          ping_status: body.p_ping_status,
+          packet_loss_percent: body.p_packet_loss_percent,
+          rx_bytes_total: body.p_rx_bytes_total,
+          tx_bytes_total: body.p_tx_bytes_total,
+          rx_bps: body.p_rx_bps,
+          tx_bps: body.p_tx_bps,
+          cpu_percent: body.p_cpu_percent,
+          memory_percent: body.p_memory_percent,
+        };
+        response.end("true");
+        return;
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/rest/v1/server_metrics_latest") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(control.serverMetrics ? [control.serverMetrics] : []));
+      return;
     }
     const emptyTables = new Set([
       "products",
@@ -456,6 +486,8 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     "test-session-secret-that-is-long-enough-for-hmac-signing";
   process.env.ACCOUNT_RECOVERY_HMAC_SECRET =
     "test-recovery-hmac-secret-that-is-long-enough";
+  process.env.SERVER_METRICS_INGEST_SECRET =
+    "test-server-metrics-ingest-secret-32-bytes";
   process.env.VERCEL = "1";
   const { default: handler } = await import(
     `../api/index.mjs?test=${Date.now()}`
@@ -982,6 +1014,164 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       body: JSON.stringify({ action: "delete_batch", batchId }),
     });
     assert.equal(deleted.status, 200);
+
+    // --- Server Monitoring Ingest & Read Integration Tests ---
+    const ingestUrl = `${base}/api/server/metrics/ingest`;
+    const validSecret = "test-server-metrics-ingest-secret-32-bytes";
+
+    // 1. Missing Authorization header -> 401
+    const noAuth = await fetch(ingestUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: new Date().toISOString(),
+        host_uptime_seconds: 1000,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        rx_bytes_total: 1000,
+        tx_bytes_total: 2000,
+        rx_bps: 100,
+        tx_bps: 200,
+      }),
+    });
+    assert.equal(noAuth.status, 401);
+
+    // 2. Wrong Authorization secret -> 401
+    const wrongAuth = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer wrong-secret-token",
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: new Date().toISOString(),
+        host_uptime_seconds: 1000,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        rx_bytes_total: 1000,
+        tx_bytes_total: 2000,
+        rx_bps: 100,
+        tx_bps: 200,
+      }),
+    });
+    assert.equal(wrongAuth.status, 401);
+
+    // 3. Payload with forbidden client telemetry -> 400
+    const forbiddenPayload = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validSecret}`,
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: new Date().toISOString(),
+        host_uptime_seconds: 1000,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        rx_bytes_total: 1000,
+        tx_bytes_total: 2000,
+        rx_bps: 100,
+        tx_bps: 200,
+        core_pid: 1234, // Forbidden client telemetry
+      }),
+    });
+    assert.equal(forbiddenPayload.status, 400);
+
+    // 4. Valid payload -> 200 { ok: true, accepted: true, server_id: "japan-vps-1" }
+    const validTime = new Date().toISOString();
+    const validReq = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validSecret}`,
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: validTime,
+        host_uptime_seconds: 50000,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        upstream_ping_ms: 12.4,
+        upstream_ping_status: "AVAILABLE",
+        upstream_packet_loss_percent: 0.0,
+        rx_bytes_total: 1000000,
+        tx_bytes_total: 2000000,
+        rx_bps: 15400.0,
+        tx_bps: 16800.0,
+        cpu_percent: 10.5,
+        memory_percent: 22.0,
+      }),
+    });
+    assert.equal(validReq.status, 200);
+    const validJson = await validReq.json();
+    assert.equal(validJson.ok, true);
+    assert.equal(validJson.accepted, true);
+    assert.equal(validJson.server_id, "japan-vps-1");
+
+    // 5. Older replay payload -> 200 { ok: true, accepted: false }
+    const olderTime = new Date(Date.now() - 60000).toISOString();
+    const replayReq = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validSecret}`,
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: olderTime,
+        host_uptime_seconds: 49940,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        rx_bytes_total: 900000,
+        tx_bytes_total: 1800000,
+        rx_bps: 10000.0,
+        tx_bps: 10000.0,
+      }),
+    });
+    assert.equal(replayReq.status, 200);
+    const replayJson = await replayReq.json();
+    assert.equal(replayJson.ok, true);
+    assert.equal(replayJson.accepted, false);
+
+    // 6. GET /api/server/metrics (authenticated)
+    const serverRes = await fetch(`${base}/api/server/metrics`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(serverRes.status, 200);
+    const serverJson = await serverRes.json();
+    assert.equal(serverJson.ok, true);
+    assert.ok(serverJson.server);
+    assert.equal(serverJson.server.server_id, "japan-vps-1");
+    assert.equal(serverJson.server.host_status, "ONLINE");
+    assert.equal(serverJson.server.shadowsocks_service_status, "active");
+    assert.equal(serverJson.server.shadowsocks_listener_status, "listening");
+    assert.equal(serverJson.server.ping_ms, 12.4);
+    assert.equal(serverJson.server.ping_target_label, "VPS → Upstream");
+    assert.equal(serverJson.server.packet_loss_percent, 0.0);
+    assert.equal(serverJson.server.rx_bytes_total, 1000000);
+    assert.equal(serverJson.server.tx_bytes_total, 2000000);
+    assert.equal(serverJson.server.rx_bps, 15400.0);
+    assert.equal(serverJson.server.tx_bps, 16800.0);
+
+    // Privacy assertion: zero client telemetry in server snapshot
+    assert.equal(serverJson.server.core_pid, undefined);
+    assert.equal(serverJson.server.client_rx_bytes, undefined);
+    assert.equal(serverJson.server.device_id, undefined);
+
+    // 7. GET /api/admin?resource=overview (authenticated)
+    const overviewRes = await fetch(`${base}/api/admin?resource=overview`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(overviewRes.status, 200);
+    const overviewJson = await overviewRes.json();
+    assert.equal(overviewJson.ok, true);
+    assert.ok(overviewJson.data.server);
+    assert.equal(overviewJson.data.server.host_status, "ONLINE");
+    assert.equal(typeof overviewJson.data.stats.onlineSessionCount, "number");
+    assert.equal(typeof overviewJson.data.stats.entitledActiveUserCount, "number");
 
     fakeSupabase.control.adminActive = false;
     const inactiveSession = await fetch(`${base}/api/admin?resource=overview`, {

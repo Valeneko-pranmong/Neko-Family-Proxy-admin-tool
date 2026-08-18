@@ -1,4 +1,12 @@
-import { escapeHtml, formatDate, formatTime, formatTrendBucket } from "../ui/escape.js";
+import {
+  escapeHtml,
+  formatBps,
+  formatBytes,
+  formatDate,
+  formatTime,
+  formatTrendBucket,
+  formatUptime,
+} from "../ui/escape.js";
 import { cell, dateCell, statusBadge, table } from "../ui/table.js";
 
 function heading(title, subtitle, action = "") {
@@ -24,6 +32,84 @@ function actionButton(action, id, label, extra = "") {
   return `<button class="button button-small ${extra}" data-action="${action}" data-id="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
 }
 
+export function renderServerHealth(server = {}, stats = {}) {
+  const hostStatus = String(server?.host_status || "UNKNOWN").toUpperCase();
+  const pingStatus = String(server?.ping_status || "UNKNOWN").toUpperCase();
+  const pingLabel = escapeHtml(server?.ping_target_label || "VPS → Upstream");
+  const pingDisplay = server?.ping_ms !== null && server?.ping_ms !== undefined
+    ? `${server.ping_ms} ms`
+    : (pingStatus === "TIMEOUT" ? "Timeout" : pingStatus === "UNSUPPORTED" ? "Unsupported" : "—");
+  const lossDisplay = server?.packet_loss_percent !== null && server?.packet_loss_percent !== undefined
+    ? `${server.packet_loss_percent}%`
+    : "—";
+
+  const rxRate = formatBps(server?.rx_bps);
+  const txRate = formatBps(server?.tx_bps);
+  const rxTotal = formatBytes(server?.rx_bytes_total);
+  const txTotal = formatBytes(server?.tx_bytes_total);
+  const uptime = formatUptime(server?.uptime_seconds);
+
+  const ssService = String(server?.shadowsocks_service_status || "unknown").toLowerCase();
+  const ssListener = String(server?.shadowsocks_listener_status || "unknown").toLowerCase();
+
+  const activeUsers = server?.online_session_count ?? stats.onlineSessionCount ?? stats.recentlyOnline ?? 0;
+  const entitledUsers = server?.entitled_active_user_count ?? stats.entitledActiveUserCount ?? stats.recentlyOnline ?? 0;
+
+  const staleNotice = server?.is_stale
+    ? `<span class="server-stale-warn">ข้อมูลค้าง (>30s)</span>`
+    : "";
+
+  return `
+    <section class="panel server-health-panel">
+      <div class="panel-title-row">
+        <div>
+          <h3>เซิร์ฟเวอร์หลัก (Japan VPS)</h3>
+          <p class="muted">ข้อมูลโครงสร้างพื้นฐานโดยรวมจาก VPS และสถิติผู้ใช้ออนไลน์จาก Session Authority</p>
+        </div>
+        <div class="server-status-badge">
+          ${staleNotice}
+          <span class="status status-${escapeHtml(hostStatus.toLowerCase())}">${escapeHtml(hostStatus)}</span>
+        </div>
+      </div>
+      <div class="server-metrics-grid">
+        <div class="server-metric-card">
+          <span class="metric-label">${pingLabel}</span>
+          <strong class="metric-value">${escapeHtml(pingDisplay)}</strong>
+          <small class="metric-sub">Loss: ${escapeHtml(lossDisplay)} · Probe: ${escapeHtml(pingStatus)}</small>
+        </div>
+        <div class="server-metric-card">
+          <span class="metric-label">VPS Download (RX)</span>
+          <strong class="metric-value">${escapeHtml(rxRate)}</strong>
+          <small class="metric-sub">รวมทั้งโฮสต์: ${escapeHtml(rxTotal)}</small>
+        </div>
+        <div class="server-metric-card">
+          <span class="metric-label">VPS Upload (TX)</span>
+          <strong class="metric-value">${escapeHtml(txRate)}</strong>
+          <small class="metric-sub">รวมทั้งโฮสต์: ${escapeHtml(txTotal)}</small>
+        </div>
+        <div class="server-metric-card">
+          <span class="metric-label">สถานะ Shadowsocks</span>
+          <strong class="metric-value">
+            <span class="status status-${escapeHtml(ssService)}">${escapeHtml(ssService)}</span>
+            <span class="status status-${escapeHtml(ssListener)}">${escapeHtml(ssListener)}</span>
+          </strong>
+          <small class="metric-sub">Daemon: ${escapeHtml(ssService)} · Listener: ${escapeHtml(ssListener)}</small>
+        </div>
+        <div class="server-metric-card">
+          <span class="metric-label">Host Uptime</span>
+          <strong class="metric-value">${escapeHtml(uptime)}</strong>
+          <small class="metric-sub">Server: ${escapeHtml(server?.server_id || "japan-vps-1")}</small>
+        </div>
+        <div class="server-metric-card">
+          <span class="metric-label">ผู้ใช้ออนไลน์ (Active Users)</span>
+          <strong class="metric-value">${escapeHtml(activeUsers)}</strong>
+          <small class="metric-sub">${escapeHtml(entitledUsers)} มี License ใช้งานได้</small>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 export function renderOverview(data = {}) {
   const stats = data.stats || {};
   const safeCount = (value) => {
@@ -34,7 +120,7 @@ export function renderOverview(data = {}) {
     ["สมาชิกทั้งหมด", stats.users ?? 0, "users", "บัญชีสมาชิกทั้งหมดในระบบ", `${stats.userBreakdown?.suspended ?? 0} ระงับ · ${stats.userBreakdown?.banned ?? 0} แบน`],
     ["License ใช้งานได้", stats.activeLicenses ?? 0, "active", "สถานะ active และอยู่ในช่วงเวลาที่ใช้ได้", `${stats.licenseBreakdown?.expiringSoon ?? 0} ใกล้หมดอายุ`],
     ["Session ปัจจุบัน", stats.activeSessions ?? 0, "session", "Session ที่ยังไม่ถูก revoke", "ไม่เท่ากับผู้ใช้ออนไลน์"],
-    ["Online ล่าสุด", stats.recentlyOnline ?? 0, "online", "Current session ที่ heartbeat ภายใน 2 นาที", "ค่าประมาณจาก heartbeat"],
+    ["Online ล่าสุด", stats.onlineSessionCount ?? stats.recentlyOnline ?? 0, "online", "Current session ที่ heartbeat ภายใน 2 นาที", "ค่าประมาณจาก heartbeat"],
     ["การติดตั้งที่จดจำ", stats.installations ?? stats.activeInstallations ?? 0, "device", "ประวัติเครื่องที่บัญชีเคยจดจำ", "ไม่ใช่อุปกรณ์ออนไลน์"],
     ["คูปองพร้อมใช้", stats.usableCoupons ?? stats.unusedCoupons ?? 0, "coupon", "คูปอง active ใน batch ที่ยังใช้ได้", "ตัด batch หมดอายุ/revoke แล้ว"],
   ];
@@ -90,6 +176,7 @@ export function renderOverview(data = {}) {
     <section class="stats-grid">${cards
       .map(([label, value, tone, explanation, secondary]) => `<article class="stat-card stat-${tone}"><span>${label}</span><strong>${escapeHtml(safeCount(value))}</strong><p>${explanation}</p><small>${escapeHtml(secondary)}</small></article>`)
       .join("")}</section>
+    ${renderServerHealth(data.server, stats)}
     <section class="panel chart-panel">
       <div class="panel-title-row"><div><h3>Launcher Activity</h3><p class="muted">Session เริ่มใหม่และการใช้คูปองสำเร็จ · เวลา Asia/Bangkok</p></div><div class="range-switch" aria-label="ช่วงเวลากราฟ">${["24h", "7d", "14d", "30d"].map((value) => `<button class="${value === range ? "is-selected" : ""}" data-action="set_range" data-range="${value}" aria-pressed="${value === range}">${value.toUpperCase()}</button>`).join("")}</div></div>
       <div class="chart-legend"><span><i class="legend-sessions"></i>Session เริ่มใหม่</span><span><i class="legend-redemptions"></i>ใช้คูปองสำเร็จ</span></div>
@@ -219,12 +306,15 @@ export function couponForm() {
 
 export function renderSessions(rows = []) {
   const body = rows.map((row) => {
+    const sessionId = row.id
+      ? `<span class="truncated-id" title="${escapeHtml(row.id)}">${escapeHtml(row.id.slice(0, 8))}</span>`
+      : "—";
     const license = row.license_id
       ? `<span class="truncated-id" title="${escapeHtml(row.license_id)}">${escapeHtml(row.license_id.slice(0, 8))}</span>`
       : "—";
-    return `<tr>${cell(row.username, "primary")}${cell(row.device)}<td>${license}</td><td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`;
+    return `<tr>${cell(row.username, "primary")}<td>${sessionId}</td><td>${license}</td><td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`;
   });
-  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "อุปกรณ์", "License", "สถานะ", "เริ่มเมื่อ", "ใช้งานล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "Session ID", "License", "สถานะ", "เริ่มเมื่อ", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
 }
 
 export function renderInstallations(rows = []) {

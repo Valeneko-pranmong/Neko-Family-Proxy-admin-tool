@@ -1,0 +1,22 @@
+[Unit]
+Description=Neko Family Proxy Server Monitoring Daemon
+After=network.target shadowsocks-libev.service
+Wants=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/neko/server-agent.env
+ExecStart=/usr/bin/python3 /opt/neko/neko_server_agent.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening / Isolation
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

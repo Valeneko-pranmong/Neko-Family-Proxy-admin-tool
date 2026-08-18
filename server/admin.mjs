@@ -15,8 +15,13 @@ import {
   normalizeTrendRange,
   RECENT_ONLINE_WINDOW_MS,
   REPORT_TIMEZONE,
+  summarizeCurrentSessions,
   trendStart,
 } from "./dashboard.mjs";
+import {
+  computeServerFreshness,
+  getLatestServerSnapshot,
+} from "./server-metrics.mjs";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -246,30 +251,24 @@ async function getInstallations() {
 }
 
 async function getSessions() {
-  const [sessions, profiles, installations] = await Promise.all([
+  const [sessions, profiles] = await Promise.all([
     tableGet("launcher_sessions", {
       select:
-        "id,user_id,installation_id,license_id,created_at,last_seen_at,revoked_at",
+        "id,user_id,license_id,created_at,last_seen_at,revoked_at",
       order: "last_seen_at.desc",
       limit: "1000",
     }),
     listProfiles(),
-    tableGet("installations", {
-      select: "id,display_name",
-      limit: "1000",
-    }),
   ]);
   const usernames = usernamesByUser(profiles);
-  const devices = new Map(
-    installations.map((installation) => [
-      installation.id,
-      installation.display_name ?? "Unnamed device",
-    ]),
-  );
   return sessions.map((session) => ({
-    ...session,
+    id: session.id,
+    user_id: session.user_id,
+    license_id: session.license_id,
+    created_at: session.created_at,
+    last_seen_at: session.last_seen_at,
+    revoked_at: session.revoked_at,
     username: usernames.get(session.user_id) ?? "—",
-    device: devices.get(session.installation_id) ?? "Unknown device",
   }));
 }
 
@@ -298,6 +297,7 @@ async function getOverview(requestedRange = "14d") {
     trendSessions,
     trendRedemptions,
     audit,
+    serverSnapshot,
   ] = await Promise.all([
     tableCount("profiles"),
     tableCount("profiles", { status: "eq.active" }),
@@ -363,6 +363,7 @@ async function getOverview(requestedRange = "14d") {
       order: "created_at.desc",
       limit: "8",
     }),
+    getLatestServerSnapshot(undefined, now).catch(() => computeServerFreshness(null, now)),
   ]);
   const usableBatchIds = new Set(
     couponBatches
@@ -373,6 +374,8 @@ async function getOverview(requestedRange = "14d") {
     (count, coupon) => count + (usableBatchIds.has(coupon.batch_id) ? 1 : 0),
     0,
   );
+  const rawOnlineSessions = summarizeCurrentSessions(recentSessions, now).recentlyOnline;
+  const entitledActiveUsers = countRecentlyOnlineSessions(recentSessions, recentlyOnlineLicenses, now);
   return {
     stats: {
       users,
@@ -385,8 +388,15 @@ async function getOverview(requestedRange = "14d") {
       },
       installations,
       activeSessions,
-      recentlyOnline: countRecentlyOnlineSessions(recentSessions, recentlyOnlineLicenses, now),
+      onlineSessionCount: rawOnlineSessions,
+      entitledActiveUserCount: entitledActiveUsers,
+      recentlyOnline: entitledActiveUsers,
       usableCoupons,
+    },
+    server: {
+      ...serverSnapshot,
+      online_session_count: rawOnlineSessions,
+      entitled_active_user_count: entitledActiveUsers,
     },
     trend: aggregateTrend({
       range,
@@ -459,6 +469,7 @@ export async function getResource(resource, options = {}) {
   if (resource === "installations") return getInstallations();
   if (resource === "sessions") return getSessions();
   if (resource === "audit") return getAudit();
+  if (resource === "server_metrics") return getLatestServerSnapshot(options.serverId, new Date());
   if (resource === "overview") return getOverview(options.range);
   throw actionError("ไม่พบข้อมูลที่ร้องขอ", 404);
 }

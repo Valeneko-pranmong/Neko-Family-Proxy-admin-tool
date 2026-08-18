@@ -4,6 +4,10 @@ import { authenticateAdmin } from "../server/auth.mjs";
 import { getResource, performAction } from "../server/admin.mjs";
 import { accountRecovery } from "../server/account-recovery.mjs";
 import { tableGet } from "../server/supabase.mjs";
+import {
+  getLatestServerSnapshot,
+  ingestServerMetrics,
+} from "../server/server-metrics.mjs";
 
 const configuredSessionTtlMs = Number(
   process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000,
@@ -223,6 +227,21 @@ export default async function handler(request, response) {
           newPassword: body.new_password,
         })),
       });
+    }
+    if (
+      request.method === "POST"
+      && (url.pathname === "/api/server/metrics/ingest" || url.pathname === "/api/server/metrics")
+    ) {
+      const body = await bodyJson(request);
+      const result = await ingestServerMetrics(body, request.headers.authorization);
+      return sendJson(response, 200, result);
+    }
+    if (request.method === "GET" && url.pathname === "/api/server/metrics") {
+      const session = await getSession(parseCookies(request).admin_session);
+      if (!session) return sendError(response, 401, "Admin login required");
+      const serverId = url.searchParams.get("server_id") || undefined;
+      const server = await getLatestServerSnapshot(serverId);
+      return sendJson(response, 200, { ok: true, server });
     }
     if (url.pathname !== "/api/admin") return sendError(response, 404, "Not found");
 
