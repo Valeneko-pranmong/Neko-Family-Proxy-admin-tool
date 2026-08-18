@@ -35,6 +35,35 @@ export function appendLiveServerSample(history = [], snapshot = {}, maxSamples =
   return nextHistory;
 }
 
+export const MAX_HISTORICAL_POINTS = 336;
+
+export function segmentHistoryPoints(points = [], bucketSeconds = 60, thresholdFactor = 1.5) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+  const gapThresholdMs = (Number(bucketSeconds) || 60) * thresholdFactor * 1000;
+  const segments = [];
+  let currentSegment = [];
+  let lastTimeMs = null;
+
+  for (const point of points) {
+    if (!point || !point.bucket_start) continue;
+    const timeMs = Date.parse(point.bucket_start);
+    if (!Number.isFinite(timeMs)) continue;
+
+    if (lastTimeMs !== null && timeMs - lastTimeMs > gapThresholdMs) {
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+        currentSegment = [];
+      }
+    }
+    currentSegment.push(point);
+    lastTimeMs = timeMs;
+  }
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+  return segments;
+}
+
 export function createStore() {
   const state = {
     active: "overview",
@@ -43,6 +72,17 @@ export function createStore() {
     refreshing: false,
     error: "",
     overviewRange: "14d",
+    serverChartRange: "live",
+    serverHistory: {
+      range: "1h",
+      bucket_seconds: 60,
+      available_since: null,
+      points: [],
+      points_count: 0,
+      loading: false,
+      error: "",
+      lastSuccessAt: null,
+    },
     toast: "",
     couponFormOpen: false,
     liveServerHistory: [],

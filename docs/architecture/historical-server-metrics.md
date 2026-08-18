@@ -3,17 +3,18 @@
 
 ```text
 DOCUMENT:               docs/architecture/historical-server-metrics.md
-STATUS:                 IMPLEMENTATION_CANDIDATE (T6B Implemented — Production Proof in T6D)
+STATUS:                 IMPLEMENTATION_CANDIDATE (T6B Persistence & T6C UI Implemented Locally — Production Proof in T6D)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & SYSTEM SPECIFICATION
-PHASE:                  T6B (Historical Persistence & Admin History API Implementation)
-PREVIOUS_PHASE:         T6A (Design Frozen at commit 7168bf65...)
-NEXT_PHASE:             T6C (Admin Dashboard Historical Charts UI)
+PHASE:                  T6C (Admin Dashboard Historical Charts UI Completed Locally)
+PREVIOUS_PHASE:         T6B (Historical Persistence & Admin History API)
+NEXT_PHASE:             T6D (Supabase Migration Apply, Scheduled Retention & Production Proof)
 PRIMARY_TEAM:           TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 TEAM_CORE:              NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER:          NO ACTION (Frozen at Phase T3)
 BACKEND_MIGRATION:      supabase/migrations/20260818120000_server_monitoring_history.sql
 ADMIN_API_AUTHORITY:    server/server-metrics.mjs & api/index.mjs
+ADMIN_UI_AUTHORITY:     standalone/src/sections/render.js & standalone/src/main.js
 PRODUCTION_DEPLOYED:    NO (Local candidate — Production deployment in Phase T6D)
 DATE:                   2026-08-18
 ```

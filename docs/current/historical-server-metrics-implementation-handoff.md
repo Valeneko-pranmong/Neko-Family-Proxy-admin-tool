@@ -28,11 +28,13 @@ All database schema migrations, ingestion and downsampling RPCs, API route regis
 |                                      PHASE STATUS SUMMARY                                         |
 +---------------------------------------------------------------------------------------------------+
 |  Phase T6A: Architecture & Contract Design         | COMPLETED & FROZEN (Commit 7168bf65...)     |
-|  Phase T6B: Persistence & Admin History API        | COMPLETED LOCALLY (Candidate for T6C/T6D)    |
-|  Phase T6C: Admin Dashboard Historical Charts UI   | NEXT IN QUEUE (Requires T6B API)            |
-|  Phase T6D: Supabase Migration & Production Proof  | FINAL DEPLOYMENT (Scheduled after T6C)       |
+|  Phase T6B: Persistence & Admin History API        | COMPLETED LOCALLY (Candidate for T6D)        |
+|  Phase T6C: Admin Dashboard Historical Charts UI   | COMPLETED LOCALLY (Candidate for T6D)        |
+|  Phase T6D: Supabase Migration & Production Proof  | FINAL DEPLOYMENT (Next in Queue)             |
 +---------------------------------------------------------------------------------------------------+
 ```
+
+> **Successor Document**: See [docs/current/historical-server-metrics-ui-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-ui-handoff.md) for the Phase T6C Dashboard UI Handoff.
 
 ---
 

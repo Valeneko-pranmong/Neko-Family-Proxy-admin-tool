@@ -4,9 +4,9 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-PHASE:                  T6B COMPLETED (Candidate for T6C UI & T6D Production Deploy)
+PHASE:                  T6C COMPLETED — LOCAL CANDIDATE (Ready for Phase T6D Production Gate)
 LAST_CLOSED_PHASE:      T5 (Admin Dashboard Polish & Live Visualization) / T6A (Design Frozen)
-NEXT_PHASE:             T6C (Admin Dashboard Historical Charts UI)
+NEXT_PHASE:             T6D (Production Deployment, Supabase Migration & Verification)
 DATE:                   2026-08-18
 ```
 
@@ -21,7 +21,7 @@ The project is currently executing **Phase T6 (Historical Server Metrics)**:
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6A (Closed / Design Frozen)** designed the authoritative server-side historical time-series storage, retention, query contract, and UI downsampling model (`7168bf65...`).
 - **Phase T6B (Completed Locally)** implemented the forward-only database migration (`public.server_metrics_history`, atomic ingest RPC `launcher.store_server_metrics_sample`, pruning function `launcher.prune_server_metrics_history`), and the Admin Historical Query API (`GET /api/server/metrics/history`).
-- **Phase T6C (Next Subphase)** will implement the Admin Dashboard historical chart UI (Live, 1h, 24h, 7d tabs) consuming the T6B history API.
+- **Phase T6C (Completed Locally)** implemented the Admin Dashboard historical chart UI (Live, 1h, 24h, 7d tabs) with gap preservation, degradation markers, and async race protections.
 - **Phase T6D (Production Gate)** will apply the Supabase migration, configure hourly database pruning, and verify against the live Japan VPS daemon.
 
 ---
@@ -36,26 +36,30 @@ The project is currently executing **Phase T6 (Historical Server Metrics)**:
 | **Phase T4B** | Server Monitoring Data Plane & Production Deploy | **CLOSED** | Backend `bc34b5b1...` / Admin `2aac1028...` |
 | **Phase T5** | Admin Dashboard Polish & Live Visualization | **CLOSED** | Source: `840adc18...` / Evidence: `41067701...` |
 | **Phase T6A** | Historical Server Metrics Architecture | **CLOSED (DESIGN FROZEN)** | Commit `7168bf65...` / `docs/architecture/historical-server-metrics.md` |
-| **Phase T6B** | Historical Persistence & Admin History API | **COMPLETED (LOCAL CANDIDATE)** | Migration `20260818120000_server_monitoring_history.sql` + Ingest RPC + Admin History API |
-| **Phase T6C** | Admin Dashboard Historical Charts UI | **NEXT IN QUEUE** | 1h, 24h, 7d Range Selectors on Admin Web |
+| **Phase T6B** | Historical Persistence & Admin History API | **COMPLETED (LOCAL CANDIDATE)** | Backend `94f389c5...` / Admin `2662193e...` |
+| **Phase T6C** | Admin Dashboard Historical Charts UI | **COMPLETED (LOCAL CANDIDATE)** | Range Selectors (Live/1h/24h/7d), Gap Splitting & Degradation Markers |
 | **Phase T6D** | Live VPS Production Proof & Retention Verification | **PLANNED (FINAL T6 GATE)** | Supabase Deploy + Pruning Cron + Live VPS Verification |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
-- **Admin Runtime Source (T5)**: `840adc18da08cd3af284c5e2cbffbb20d5ef5d6a`
-- **Backend Database Pre-T6B Baseline**: `bc34b5b1e70228f3c007ba077e72d3650602bd34` (`Neko-Family-Proxy` repo)
-- **T6B Implementation Candidate**: Local unpushed candidate ready for review.
+- **Backend Git T6B Migration Commit**: `94f389c5c3dfd6c919dcbdb54955ebc621345b5f`
+- **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
+- **Admin Runtime Source (T5 Baseline)**: `840adc18da08cd3af284c5e2cbffbb20d5ef5d6a`
 
 ---
 
 ## 3. Monitoring System Operational State
 
 ```text
-CURRENT_PRODUCTION_MONITORING = LIVE (T4B/T5)
-CURRENT_PRODUCTION_STORAGE    = LATEST_ONLY (public.server_metrics_latest)
-CURRENT_LIVE_GRAPH            = BROWSER_LOCAL_ROLLING (~5 minutes, 60 samples, resets on reload)
-T6B_HISTORICAL_CODE_STATUS    = IMPLEMENTED & TESTED LOCALLY (Pending T6D Production Gate)
-HISTORICAL_RETENTION_RULE     = 7 DAYS RAW (Pruned hourly via launcher.prune_server_metrics_history)
+CURRENT_PRODUCTION_MONITORING   = LIVE (T4B/T5)
+CURRENT_PRODUCTION_STORAGE      = LATEST_ONLY (public.server_metrics_latest)
+CURRENT_LIVE_GRAPH              = BROWSER_LOCAL_ROLLING (~5 minutes, 60 samples, resets on reload)
+PRODUCTION_HISTORY              = NOT DEPLOYED (Pending T6D Production Gate)
+PRODUCTION_HISTORY_API          = NOT DEPLOYED (Pending T6D Production Gate)
+PRODUCTION_HISTORICAL_CHARTS    = NOT DEPLOYED (Pending T6D Production Gate)
+T6B_HISTORICAL_CODE_STATUS      = IMPLEMENTED & TESTED LOCALLY
+T6C_UI_CODE_STATUS              = IMPLEMENTED & TESTED LOCALLY
+HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via launcher.prune_server_metrics_history)
 ```
 
 ---

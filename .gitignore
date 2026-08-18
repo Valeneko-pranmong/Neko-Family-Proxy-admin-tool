@@ -14,3 +14,5 @@ npm-debug.log*
 /work/
 .vercel
 .env*
+__pycache__/
+*.py[cod]

@@ -3,6 +3,7 @@ import {
   formatBps,
   formatBytes,
   formatDate,
+  formatHistoryBucket,
   formatRelativeAge,
   formatTime,
   formatTrendBucket,
@@ -10,6 +11,7 @@ import {
   statusIcon,
 } from "../ui/escape.js";
 import { cell, dateCell, statusBadge, table } from "../ui/table.js";
+import { segmentHistoryPoints } from "../state.js";
 
 function heading(title, subtitle, action = "") {
   return `
@@ -141,7 +143,7 @@ export function renderServerHealth(server = {}, stats = {}) {
   `;
 }
 
-export function renderLiveServerChart(history = [], server = {}) {
+export function renderLiveServerChart(history = [], server = {}, rangeControls = "") {
   const points = Array.isArray(history) ? history : [];
   const latestPoint = points.length > 0 ? points[points.length - 1] : null;
   const currentRx = latestPoint ? formatBps(latestPoint.rxBps) : formatBps(server?.rx_bps);
@@ -211,8 +213,17 @@ export function renderLiveServerChart(history = [], server = {}) {
     `;
   }
 
+  const rangeHtml = rangeControls || `
+    <div class="range-switch server-chart-range-switch" role="tablist" aria-label="ช่วงเวลากราฟ Server Network Activity">
+      <button class="is-selected" data-action="set_server_chart_range" data-range="live" role="tab" aria-selected="true" aria-label="กราฟ Live (เซสชันปัจจุบัน)">LIVE</button>
+      <button data-action="set_server_chart_range" data-range="1h" role="tab" aria-selected="false" aria-label="กราฟย้อนหลัง 1 ชั่วโมง">1H</button>
+      <button data-action="set_server_chart_range" data-range="24h" role="tab" aria-selected="false" aria-label="กราฟย้อนหลัง 24 ชั่วโมง">24H</button>
+      <button data-action="set_server_chart_range" data-range="7d" role="tab" aria-selected="false" aria-label="กราฟย้อนหลัง 7 วัน">7D</button>
+    </div>
+  `;
+
   return `
-    <section class="panel live-chart-panel" aria-label="Live Network Activity">
+    <section class="panel live-chart-panel" aria-label="Server Network Activity">
       <div class="panel-title-row">
         <div>
           <div class="panel-eyebrow">REAL-TIME TRAFFIC</div>
@@ -220,6 +231,7 @@ export function renderLiveServerChart(history = [], server = {}) {
           <p class="muted">Live — Since Dashboard Opened · บันทึกในหน่วยความจำเบราว์เซอร์ (Rolling Buffer สูงสุด 60 จุด / ~5 นาที)</p>
         </div>
         <div class="chart-meta-actions">
+          ${rangeHtml}
           ${statusBadgeHtml}
         </div>
       </div>
@@ -230,6 +242,220 @@ export function renderLiveServerChart(history = [], server = {}) {
       ${chartBody}
     </section>
   `;
+}
+
+export function renderHistoricalServerChart(range = "1h", history = {}, server = {}, rangeControls = "") {
+  const points = Array.isArray(history?.points) ? history.points : [];
+  const loading = Boolean(history?.loading);
+  const error = history?.error ? String(history.error) : "";
+  const availableSince = history?.available_since;
+  const bucketSeconds = Number(history?.bucket_seconds) || (range === "1h" ? 60 : range === "24h" ? 300 : 1800);
+
+  const rangeLabels = {
+    "1h": {
+      eyebrow: "HISTORICAL TRAFFIC (1H)",
+      title: "Historical Network Activity — Last 1 Hour",
+      desc: "Historical — Last 1 Hour · ข้อมูล aggregate ทุก 1 นาที (สูงสุด 60 จุด)",
+    },
+    "24h": {
+      eyebrow: "HISTORICAL TRAFFIC (24H)",
+      title: "Historical Network Activity — Last 24 Hours",
+      desc: "Historical — Last 24 Hours · ข้อมูล aggregate ทุก 5 นาที (สูงสุด 288 จุด)",
+    },
+    "7d": {
+      eyebrow: "HISTORICAL TRAFFIC (7D)",
+      title: "Historical Network Activity — Last 7 Days",
+      desc: "Historical — Last 7 Days · ข้อมูล aggregate ทุก 30 นาที (สูงสุด 336 จุด)",
+    },
+  };
+
+  const config = rangeLabels[range] || rangeLabels["1h"];
+  const availableNotice = availableSince
+    ? ` · มีข้อมูลตั้งแต่ ${escapeHtml(formatTime(availableSince))}`
+    : "";
+  const subtitle = `${config.desc}${availableNotice}`;
+
+  const rangeHtml = rangeControls || `
+    <div class="range-switch server-chart-range-switch" role="tablist" aria-label="ช่วงเวลากราฟ Server Network Activity">
+      <button data-action="set_server_chart_range" data-range="live" role="tab" aria-selected="false" aria-label="กราฟ Live (เซสชันปัจจุบัน)">LIVE</button>
+      <button class="${range === "1h" ? "is-selected" : ""}" data-action="set_server_chart_range" data-range="1h" role="tab" aria-selected="${range === "1h"}" aria-label="กราฟย้อนหลัง 1 ชั่วโมง">1H</button>
+      <button class="${range === "24h" ? "is-selected" : ""}" data-action="set_server_chart_range" data-range="24h" role="tab" aria-selected="${range === "24h"}" aria-label="กราฟย้อนหลัง 24 ชั่วโมง">24H</button>
+      <button class="${range === "7d" ? "is-selected" : ""}" data-action="set_server_chart_range" data-range="7d" role="tab" aria-selected="${range === "7d"}" aria-label="กราฟย้อนหลัง 7 วัน">7D</button>
+    </div>
+  `;
+
+  let chartStatusTag = "";
+  if (loading) {
+    chartStatusTag = `<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">↻</span> กำลังโหลดประวัติ…</span>`;
+  } else if (error && points.length > 0) {
+    chartStatusTag = `<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">⚠</span> รีเฟรชไม่สำเร็จ</span>`;
+  } else if (points.length > 0) {
+    chartStatusTag = `<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">●</span> ${points.length} จุด</span>`;
+  }
+
+  let legendHtml = "";
+  if (points.length > 0) {
+    const avgRx = formatBps(points.reduce((acc, p) => acc + (Number(p.rx_bps_avg) || 0), 0) / points.length);
+    const avgTx = formatBps(points.reduce((acc, p) => acc + (Number(p.tx_bps_avg) || 0), 0) / points.length);
+    const peakRx = formatBps(Math.max(...points.map((p) => Number(p.rx_bps_max) || Number(p.rx_bps_avg) || 0)));
+    const peakTx = formatBps(Math.max(...points.map((p) => Number(p.tx_bps_max) || Number(p.tx_bps_avg) || 0)));
+
+    const validPings = points.filter((p) => p.ping_ms_avg !== null && p.ping_ms_avg !== undefined && Number.isFinite(Number(p.ping_ms_avg)));
+    const avgPing = validPings.length > 0
+      ? `${(validPings.reduce((acc, p) => acc + Number(p.ping_ms_avg), 0) / validPings.length).toFixed(1)} ms`
+      : null;
+
+    const hasServiceFailure = points.some((p) => p.had_service_failure || p.had_listener_failure);
+
+    legendHtml = `
+      <div class="live-chart-legend">
+        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download (Avg): <strong>${escapeHtml(avgRx)}</strong> <small>(Peak: ${escapeHtml(peakRx)})</small></span>
+        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload (Avg): <strong>${escapeHtml(avgTx)}</strong> <small>(Peak: ${escapeHtml(peakTx)})</small></span>
+        ${avgPing ? `<span class="legend-item"><i class="legend-dot legend-ping"></i> Latency (VPS → Upstream): <strong>${escapeHtml(avgPing)}</strong></span>` : ""}
+        ${hasServiceFailure ? `<span class="legend-item legend-alert"><i class="legend-dot legend-degraded"></i> มี Service/Listener ขัดข้องในช่วงเวลา</span>` : ""}
+      </div>
+    `;
+  }
+
+  let chartBody = "";
+  if (loading && points.length === 0) {
+    chartBody = `
+      <div class="chart-empty chart-loading" role="status" aria-label="กำลังโหลดข้อมูลประวัติย้อนหลัง">
+        <strong>กำลังโหลดข้อมูลประวัติย้อนหลัง (${escapeHtml(range.toUpperCase())})…</strong>
+        <span>กำลังดึงข้อมูล Time-series จาก Server History API</span>
+      </div>
+    `;
+  } else if (error && points.length === 0) {
+    chartBody = `
+      <div class="chart-empty chart-error" role="alert">
+        <strong>ข้อมูลประวัติย้อนหลังไม่พร้อมใช้งานชั่วคราว</strong>
+        <span>${escapeHtml(error)}</span>
+      </div>
+    `;
+  } else if (points.length === 0) {
+    chartBody = `
+      <div class="chart-empty">
+        <strong>ยังไม่มีข้อมูลประวัติย้อนหลังในช่วงเวลานี้</strong>
+        <span>ระบบจะไม่สร้างข้อมูลจำลองหรือเส้นศูนย์แทนข้อมูลจริง (ประวัติเริ่มสะสมเมื่อระบบเปิดใช้งาน)</span>
+      </div>
+    `;
+  } else {
+    const staleAlert = error
+      ? `<div class="inline-alert chart-stale-alert" role="alert">ข้อมูลประวัติย้อนหลังอาจไม่อัปเดต (รีเฟรชไม่สำเร็จ: ${escapeHtml(error)}) · กำลังแสดงข้อมูลล่าสุดที่มี</div>`
+      : "";
+
+    const width = 840;
+    const height = 240;
+    const pad = { left: 68, right: 20, top: 24, bottom: 36 };
+
+    const maxVal = Math.max(1000, ...points.flatMap((p) => [Number(p.rx_bps_avg) || 0, Number(p.tx_bps_avg) || 0]));
+    const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, points.length - 1);
+    const y = (value) => height - pad.bottom - ((Number(value) || 0) * (height - pad.top - pad.bottom)) / maxVal;
+
+    const segments = segmentHistoryPoints(points, bucketSeconds, 1.5);
+
+    let polylinesHtml = "";
+    let currentIndex = 0;
+    for (const seg of segments) {
+      const segIndices = seg.map((_, i) => currentIndex + i);
+      currentIndex += seg.length;
+      if (seg.length > 1) {
+        const rxPoly = seg.map((p, i) => `${x(segIndices[i])},${y(p.rx_bps_avg)}`).join(" ");
+        const txPoly = seg.map((p, i) => `${x(segIndices[i])},${y(p.tx_bps_avg)}`).join(" ");
+        polylinesHtml += `<polyline points="${rxPoly}" fill="none" stroke="#3f76b7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+        polylinesHtml += `<polyline points="${txPoly}" fill="none" stroke="#287b5b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+      }
+    }
+
+    const dots = points.map((p, i) => {
+      const timeStr = formatHistoryBucket(p.bucket_start, range);
+      let title = `${timeStr} · VPS Download: ${formatBps(p.rx_bps_avg)} (Peak: ${formatBps(p.rx_bps_max || p.rx_bps_avg)}) · VPS Upload: ${formatBps(p.tx_bps_avg)} (Peak: ${formatBps(p.tx_bps_max || p.tx_bps_avg)}) · Samples: ${p.sample_count}`;
+      if (p.ping_ms_avg !== null && p.ping_ms_avg !== undefined) {
+        title += ` · Latency (VPS → Upstream): ${Number(p.ping_ms_avg).toFixed(1)} ms`;
+      }
+      if (p.packet_loss_percent_avg !== null && p.packet_loss_percent_avg !== undefined && Number(p.packet_loss_percent_avg) > 0) {
+        title += ` · Loss: ${Number(p.packet_loss_percent_avg).toFixed(1)}%`;
+      }
+      if (p.had_service_failure || p.had_listener_failure) {
+        title += ` · ⚠️ Shadowsocks Service/Listener Degraded`;
+      }
+
+      const rxDot = `<circle tabindex="0" cx="${x(i)}" cy="${y(p.rx_bps_avg)}" r="3" fill="#3f76b7" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+      const txDot = `<circle tabindex="0" cx="${x(i)}" cy="${y(p.tx_bps_avg)}" r="3" fill="#287b5b" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+      const failureDot = (p.had_service_failure || p.had_listener_failure)
+        ? `<circle cx="${x(i)}" cy="${y(p.rx_bps_avg)}" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" class="degradation-marker" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`
+        : "";
+
+      return `${rxDot}${txDot}${failureDot}`;
+    }).join("");
+
+    const timeLabels = points.map((p, i) => {
+      const step = Math.max(1, Math.floor(points.length / 5));
+      if (i % step !== 0 && i !== points.length - 1) return "";
+      return `<text x="${x(i)}" y="${height - 12}" text-anchor="middle" class="chart-time-label">${escapeHtml(formatHistoryBucket(p.bucket_start, range))}</text>`;
+    }).join("");
+
+    chartBody = `
+      ${staleAlert}
+      <div class="chart-wrap" role="img" aria-label="กราฟ ${escapeHtml(config.title)}">
+        <svg class="activity-chart historical-network-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${y(maxVal / 2)}" x2="${width - pad.right}" y2="${y(maxVal / 2)}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
+          <text x="8" y="${pad.top + 5}" class="chart-max">${escapeHtml(formatBps(maxVal))}</text>
+          <text x="8" y="${y(maxVal / 2) + 4}" class="chart-max">${escapeHtml(formatBps(maxVal / 2))}</text>
+          <text x="36" y="${height - pad.bottom + 4}" class="chart-max">0 bps</text>
+          ${polylinesHtml}
+          ${dots}
+          ${timeLabels}
+        </svg>
+      </div>
+    `;
+  }
+
+  return `
+    <section class="panel live-chart-panel historical-chart-panel" aria-label="${escapeHtml(config.title)}">
+      <div class="panel-title-row">
+        <div>
+          <div class="panel-eyebrow">${escapeHtml(config.eyebrow)}</div>
+          <h3>${escapeHtml(config.title)}</h3>
+          <p class="muted">${escapeHtml(subtitle)}</p>
+        </div>
+        <div class="chart-meta-actions">
+          ${rangeHtml}
+          ${chartStatusTag}
+        </div>
+      </div>
+      ${legendHtml}
+      ${chartBody}
+    </section>
+  `;
+}
+
+export function renderServerChart(chartState = {}, server = {}) {
+  const range = ["live", "1h", "24h", "7d"].includes(chartState.range) ? chartState.range : "live";
+  const liveHistory = Array.isArray(chartState.liveHistory) ? chartState.liveHistory : [];
+  const history = chartState.history || {};
+
+  const rangeButtons = ["live", "1h", "24h", "7d"].map((r) => {
+    const isSelected = r === range;
+    const label = r.toUpperCase();
+    const title = r === "live"
+      ? "กราฟ Live Real-time (~5 นาที)"
+      : r === "1h"
+        ? "กราฟย้อนหลัง 1 ชั่วโมง (ความละเอียด 1 นาที)"
+        : r === "24h"
+          ? "กราฟย้อนหลัง 24 ชั่วโมง (ความละเอียด 5 นาที)"
+          : "กราฟย้อนหลัง 7 วัน (ความละเอียด 30 นาที)";
+    return `<button class="${isSelected ? "is-selected" : ""}" data-action="set_server_chart_range" data-range="${r}" role="tab" aria-selected="${isSelected}" aria-label="${escapeHtml(title)}">${label}</button>`;
+  }).join("");
+
+  const rangeSwitchHtml = `<div class="range-switch server-chart-range-switch" role="tablist" aria-label="ช่วงเวลากราฟ Server Network Activity">${rangeButtons}</div>`;
+
+  if (range === "live") {
+    return renderLiveServerChart(liveHistory, server, rangeSwitchHtml);
+  }
+  return renderHistoricalServerChart(range, history, server, rangeSwitchHtml);
 }
 
 export function renderOverview(data = {}) {
@@ -309,7 +535,11 @@ export function renderOverview(data = {}) {
     </div>
     ${error}
     ${renderServerHealth(server, stats)}
-    ${renderLiveServerChart(liveServerHistory, server)}
+    ${renderServerChart({
+      range: data.serverChartRange || "live",
+      liveHistory: liveServerHistory,
+      history: data.serverHistory || {},
+    }, server)}
     <div class="section-title-divider">
       <h3>สถิติสมาชิกและสิทธิ์การใช้งาน (Session Authority)</h3>
     </div>

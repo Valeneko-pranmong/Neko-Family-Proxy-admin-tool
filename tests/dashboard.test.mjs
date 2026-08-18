@@ -18,11 +18,13 @@ import {
   statusIcon,
 } from "../standalone/src/ui/escape.js";
 import { statusBadge } from "../standalone/src/ui/table.js";
-import { appendLiveServerSample, MAX_LIVE_SAMPLES } from "../standalone/src/state.js";
+import { appendLiveServerSample, MAX_LIVE_SAMPLES, segmentHistoryPoints } from "../standalone/src/state.js";
 import {
+  renderHistoricalServerChart,
   renderLiveServerChart,
   renderOverview,
   renderSectionRefreshNotice,
+  renderServerChart,
   renderServerHealth,
   renderSessions,
 } from "../standalone/src/sections/render.js";
@@ -511,4 +513,138 @@ test("renderSessions strictly respects privacy boundaries and excludes client ha
   assert.doesNotMatch(html, /8888/);
   assert.doesNotMatch(html, /123456/);
   assert.match(html, /secret_user/);
+});
+
+test("renderServerChart renders range tabs for LIVE, 1H, 24H, 7D", () => {
+  const html = renderServerChart({ range: "live", liveHistory: [], history: {} });
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /data-range="live"/);
+  assert.match(html, /data-range="1h"/);
+  assert.match(html, /data-range="24h"/);
+  assert.match(html, /data-range="7d"/);
+  assert.match(html, /is-selected.*data-range="live"/);
+});
+
+test("renderServerChart preserves T5 Live authority on LIVE mode", () => {
+  const liveHistory = [
+    { observedAt: "2026-08-18T10:00:00.000Z", rxBps: 12000000, txBps: 6000000 },
+  ];
+  const html = renderServerChart({ range: "live", liveHistory, history: {} });
+  assert.match(html, /Live Network Activity/);
+  assert.match(html, /Live — Since Dashboard Opened/);
+  assert.match(html, /12.00 Mbps/);
+  assert.match(html, /6.00 Mbps/);
+});
+
+test("renderHistoricalServerChart renders 1H, 24H, 7D titles and metadata", () => {
+  const h1 = renderHistoricalServerChart("1h", { points: [] });
+  assert.match(h1, /Historical Network Activity — Last 1 Hour/);
+  assert.match(h1, /ข้อมูล aggregate ทุก 1 นาที \(สูงสุด 60 จุด\)/);
+
+  const h24 = renderHistoricalServerChart("24h", { points: [] });
+  assert.match(h24, /Historical Network Activity — Last 24 Hours/);
+  assert.match(h24, /ข้อมูล aggregate ทุก 5 นาที \(สูงสุด 288 จุด\)/);
+
+  const h7d = renderHistoricalServerChart("7d", { points: [] });
+  assert.match(h7d, /Historical Network Activity — Last 7 Days/);
+  assert.match(h7d, /ข้อมูล aggregate ทุก 30 นาที \(สูงสุด 336 จุด\)/);
+});
+
+test("renderHistoricalServerChart displays available_since notice when present", () => {
+  const html = renderHistoricalServerChart("1h", {
+    available_since: "2026-08-18T11:30:00.000Z",
+    points: [],
+  });
+  assert.match(html, /มีข้อมูลตั้งแต่/);
+});
+
+test("renderHistoricalServerChart renders loading state when points empty and loading true", () => {
+  const html = renderHistoricalServerChart("1h", { loading: true, points: [] });
+  assert.match(html, /กำลังโหลดข้อมูลประวัติย้อนหลัง \(1H\)…/);
+});
+
+test("renderHistoricalServerChart renders isolated error state when points empty and error present", () => {
+  const html = renderHistoricalServerChart("1h", { error: "Network timeout", points: [] });
+  assert.match(html, /ข้อมูลประวัติย้อนหลังไม่พร้อมใช้งานชั่วคราว/);
+  assert.match(html, /Network timeout/);
+});
+
+test("renderHistoricalServerChart renders stale warning when points exist and refresh error present", () => {
+  const points = [
+    { bucket_start: "2026-08-18T11:00:00.000Z", rx_bps_avg: 5000000, tx_bps_avg: 2000000, sample_count: 12 },
+  ];
+  const html = renderHistoricalServerChart("1h", { error: "500 Internal Error", points });
+  assert.match(html, /ข้อมูลประวัติย้อนหลังอาจไม่อัปเดต/);
+  assert.match(html, /500 Internal Error/);
+  assert.match(html, /<svg/);
+});
+
+test("renderHistoricalServerChart renders empty state without fabricating fake zeros", () => {
+  const html = renderHistoricalServerChart("1h", { points: [] });
+  assert.match(html, /ยังไม่มีข้อมูลประวัติย้อนหลังในช่วงเวลานี้/);
+  assert.match(html, /ระบบจะไม่สร้างข้อมูลจำลองหรือเส้นศูนย์แทนข้อมูลจริง/);
+  assert.doesNotMatch(html, /<polyline/);
+});
+
+test("segmentHistoryPoints splits continuous points across gaps (>1.5x bucket_seconds)", () => {
+  const bucketSeconds = 60;
+  const points = [
+    { bucket_start: "2026-08-18T11:00:00.000Z" },
+    { bucket_start: "2026-08-18T11:01:00.000Z" }, // 60s gap (normal)
+    { bucket_start: "2026-08-18T11:02:00.000Z" }, // 60s gap (normal)
+    { bucket_start: "2026-08-18T11:10:00.000Z" }, // 8min gap (>90s) -> gap!
+    { bucket_start: "2026-08-18T11:11:00.000Z" }, // 60s gap (normal)
+  ];
+  const segments = segmentHistoryPoints(points, bucketSeconds, 1.5);
+  assert.equal(segments.length, 2);
+  assert.equal(segments[0].length, 3);
+  assert.equal(segments[1].length, 2);
+});
+
+test("renderHistoricalServerChart renders separate polylines across time gaps", () => {
+  const points = [
+    { bucket_start: "2026-08-18T11:00:00.000Z", rx_bps_avg: 1000000, tx_bps_avg: 500000, sample_count: 12 },
+    { bucket_start: "2026-08-18T11:01:00.000Z", rx_bps_avg: 2000000, tx_bps_avg: 1000000, sample_count: 12 },
+    // 10 minute outage gap
+    { bucket_start: "2026-08-18T11:11:00.000Z", rx_bps_avg: 3000000, tx_bps_avg: 1500000, sample_count: 12 },
+    { bucket_start: "2026-08-18T11:12:00.000Z", rx_bps_avg: 4000000, tx_bps_avg: 2000000, sample_count: 12 },
+  ];
+  const html = renderHistoricalServerChart("1h", { points, bucket_seconds: 60 });
+  // There should be 2 rx polylines and 2 tx polylines (total 4 polylines)
+  const polylineMatches = html.match(/<polyline/g) || [];
+  assert.equal(polylineMatches.length, 4);
+});
+
+test("renderHistoricalServerChart renders service failure markers when degradation occurs", () => {
+  const points = [
+    { bucket_start: "2026-08-18T11:00:00.000Z", rx_bps_avg: 1000000, tx_bps_avg: 500000, sample_count: 12, had_service_failure: false, had_listener_failure: false },
+    { bucket_start: "2026-08-18T11:01:00.000Z", rx_bps_avg: 500000, tx_bps_avg: 200000, sample_count: 12, had_service_failure: true, had_listener_failure: true },
+  ];
+  const html = renderHistoricalServerChart("1h", { points, bucket_seconds: 60 });
+  assert.match(html, /degradation-marker/);
+  assert.match(html, /มี Service\/Listener ขัดข้องในช่วงเวลา/);
+  assert.match(html, /Shadowsocks Service\/Listener Degraded/);
+});
+
+test("renderHistoricalServerChart strictly labels ping as VPS → Upstream and preserves null pings", () => {
+  const points = [
+    { bucket_start: "2026-08-18T11:00:00.000Z", rx_bps_avg: 1000000, tx_bps_avg: 500000, ping_ms_avg: 12.4, sample_count: 12 },
+    { bucket_start: "2026-08-18T11:01:00.000Z", rx_bps_avg: 2000000, tx_bps_avg: 1000000, ping_ms_avg: null, sample_count: 12 },
+  ];
+  const html = renderHistoricalServerChart("1h", { points, bucket_seconds: 60 });
+  assert.match(html, /VPS → Upstream/);
+  assert.doesNotMatch(html, /PSO2 JP/);
+  assert.doesNotMatch(html, /Thailand → Japan/);
+});
+
+test("renderOverview integrates renderServerChart with historical state and server health", () => {
+  const html = renderOverview({
+    stats: { users: 10, activeLicenses: 5, activeSessions: 3, onlineSessionCount: 2 },
+    server: { host_status: "ONLINE", rx_bps: 1000000, tx_bps: 500000, uptime_seconds: 3600 },
+    serverChartRange: "1h",
+    serverHistory: { points: [], loading: false },
+  });
+  assert.match(html, /ONLINE/);
+  assert.match(html, /Historical Network Activity — Last 1 Hour/);
+  assert.match(html, /data-range="1h"/);
 });

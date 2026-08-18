@@ -18,6 +18,7 @@ import { escapeHtml } from "./ui/escape.js";
 import { toast } from "./ui/toast.js";
 
 const POLL_CADENCE_MS = 5000;
+const HISTORY_POLL_CADENCE_MS = 30000;
 
 const root = document.querySelector("#app");
 const store = createStore();
@@ -28,6 +29,9 @@ let loadRequestId = 0;
 let actionInFlight = false;
 let pollTimer = null;
 let pollInFlight = false;
+let historyPollTimer = null;
+let historyRequestInFlight = false;
+let historyRequestId = 0;
 
 function render() {
   if (!session.authenticated) {
@@ -54,6 +58,8 @@ function render() {
           ? {
               ...(sectionData || {}),
               liveServerHistory: store.state.liveServerHistory,
+              serverChartRange: store.state.serverChartRange,
+              serverHistory: store.state.serverHistory,
               _ui: { refreshing: store.state.refreshing, error: store.state.error },
             }
           : sectionData;
@@ -82,6 +88,72 @@ async function handleUnauthorized(error) {
   stopPolling();
   await session.logout({ forceLocal: true });
   return true;
+}
+
+async function fetchServerMetricsHistory(range = store.state.serverChartRange, isInterval = false) {
+  if (range === "live") return;
+  if (historyRequestInFlight) return;
+  const requestId = ++historyRequestId;
+  historyRequestInFlight = true;
+
+  if (!isInterval) {
+    store.patch({
+      serverHistory: {
+        ...store.state.serverHistory,
+        loading: true,
+        error: "",
+      },
+    });
+  }
+
+  try {
+    const result = await api.loadServerMetricsHistory(range);
+    // RACE PROTECTION 1 & 2: Range switch & Live switch check
+    if (requestId !== historyRequestId || store.state.serverChartRange !== range) {
+      return;
+    }
+    store.patch({
+      serverHistory: {
+        range: result.range || range,
+        bucket_seconds: result.bucket_seconds || (range === "1h" ? 60 : range === "24h" ? 300 : 1800),
+        available_since: result.available_since || null,
+        points: Array.isArray(result.points) ? result.points : [],
+        points_count: result.points_count || (result.points ? result.points.length : 0),
+        loading: false,
+        error: "",
+        lastSuccessAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    if (requestId !== historyRequestId || store.state.serverChartRange !== range) {
+      return;
+    }
+    if (await handleUnauthorized(error)) return;
+    store.patch({
+      serverHistory: {
+        ...store.state.serverHistory,
+        loading: false,
+        error: error instanceof Error ? error.message : "โหลดข้อมูลประวัติย้อนหลังไม่สำเร็จ",
+      },
+    });
+  } finally {
+    if (requestId === historyRequestId) {
+      historyRequestInFlight = false;
+    }
+  }
+}
+
+async function pollHistory() {
+  if (
+    !session.authenticated ||
+    store.state.active !== "overview" ||
+    document.visibilityState !== "visible" ||
+    store.state.serverChartRange === "live" ||
+    historyRequestInFlight
+  ) {
+    return;
+  }
+  await fetchServerMetricsHistory(store.state.serverChartRange, true);
 }
 
 async function pollOverview() {
@@ -123,12 +195,17 @@ async function pollOverview() {
 function startPolling() {
   stopPolling();
   pollTimer = setInterval(pollOverview, POLL_CADENCE_MS);
+  historyPollTimer = setInterval(pollHistory, HISTORY_POLL_CADENCE_MS);
 }
 
 function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (historyPollTimer) {
+    clearInterval(historyPollTimer);
+    historyPollTimer = null;
   }
 }
 
@@ -379,6 +456,9 @@ document.addEventListener("visibilitychange", () => {
     store.state.active === "overview"
   ) {
     void pollOverview();
+    if (store.state.serverChartRange !== "live") {
+      void fetchServerMetricsHistory(store.state.serverChartRange, true);
+    }
   }
 });
 
@@ -428,6 +508,18 @@ root.addEventListener("click", async (event) => {
   const name = target.dataset.action;
   if (name === "refresh_overview") {
     await load("overview");
+    if (store.state.serverChartRange !== "live") {
+      void fetchServerMetricsHistory(store.state.serverChartRange, true);
+    }
+    return;
+  }
+  if (name === "set_server_chart_range") {
+    const range = target.dataset.range;
+    if (!["live", "1h", "24h", "7d"].includes(range)) return;
+    store.patch({ serverChartRange: range });
+    if (range !== "live") {
+      void fetchServerMetricsHistory(range, false);
+    }
     return;
   }
   if (name === "set_range") {

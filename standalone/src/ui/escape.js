@@ -42,6 +42,23 @@ export function formatTrendBucket(value, range = "14d") {
     : { day: "numeric", month: "short", timeZone: "Asia/Bangkok" }).format(date);
 }
 
+export function formatHistoryBucket(value, range = "1h") {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return display(value);
+  if (range === "1h" || range === "24h") {
+    return new Intl.DateTimeFormat("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Bangkok",
+    }).format(date);
+  }
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Bangkok",
+  }).format(date);
+}
+
 export function formatBytes(bytes) {
   const num = Number(bytes);
   if (!Number.isFinite(num) || num <= 0) return "0 B";

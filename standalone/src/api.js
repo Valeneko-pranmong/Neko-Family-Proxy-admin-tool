@@ -46,3 +46,9 @@ export const runAction = (payload) =>
     method: "POST",
     body: JSON.stringify(payload),
   });
+
+export const loadServerMetricsHistory = (range = "1h", serverId) => {
+  const params = new URLSearchParams({ range });
+  if (serverId) params.set("serverId", serverId);
+  return request(`/api/server/metrics/history?${params}`);
+};
