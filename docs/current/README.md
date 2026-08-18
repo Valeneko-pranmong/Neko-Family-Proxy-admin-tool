@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T7A COMPLETED — DISCORD SERVER STATUS & ALERTING DESIGN
-LAST_CLOSED_PHASE:      T6D (Production Deployment & Historical Metrics Proof)
-ACTIVE_PHASE:           T7A (Design Frozen / Contract Complete)
-NEXT_PHASE:             T7B (Server-Side Discord Integration Implementation & Tests)
+CURRENT_PHASE:          T7 V1A COMPLETED — LEGACY DISCORD DISCOVERY & ARCHITECTURE FREEZE
+LAST_CLOSED_PHASE:      T7 V1A (Legacy Discord Discovery & Unified Lightsail Architecture Freeze)
+ACTIVE_PHASE:           T7 V1A (Completed / Authority Frozen)
+NEXT_PHASE:             T7 V1B (Unified Lightsail Discord Worker Implementation & Tests)
 DATE:                   2026-08-18
 ```
 
@@ -17,11 +17,12 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)** in its entirety and has designed **Phase T7A (Discord Server Status & Alerting)**:
+The project has completed **Phase T6 (Historical Server Metrics)** in its entirety and has completed **Phase T7 V1A (Legacy Discord Discovery & Architecture Freeze)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
-- **Phase T7A (Closed / Design Frozen)** designed the authoritative Discord Server Status & Alerting integration contract (`docs/architecture/discord-server-status.md`), specifying persistent status embeds edited every ~60s, state-transition alerts, anti-flap confirmation, and strict session-only privacy boundaries.
+- **Phase T7 Original Design (Superseded)**: The initial T7A plan (Vercel Cron + Backend Active Users query + Supabase persistence) was **superseded by Owner Decision** in favor of a low-maintenance, resilient, AWS Lightsail-local architecture (**T7 V1**).
+- **Phase T7 V1A (Closed / Authority Frozen)**: Discovered existing legacy Lightsail Discord integration (`neko-traffic-monitor.service`), classified its traffic source (`AF_PACKET` on `ens5:8388`) and calculation (`TOTAL_BYTES_DURING_WINDOW`), froze the unified Lightsail Discord Worker architecture, redefined Traffic Summary as time-weighted average throughput, removed Active Users/Backend/Vercel dependencies, and established local state persistence.
 
 ---
 
@@ -38,9 +39,10 @@ The project has completed **Phase T6 (Historical Server Metrics)** in its entire
 | **Phase T6B** | Historical Persistence & Admin History API | **CLOSED** | Backend `94f389c5...` / Admin `2662193e...` |
 | **Phase T6C** | Admin Dashboard Historical Charts UI | **CLOSED** | Commit `6b5940bd...` / UI Range Selectors & Gap Splitting |
 | **Phase T6D** | Production Deployment & Historical Proof | **CLOSED** | Backend `852bfb67...` / Retention `pg_cron` / Remote Proof Verified |
-| **Phase T7A** | Discord Server Status & Alerting Design | **CLOSED (DESIGN FROZEN)** | `docs/architecture/discord-server-status.md` / `docs/current/discord-server-status-handoff.md` |
-| **Phase T7B** | Discord Server Integration & Automated Tests | **PLANNED / NEXT** | Server-side worker, state persistence migration, unit/state tests |
-| **Phase T7C** | Discord Production Secret & Live Proof | **PLANNED** | Vercel production webhook configuration, live Discord proof |
+| **Original T7A** | Vercel Cron / Backend Discord Architecture | **SUPERSEDED** | Commit `d242c598...` (Superseded by Owner Decision in favor of T7 V1) |
+| **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | `docs/architecture/discord-server-status.md` / `docs/current/discord-server-status-handoff.md` |
+| **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **PLANNED / NEXT** | Local Worker script, time-weighted average calc, state persistence, unit tests |
+| **Phase T7 V1C** | Production Deployment & Legacy Cutover | **PLANNED** | Staging on Lightsail, legacy publisher retirement, live proof |
 
 ### Git Authority Identifiers:
 - **Admin Git T6A Design Commit**: `7168bf655623230f3a327f48705cb880f34fa830`
@@ -49,7 +51,7 @@ The project has completed **Phase T6 (Historical Server Metrics)** in its entire
 - **Admin Git T6B Implementation Commit**: `2662193e077789a3beae5d4063b74b6fba7fd6ec`
 - **Admin Git T6C UI Implementation Commit**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
 - **Admin Runtime Source (Deployed Authority)**: `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d`
-- **Admin Pre-T7 Evidence HEAD**: `54dfaf9bc00884a5072706e181d5a21caa40ab28`
+- **Admin Original T7A Baseline Commit**: `d242c5981d04b2b11fdbae79aa908bd646275eb7`
 
 ---
 
@@ -63,8 +65,8 @@ PRODUCTION_HISTORY              = LIVE (7-day bounded rolling raw telemetry)
 PRODUCTION_HISTORY_API          = LIVE (GET /api/server/metrics/history?range=1h|24h|7d)
 PRODUCTION_HISTORICAL_CHARTS    = LIVE (Interactive range switching, gap splitting, degradation markers)
 HISTORICAL_RETENTION_RULE       = 7 DAYS RAW (Pruned hourly via database scheduled job launcher.prune_server_metrics_history)
-DISCORD_STATUS_INTEGRATION      = DESIGNED / NOT YET IMPLEMENTED (Phase T7A Contract Frozen)
-DISCORD_WEBHOOK_PRODUCTION      = NOT YET CONFIGURED (Pending Phase T7C)
+DISCORD_PRODUCTION_STATE        = LEGACY VPS PUBLISHER ACTIVE (neko-traffic-monitor.service)
+UNIFIED_T7_V1_DISCORD_WORKER    = NOT YET IMPLEMENTED / DEPLOYED (Pending Phase T7 V1B & T7 V1C)
 ```
 
 ---
@@ -83,8 +85,9 @@ DISCORD_WEBHOOK_PRODUCTION      = NOT YET CONFIGURED (Pending Phase T7C)
    - **Backend Location**: Vercel Environment Variables only. Never leaked to client.
 3. **Admin Cookie HMAC Secret (`ADMIN_SESSION_SECRET`)**:
    - **Backend Location**: Vercel Environment Variables only.
-4. **Discord Webhook Secret (`DISCORD_SERVER_STATUS_WEBHOOK_URL`) [Planned T7C]**:
-   - **Backend Location**: Vercel Production Environment Variables only (`SERVER_SIDE_ONLY`).
+4. **Discord Webhook Secret (`DISCORD_WEBHOOK_URL`) [T7 V1 Authority]**:
+   - **VPS Location**: Protected EnvironmentFile `/etc/neko-traffic-monitor.env` (existing legacy) / `/etc/neko/discord.env` (target T7 V1) (`chmod 600`, root-owned).
+   - **Vercel / Backend Location**: Not required (Decoupled from Vercel/Supabase).
    - **Browser Bundle**: Zero access (`WEBHOOK_IN_FRONTEND = NO`).
 
 ---
@@ -144,11 +147,11 @@ A new engineer joining the project should read documents in the following order:
 1. **[docs/current/README.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/README.md)**
    *Current project status, phase boundaries, authoritative commits, and guardrails.*
 2. **[docs/architecture/server-monitoring-session-boundary.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/server-monitoring-session-boundary.md)**
-   *Foundational server monitoring architecture, two-plane decoupling, and privacy boundary.*
+   *Foundational server monitoring architecture, two-plane decoupling, Discord isolation, and privacy boundary.*
 3. **[docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md)**
    *Phase T6 historical server metrics architecture, database model, retention, and query API contract.*
 4. **[docs/architecture/discord-server-status.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/discord-server-status.md)**
-   *Phase T7 Discord server status & alerting architecture, message contracts, anti-spam rules, and state persistence.*
+   *Phase T7 V1 Lightsail Discord architecture, Traffic Summary average throughput calculation, status embeds, transition alerts, anti-spam rules, and local state persistence.*
 5. **[docs/current/server-monitoring-implementation-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/server-monitoring-implementation-handoff.md)**
    *Phase T4B implementation handoff and live VPS production deployment evidence.*
 6. **[docs/current/admin-dashboard-polish-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/admin-dashboard-polish-handoff.md)**
@@ -160,4 +163,4 @@ A new engineer joining the project should read documents in the following order:
 9. **[docs/current/historical-server-metrics-production-proof.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/historical-server-metrics-production-proof.md)**
    *Phase T6D production verification evidence, Supabase migrations, pg_cron retention, and live VPS proof.*
 10. **[docs/current/discord-server-status-handoff.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/current/discord-server-status-handoff.md)**
-    *Phase T7A architecture handoff, state persistence design, test plan matrix, and T7B implementation roadmap.*
+    *Phase T7 V1A legacy discovery & architecture freeze handoff, discovered services/counters, and T7 V1B implementation roadmap.*

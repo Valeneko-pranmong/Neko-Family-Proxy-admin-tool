@@ -1,183 +1,234 @@
-# NEKO FAMILY PROXY — DISCORD SERVER STATUS & ALERTING ARCHITECTURE CONTRACT (PHASE T7)
+# NEKO FAMILY PROXY — DISCORD SERVER STATUS & ALERTING ARCHITECTURE CONTRACT (PHASE T7 V1)
 
 ```text
 DOCUMENT:               docs/architecture/discord-server-status.md
-STATUS:                 DESIGNED (Phase T7A Design & Documentation Contract Frozen)
+STATUS:                 AUTHORITATIVE ARCHITECTURE CONTRACT (T7 V1 FROZEN)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & CONTRACT
 OWNER:                  TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
-CONSUMERS:              BACKEND DISCORD WORKER / SCHEDULER, ADMIN WEB
+PUBLISHER_AUTHORITY:    AWS_LIGHTSAIL (Local-Only Daemon / Scheduler)
+CONSUMERS:              DISCORD WORKER ON JAPAN VPS
 TEAM_CORE SCOPE:        NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER SCOPE:    NO ACTION (Frozen at Phase T3)
-CURRENT_DEPLOYMENT:     NOT YET DEPLOYED (Phase T7B Implementation / Phase T7C Production Proof Planned)
-WEBHOOK_STATUS:         NOT YET CONFIGURED (Production Secret Pending T7C)
+CURRENT_DEPLOYMENT:     LEGACY PUBLISHER ACTIVE (neko-traffic-monitor.service)
+UNIFIED_T7_V1_STATUS:   DESIGNED & FROZEN (T7 V1A Complete — Implementation Planned for T7 V1B)
+SUPERSEDED_COMMIT:      d242c5981d04b2b11fdbae79aa908bd646275eb7 (Original T7A Vercel-Side Plan)
 DATE:                   2026-08-18
 ```
 
 ---
 
-## 1. Executive Summary & Purpose
+## 1. Executive Summary & Architecture Authority (T7 V1)
 
-This document establishes the authoritative specification, data contracts, anti-spam state machine, privacy safeguards, and operational failure boundaries for **Phase T7 (Discord Server Status & Alerting)** in the Neko Family Proxy ecosystem.
+This document establishes the authoritative specification, metric semantics, state persistence models, privacy boundaries, and operational failure boundaries for **Phase T7 V1 (Unified AWS Lightsail Discord Integration)** in the Neko Family Proxy ecosystem.
 
-The primary product goal is to provide operators and community moderators with an honest, real-time, zero-spam operational window into the Japan VPS proxy infrastructure via a dedicated Discord channel:
+### 1.1 Owner Decision — Supersession of Original T7A Plan
 
-```text
-+-------------------------------------------------------------------------------+
-|                       PHASE T7 ARCHITECTURAL GOAL                             |
-+-------------------------------------------------------------------------------+
-| 1. Persistent Operational Status: One pinned/editable message updated every   |
-|    ~60 seconds displaying aggregate health, bandwidth, latency, and sessions. |
-|                                                                               |
-| 2. Discrete State Transition Alerts: Standalone notification messages sent    |
-|    ONLY when the server health state meaningfully transitions (e.g. ONLINE to |
-|    DEGRADED/STALE, or upon RECOVERY).                                         |
-|                                                                               |
-| 3. Strict Zero-Spam / Anti-Flap: Alert deduplication and multi-sample         |
-|    confirmation ensure Discord channels remain clean and actionable.          |
-+-------------------------------------------------------------------------------+
-```
-
----
-
-## 2. Non-Goals & Strict Exclusions
-
-Phase T7 explicitly excludes the following capabilities:
-
-1. **No Client/Player Telemetry in Discord**: Zero client metrics, process names (`pso2.exe`), local SOCKS data, packet flows, DNS lookups, or user identities are ever delivered to Discord.
-2. **No Interactive Bot Commands / Gateway Socket**: V1 is strictly outbound unidirectional HTTP webhook publishing; it does not connect to the Discord Gateway websocket or run an interactive bot daemon.
-3. **No Mass Mentions**: V1 alerts will **NEVER** use `@everyone` or `@here` mentions (`MASS_MENTION = NO`).
-4. **No Direct VPS-to-Discord Webhook Calling**: The Japan VPS monitoring agent never talks directly to Discord; the integration runs exclusively through the trusted Backend serverless/scheduled worker.
-5. **No Browser/Admin UI Dependency**: Status publishing and alerting run completely autonomously in the backend without requiring any admin browser session to remain open.
-
----
-
-## 3. Data Authority & Decoupled Data Planes
-
-The Discord integration derives all displayed metrics strictly from pre-existing, verified, and closed data authorities:
-
-```text
-+-------------------------------------------------------------------------------+
-|                      DISCORD DATA INGESTION PIPELINE                          |
-+-------------------------------------------------------------------------------+
-|                                                                               |
-|  [ SERVER AGGREGATE DATA PLANE ]                                              |
-|  Japan VPS Monitoring Daemon (`neko-server-monitor.service`)                  |
-|       │                                                                       |
-|       ▼ (HTTPS Push every 5s with SERVER_METRICS_INGEST_SECRET)               |
-|  Backend Ingest Endpoint (`/api/server/metrics/ingest`)                       |
-|       │                                                                       |
-|       ▼ (Atomic RPC `launcher.store_server_metrics_sample`)                   |
-|  Supabase `public.server_metrics_latest` Table (Latest Snapshot Authority)    |
-|       │                                                                       |
-|       ├────────────────────────────────────────────────┐                      |
-|       │                                                │                      |
-|       ▼                                                ▼                      |
-|  [ SESSION DATA PLANE ]                   [ DISCORD INTEGRATION WORKER ]      |
-|  Supabase `launcher_sessions`                  (Trusted Backend / Cron)       |
-|  (unrevoked + last_seen_at <= 120s)                    │                      |
-|       │                                                │                      |
-|       └───────────────────────────────────────────────►│                      |
-|                                                        ▼ (HTTPS POST / PATCH) |
-|                                                   Discord Webhook             |
-|                                                                               |
-+-------------------------------------------------------------------------------+
-```
-
-### 3.1 Frozen Authority Mapping Table
-
-| Metric Field in Discord | Authoritative Source | Freshness & Authority Rule |
-| :--- | :--- | :--- |
-| **Status State** | `public.server_metrics_latest` | Evaluated against `observed_at` ($> 30\text{s} \rightarrow \text{STALE}$) and service health. |
-| **Ping Latency (`ping_ms`)** | `public.server_metrics_latest.upstream_ping_ms` | Japan VPS to configured upstream target. |
-| **Packet Loss (`packet_loss_percent`)** | `public.server_metrics_latest.upstream_packet_loss_percent` | 5-packet burst loss rate from Japan VPS. |
-| **Ping Target Label** | `CONFIGURED_UPSTREAM_MONITOR_TARGET` | **MUST BE**: `VPS → Upstream` (Frozen label authority). |
-| **Download Speed** | `public.server_metrics_latest.rx_bps` | Interface delta bits/sec ($\Delta \text{rx\_bytes} / \Delta t \times 8$). |
-| **Upload Speed** | `public.server_metrics_latest.tx_bps` | Interface delta bits/sec ($\Delta \text{tx\_bytes} / \Delta t \times 8$). |
-| **RX Total Bytes** | `public.server_metrics_latest.rx_bytes_total` | Total network interface cumulative bytes received. |
-| **TX Total Bytes** | `public.server_metrics_latest.tx_bytes_total` | Total network interface cumulative bytes sent. |
-| **Host Uptime** | `public.server_metrics_latest.host_uptime_seconds` | System `/proc/uptime` on Japan VPS. Label: `Host Uptime`. |
-| **Shadowsocks Daemon** | `public.server_metrics_latest.proxy_service_status` | Systemd unit state (`active` vs `inactive`/`failed`). |
-| **Shadowsocks Listener** | `public.server_metrics_latest.shadowsocks_service_status` | Local TCP listener state (`listening` vs `closed`/`error`). |
-| **Active Users** | `public.launcher_sessions` | Aggregate integer: `revoked_at IS NULL` AND `last_seen_at >= now() - interval '120 seconds'`. |
-| **Last Observation Age** | `public.server_metrics_latest.observed_at` | Delta from `now() - observed_at` (Never from Discord send timestamp). |
-
----
-
-## 4. Privacy & Security Boundary Contract
-
-The Discord integration is subject to strict privacy governance:
+The original Phase T7A design (commit `d242c5981d04b2b11fdbae79aa908bd646275eb7`) proposed a Vercel-side scheduled cron worker calling Supabase database tables (`public.server_metrics_latest`, `public.launcher_sessions`, and `public.server_status_integrations`).
 
 ```text
 =============================================================================
-STRICTLY FORBIDDEN FROM DISCORD MESSAGES & EMBEDS
+HISTORICAL DESIGN SUPERSEDED RECORD
 =============================================================================
-❌ User Identifiers:      user_id, username, email, display name
-❌ Session & Auth Data:   session_id, token, license_id, JWT, permit key
-❌ Client Hardware Data:  machine_id, device name, hardware hashes, MAC addresses
-❌ Process Details:       Core PID, Game PID (pso2.exe), v2ray PID, client handles
-❌ Client Network Data:   Client RX/TX, destination IPs, DNS queries, packet buffers
-❌ Proxy Secrets:         SERVER_METRICS_INGEST_SECRET, Shadowsocks passwords
+ORIGINAL_T7A_PLAN:
+  - Publisher: Vercel Serverless Cron (* * * * *)
+  - Active Users: Queried from public.launcher_sessions (Supabase)
+  - State Storage: Persisted in PostgreSQL table public.server_status_integrations
+  - Dependencies: Vercel + Supabase + Backend API
+
+SUPERSEDED_STATUS:
+  SUPERSEDED_BY = T7 V1 (AWS Lightsail Unified Local Architecture)
+
+RATIONALE:
+  1. AWS Lightsail is the operational home and single notification authority.
+  2. Lower maintenance overhead: zero Vercel Cron setup, zero Supabase schema migrations.
+  3. Resilience & Failure Independence: Discord reporting continues uninterrupted
+     even if Backend, Supabase, or Vercel experiences outages.
+  4. Privacy & Decoupling: Complete removal of user session dependencies from Discord.
+  5. Existing Working Foundation: Discovered legacy Lightsail Discord integration
+     provides proven raw network capture capabilities that can be cleanly unified.
 =============================================================================
 ```
 
 ```text
-DISCORD_CLIENT_DEEP_TELEMETRY = NO
-DISCORD_USER_IDENTITY         = NO
-DISCORD_USER_COUNT            = AGGREGATE_ONLY
-ACTIVE_USER_AUTHORITY         = SESSION_ONLY
++-------------------------------------------------------------------------------+
+|                       PHASE T7 V1 ARCHITECTURAL GOAL                          |
++-------------------------------------------------------------------------------+
+| 1. ONE Discord Publisher on AWS Lightsail (Unified Worker).                   |
+| 2. ONE Discord Webhook (Reused from protected VPS environment).               |
+| 3. THREE Core Responsibilities:                                               |
+|    A. Persistent Operational Status: One pinned/editable message (~60s).      |
+|    B. Traffic Summary: Chronological usage record per interval (30m),         |
+|       reporting TIME-WEIGHTED AVERAGE THROUGHPUT as primary metric.           |
+|    C. Transition Alerts: Standalone messages posted ONLY on confirmed health   |
+|       state transitions (ONLINE -> DEGRADED/STALE, or RECOVERY).              |
+| 4. ZERO Active Users / ZERO Backend / ZERO Supabase / ZERO Vercel Cron.       |
+| 5. Protected Local State Persistence (/var/lib/neko/discord-state.json).      |
++-------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 5. Status Model & Semantics
+## 2. Legacy Discord Discovery & Operational Baseline
 
-The Discord status integration adheres strictly to the four-tier status model defined in Phase T4A:
+During Phase T7 V1A, read-only operational discovery was conducted on the production AWS Lightsail Japan VPS:
 
 ```text
-+-------------------+-------------------------------------------------------------------+
-| Status State      | Authoritative Criteria & Meaning                                  |
-+-------------------+-------------------------------------------------------------------+
-| 🟢 ONLINE         | Fresh snapshot (`observed_at <= 30s`), systemd daemon is `active`, |
-|                   | and Shadowsocks listener is `listening`.                          |
-|                   |                                                                   |
-| 🟡 DEGRADED       | Fresh snapshot (`observed_at <= 30s`), BUT systemd daemon is NOT  |
-|                   | `active` or Shadowsocks listener is NOT `listening`.              |
-|                   |                                                                   |
-| 🟠 STALE          | Latest snapshot `observed_at > 30s` (VPS daemon stopped reporting)|
-|                   | Invariant: STALE != OFFLINE. Proxy reachability is not disproven. |
-|                   |                                                                   |
-| ⚪ UNKNOWN         | No authoritative snapshot recorded in database.                   |
-+-------------------+-------------------------------------------------------------------+
+=============================================================================
+AWS LIGHTSAIL LEGACY DISCORD DISCOVERY REPORT
+=============================================================================
+LEGACY_SERVICE:               neko-traffic-monitor.service
+SERVICE_PATH:                 /etc/systemd/system/neko-traffic-monitor.service
+EXECUTION_MODEL:              LONG_RUNNING_DAEMON (Type=simple with select() loop)
+LEGACY_SCRIPT:                /usr/local/lib/neko-traffic-monitor/neko_traffic_monitor.py
+RUNTIME_USER:                 root (Capabilities: CAP_NET_RAW)
+LEGACY_SCHEDULE:              30-minute epoch-aligned windows (MONITOR_INTERVAL_SECONDS=1800)
+REPORT_THRESHOLD:             1,048,576 bytes (1 MB minimum; skips interval if below)
+TIMEZONE:                     Asia/Bangkok (Thai date/time formatting)
+
+LEGACY_MESSAGE_MODEL:         NEW_MESSAGE_PER_INTERVAL (POST to Webhook, Thai embed)
+LEGACY_MESSAGE_TITLE:         "🌐 Neko Proxy Core Status"
+
+LEGACY_TRAFFIC_SOURCE:        AF_PACKET raw socket on interface 'ens5' filtered to port 8388
+LEGACY_DOWNLOAD_SOURCE:       Outbound packets from port 8388 on ens5 (VPS -> client)
+LEGACY_UPLOAD_SOURCE:         Inbound packets to port 8388 on ens5 (client -> VPS)
+LEGACY_TRAFFIC_SOURCE_CLASS:  SHADOWSOCKS_PORT_RAW_PACKET_SNIFFING
+
+LEGACY_TRAFFIC_CALCULATION:   TOTAL_BYTES_DURING_WINDOW (Cumulative sum of packet lengths)
+LEGACY_STATE_PERSISTENCE:     NO (In-memory variables only; lost on service restart)
+
+WEBHOOK_SECRET_LOCATION:      /etc/neko-traffic-monitor.env
+WEBHOOK_FILE_PROTECTIONS:     -rw------- 1 root root (0600 least-privilege)
+WEBHOOK_SECRET_PRINTED:       NO
+=============================================================================
 ```
 
-### 5.1 Invariant: No OFFLINE Inference from Stale Monitoring
-```text
-DISCORD_INFERS_OFFLINE = NO
-```
-If Japan VPS telemetry ceases for $> 30\text{s}$, the Discord status **MUST** transition to `STALE`. It must **NEVER** state `SERVER OFFLINE` or `PROXY CRASHED` without independent reachability corroboration, because network firewalls or agent restarts can pause metrics while traffic routing continues uninterrupted.
+### 2.1 Key Insights from Legacy Discovery
+1. **Source Precision**: The legacy script captures traffic specifically on Shadowsocks port `8388` using raw packet sniffing (`AF_PACKET`).
+2. **Missing Rate Authority**: Legacy traffic summary calculates only total cumulative bytes in the interval (e.g. `319.5 MB`), but does **not** compute average throughput or data rate.
+3. **No Persistent Status / Alerts**: Legacy script does not manage a persistent status message and does not send health degradation/recovery alerts.
+4. **State Fragility**: Current state is purely in-memory. If the service restarts mid-interval, partial byte counts are lost.
 
 ---
 
-## 6. Message Delivery & Presentation Architecture
+## 3. Metric Semantics & Traffic Summary Authority
 
-### 6.1 Delivery Architecture: Option C (Persistent Status + Transition Alerts)
-- **Status Delivery Model**: **OPTION C**
-  - **Channel Message 1 (Pinned / Persistent)**: A single dedicated status message that is edited in-place (`PATCH /webhooks/.../messages/{message_id}`) every **60 seconds**.
-  - **Channel Message 2+ (Alerts)**: Standalone messages posted (`POST /webhooks/...`) **ONLY** on confirmed state transitions or service degradations.
-- **Benefits**: Eliminates Discord channel clutter and scrolling spam while providing instant push alerts when issues occur.
+### 3.1 Traffic Summary: Time-Weighted Average Throughput (Frozen Authority)
+
+The owner decision freezes the primary metric of the Discord Traffic Summary as **Average Throughput over the reporting window**:
 
 ```text
-STATUS_DELIVERY_MODEL    = OPTION_C (PERSISTENT_STATUS_EDIT + TRANSITION_ALERTS)
-STATUS_REFRESH_INTERVAL  = 60 seconds
+TRAFFIC_SUMMARY_METRIC   = TIME_WEIGHTED_AVERAGE_THROUGHPUT
+CALCULATION_AUTHORITY    = CUMULATIVE_BYTE_COUNTER_DELTA / REAL_ELAPSED_TIME
+RATE_UNIT_AUTHORITY      = BITS_PER_SECOND (bps, Kbps, Mbps, Gbps)
+WINDOW_TOTAL_BYTES       = OPTIONAL_SECONDARY
 ```
 
-### 6.2 Conceptual Discord Embed Contract
+#### Authoritative Calculation Formulas:
 
-#### A. Persistent Status Embed (Edited Every 60s)
+$$\text{download\_avg\_bps} = \frac{(\text{download\_counter\_end} - \text{download\_counter\_start}) \times 8}{\text{actual\_elapsed\_seconds}}$$
+
+$$\text{upload\_avg\_bps} = \frac{(\text{upload\_counter\_end} - \text{upload\_counter\_start}) \times 8}{\text{actual\_elapsed\_seconds}}$$
+
+```text
+=============================================================================
+CRITICAL CALCULATION INVARIANT:
+DO NOT DEFINE THE AUTHORITY AS: sum(sample_rates) / sample_count
+RATIONALE:
+Irregular sampling intervals or missing probe ticks will bias arithmetic
+sample averages. The cumulative counter delta divided by true elapsed time
+guarantees mathematically exact throughput across the entire interval.
+=============================================================================
+```
+
+### 3.2 Real Elapsed Time Authority
+Never assume configured 30 minutes is exactly 1,800.0 seconds. Use real monotonic/epoch timestamps:
+$$\text{actual\_elapsed\_seconds} = \text{end\_timestamp} - \text{start\_timestamp}$$
+
+### 3.3 Counter Reset Semantics (No Fake Throughput)
+Host reboots, network interface restarts, or counter overflows may cause:
+$$\text{counter\_end} < \text{counter\_start}$$
+
+**Required Handling**:
+- If `counter_end < counter_start`, do **NOT** calculate a massive wrapped integer value.
+- Mark interval as `COUNTER_RESET` or restart baseline collection.
+- Never output fake spike throughput.
+
+### 3.4 Unit Formatting Standards
+- **Average Throughput Rates (`bps`)**: Formatted using decimal SI scaling (1,000):
+  - $< 1,000 \text{ bps} \rightarrow \text{bps}$
+  - $1,000 \text{ to } 999,999 \text{ bps} \rightarrow \text{Kbps}$ (divide by 1,000)
+  - $1,000,000 \text{ to } 999,999,999 \text{ bps} \rightarrow \text{Mbps}$ (divide by 1,000,000)
+  - $\ge 1,000,000,000 \text{ bps} \rightarrow \text{Gbps}$ (divide by 1,000,000,000)
+- **Cumulative Total Bytes**: Formatted using binary IEC scaling (1,024):
+  - $< 1,024 \text{ B} \rightarrow \text{B}$
+  - $1,024 \text{ to } 1,048,575 \text{ B} \rightarrow \text{KB}$ (divide by 1,024)
+  - $1,048,576 \text{ to } 1,073,741,823 \text{ B} \rightarrow \text{MB}$ (divide by 1,048,576)
+  - $\ge 1,073,741,824 \text{ B} \rightarrow \text{GB}$ (divide by 1,073,741,824)
+
+### 3.5 Current Status vs Traffic Summary Separation
+- **CURRENT STATUS**: Near-current network rate and service health condition (live snapshot updated every ~60s in persistent message).
+- **TRAFFIC SUMMARY**: Bounded time-weighted average throughput over an elapsed window (new chronological message posted every ~30m).
+- **Invariant**: These metrics must never be conflated or labeled interchangeably.
+
+---
+
+## 4. Single Unified Discord Worker Architecture
+
+```text
++-------------------------------------------------------------------------------+
+|                      UNIFIED LIGHTSAIL DISCORD WORKER                         |
++-------------------------------------------------------------------------------+
+|                                                                               |
+|  [ LOCAL VPS DATA SOURCES ]                                                   |
+|  ├─ Interface Counters (/proc/net/dev or Port Sniffer on ens5)                |
+|  ├─ Systemd Manager (systemctl is-active shadowsocks-libev)                   |
+|  ├─ Socket Listener Probe (127.0.0.1:8388 TCP check)                          |
+|  ├─ Upstream Latency / Loss Probe (ICMP / TCP to upstream target)             |
+|  └─ Host Uptime (/proc/uptime)                                                |
+|                                                                               |
+|       │                                                                       |
+|       ▼ (Direct In-Process Evaluation)                                        |
+|  [ UNIFIED DISCORD WORKER ] (neko-discord-worker.service / .timer)            |
+|  ├─ Local State: /var/lib/neko/discord-state.json                             |
+|  ├─ Secret Config: /etc/neko/discord.env (chmod 600)                          |
+|                                                                               |
+|       │                                                                       |
+|       ├─► [ Responsibility 1: Current Status ] ──► PATCH status_message_id    |
+|       │   (Single persistent embed updated every ~60s)                        |
+|       │                                                                       |
+|       ├─► [ Responsibility 2: Traffic Summary ] ─► POST new message           |
+|       │   (Average throughput embed every ~30m)                               |
+|       │                                                                       |
+|       └─► [ Responsibility 3: Transition Alerts] ─► POST alert embed          |
+|           (Degradation / Recovery alerts on confirmed state changes)          |
+|                                                                               |
++-------------------------------------------------------------------------------+
+```
+
+### 4.1 Target Service Isolation
+```text
+SYSTEMD_SERVICES_ON_LIGHTSAIL:
+  1. shadowsocks-libev.service    (Core proxy routing)
+  2. neko-server-monitor.service  (Agent pushing telemetry to Admin Web Backend)
+  3. neko-discord-worker.service  (Local Discord status, summary, and alerts)
+  4. neko-discord-worker.timer    (Scheduler firing worker cadence)
+```
+
+```text
+DISCORD_FAILURE_CAN_STOP_MONITORING_AGENT = NO
+DISCORD_FAILURE_CAN_STOP_SHADOWSOCKS      = NO
+```
+
+---
+
+## 5. Discord Presentation Contracts
+
+### 5.1 Responsibility 1: Persistent Current Status (Edited In-Place Every ~60s)
+
 ```text
 ------------------------------------------------------------
-🟩 NEKO FAMILY PROXY — SERVER STATUS
+🌐 NEKO PROXY — CURRENT STATUS
 ------------------------------------------------------------
 Status        🟢 ONLINE
 Ping          1.7 ms
@@ -186,255 +237,200 @@ Loss          0.0%
 ↓ VPS Speed   12.84 Mbps
 ↑ VPS Speed    2.11 Mbps
 
-↓ VPS Total   522.8 MB
-↑ VPS Total    84.2 MB
-
-Active Users  12
 Host Uptime   9d 14h
-
 Shadowsocks   Active
 Listener      Listening
 
 Probe         VPS → Upstream
-Updated       8s ago (2026-08-18 12:45:00 UTC)
+Updated       8s ago (2026-08-18 13:30:00 UTC)
 ------------------------------------------------------------
 ```
 
-#### B. Degradation Alert Embed (Posted on Transition)
+### 5.2 Responsibility 2: Traffic Summary (New Message Every 30m)
+
+```text
+------------------------------------------------------------
+📊 NEKO PROXY — TRAFFIC SUMMARY
+------------------------------------------------------------
+ช่วงเวลา: 18 สิงหาคม 2569 เวลา 13:00–13:30 น. (เวลาไทย)
+
+↓ ดาวน์โหลด (เฉลี่ย)
+**1.42 Mbps**
+(รวม 319.5 MB)
+
+↑ อัปโหลด (เฉลี่ย)
+**0.18 Mbps**
+(รวม 40.5 MB)
+
+Host Uptime: 9d 14h | Status: 🟢 ONLINE
+------------------------------------------------------------
+```
+
+### 5.3 Responsibility 3: Transition Alerts (Posted on State Transitions)
+
+#### A. Degradation Alert
 ```text
 ------------------------------------------------------------
 ⚠️ NEKO SERVER DEGRADED
 ------------------------------------------------------------
 Status changed from ONLINE to DEGRADED.
-Reason: Shadowsocks Listener is Not Listening (Port 8388 unreachable).
-Host telemetry is fresh.
+Reason: Shadowsocks Listener is Not Listening (Port 8388 closed).
 Observed: 10s ago
 ------------------------------------------------------------
 ```
 
-#### C. Stale Telemetry Alert Embed (Posted on Transition)
+#### B. Telemetry Stale Alert
 ```text
 ------------------------------------------------------------
-⏱️ NEKO MONITORING STALE
+⏱️ NEKO PROBE STALE
 ------------------------------------------------------------
 Status changed from ONLINE to STALE.
-No fresh telemetry received from Japan VPS for >30 seconds.
+Local probe cannot reach upstream target.
 Note: Proxy traffic routing is not independently proven offline.
-Last Observed: 42s ago
+Observed: 35s ago
 ------------------------------------------------------------
 ```
 
-#### D. Recovery Alert Embed (Posted on Transition Back to Healthy)
+#### C. Recovery Alert
 ```text
 ------------------------------------------------------------
 ✅ NEKO SERVER RECOVERED
 ------------------------------------------------------------
 Status restored to ONLINE.
 Shadowsocks daemon is Active and Listener is Listening.
-Ping: 1.8 ms | Active Users: 14
+Ping: 1.8 ms | Loss: 0.0%
 Observed: 5s ago
 ------------------------------------------------------------
 ```
 
 ---
 
-## 7. Labeling, Formatting & Unit Conversion Rules
-
-### 7.1 Explicit Direction Labels
-To avoid confusing server infrastructure traffic with client user traffic:
-- **Download Rate**: `↓ VPS Download` or `↓ VPS Speed` (Calculated from `rx_bps`).
-- **Upload Rate**: `↑ VPS Upload` or `↑ VPS Speed` (Calculated from `tx_bps`).
-- **Download Total**: `↓ VPS RX Total` (Calculated from `rx_bytes_total`).
-- **Upload Total**: `↑ VPS TX Total` (Calculated from `tx_bytes_total`).
-- **Prohibited Labels**: `Client Download`, `Client Upload`, `User Speed`.
-
-### 7.2 Unit Semantics
-- **Throughput Rates (`rx_bps`, `tx_bps`)**: Expressed in decimal bit units:
-  - $< 1,000 \text{ bps} \rightarrow \text{bps}$
-  - $1,000 \text{ to } 999,999 \text{ bps} \rightarrow \text{Kbps}$ (divide by $1,000$)
-  - $1,000,000 \text{ to } 999,999,999 \text{ bps} \rightarrow \text{Mbps}$ (divide by $1,000,000$)
-  - $\ge 1,000,000,000 \text{ bps} \rightarrow \text{Gbps}$ (divide by $1,000,000,000$)
-- **Data Volume Totals (`rx_bytes_total`, `tx_bytes_total`)**: Expressed in binary/IEC or standard byte units:
-  - $< 1,024 \text{ B} \rightarrow \text{B}$
-  - $1,024 \text{ to } 1,048,575 \text{ B} \rightarrow \text{KB}$ (divide by $1,024$)
-  - $1,048,576 \text{ to } 1,073,741,823 \text{ B} \rightarrow \text{MB}$ (divide by $1,048,576$)
-  - $1,073,741,824 \text{ to } 1,099,511,627,775 \text{ B} \rightarrow \text{GB}$ (divide by $1,073,741,824$)
-  - $\ge 1,099,511,627,776 \text{ B} \rightarrow \text{TB}$ (divide by $1,099,511,627,776$)
-- **Missing / Null Values**: Must display `—`, `Unknown`, or `Unavailable`. **NEVER** map missing values to `0 ms`, `0.0%`, or `0 Mbps`.
-
----
-
-## 8. Anti-Spam, Anti-Flap & Alert State Machine
+## 6. Privacy & Security Boundary Contract
 
 ```text
-+-------------------------------------------------------------------------------+
-|                       ALERT STATE MACHINE INVARIANTS                          |
-+-------------------------------------------------------------------------------+
-| 1. State Transition Only: Alerts trigger strictly on status state changes.    |
-| 2. Anti-Flap Confirmation:                                                    |
-|    - DEGRADED: Requires 2 consecutive fresh unhealthy samples before alert.   |
-|    - RECOVERY: Requires 2 consecutive healthy samples before recovery alert.  |
-|    - STALE: Fires immediately once snapshot age > 30 seconds.                 |
-| 3. Alert Cooldown: 5-minute safety cooldown prevents duplicate alert storms    |
-|    during rapid process restarts or flapping conditions.                      |
-| 4. Recovery Precedence: Recovery alerts are always permitted when a degraded  |
-|    or stale state successfully resolves.                                      |
-+-------------------------------------------------------------------------------+
+=============================================================================
+STRICT PRIVACY GOVERNANCE — PUBLIC VPS OPERATIONAL STATUS ONLY
+=============================================================================
+Discord is strictly a PUBLIC INFRASTRUCTURE HEALTH projection.
+It is NOT a user monitoring or client diagnostic tool.
+
+STRICTLY FORBIDDEN IN DISCORD:
+❌ User Identifiers:      user_id, username, email, display name
+❌ Session Identifiers:   session_id, token, license_id, JWT, permit key
+❌ Client Hardware Data:  machine_id, device names, MAC addresses
+❌ Process Details:       Core PID, Game PID (pso2.exe), client handles
+❌ Client Network Data:   destination IPs, DNS queries, packet buffers
+❌ Proxy Secrets:         SERVER_METRICS_INGEST_SECRET, Shadowsocks passwords
+❌ Active Users:          REMOVED (Zero user counts in T7 V1)
+=============================================================================
 ```
 
 ```text
-ALERT_ON_STATE_TRANSITION_ONLY = YES
-DUPLICATE_ALERT_SPAM           = NO
-RECOVERY_NOTIFICATION          = YES
-ALERT_COOLDOWN                 = 300 seconds (5 minutes)
-ANTI_FLAP_POLICY               = 2_SAMPLE_CONFIRMATION (DEGRADED/RECOVERY)
+DISCORD_DATA_CLASSIFICATION   = PUBLIC_VPS_OPERATIONAL_STATUS
+DISCORD_USER_IDENTITY         = NO
+DISCORD_CLIENT_DEEP_TELEMETRY = NO
+ACTIVE_USERS                  = REMOVED
 ```
 
 ---
 
-## 9. Integration State Persistence Architecture
+## 7. Status Model & Anti-Spam State Machine
 
-To ensure state machine continuity across serverless cold starts, container recycles, and worker executions, the integration state is persisted in Supabase PostgreSQL:
+### 7.1 Status States
+- 🟢 `ONLINE`: Systemd service active, port 8388 listening, upstream ping responsive.
+- 🟡 `DEGRADED`: Service inactive OR port 8388 closed.
+- 🟠 `STALE`: Upstream probe timeout or unable to inspect local health.
+- ⚪ `UNKNOWN`: Initial startup baseline.
 
-### 9.1 Database Schema Contract (`public.server_status_integrations`)
+```text
+STALE_EQUALS_OFFLINE = NO
+```
 
-```sql
-create table if not exists public.server_status_integrations (
-  id text primary key default 'primary_discord_status',
-  status_message_id text null,
-  last_status text not null default 'UNKNOWN',
-  unhealthy_sample_count int not null default 0,
-  healthy_sample_count int not null default 0,
-  last_alert_type text null,
-  last_alert_at timestamptz null,
-  last_success_at timestamptz null,
-  updated_at timestamptz not null default now()
-);
+### 7.2 Anti-Flap Confirmation & Cooldown
+- **Anti-Flap**: Requires **2 consecutive unhealthy checks** before posting `DEGRADED`, and **2 consecutive healthy checks** before posting `RECOVERY`.
+- **Cooldown**: 300-second safety cooldown prevents alert loops during rapid service restarts.
+- **Deduplication**: Never post duplicate alert embeds for unchanged states.
 
-alter table public.server_status_integrations enable row level security;
-revoke all on public.server_status_integrations from anon, authenticated;
-grant select, insert, update on public.server_status_integrations to service_role;
+---
+
+## 8. Local State Persistence Contract
+
+State is stored locally on the Japan VPS file system:
+
+```text
+STATE_FILE_PATH:       /var/lib/neko/discord-state.json
+PERMISSIONS:           -rw------- 1 root root (0600)
+DATABASE_DEPENDENCY:   NONE (No PostgreSQL / Supabase required)
+```
+
+### 8.1 State Schema Contract
+```json
+{
+  "status_message_id": "123456789012345678",
+  "window_start_time": 1755518400,
+  "window_start_rx_bytes": 841643967,
+  "window_start_tx_bytes": 720720638,
+  "confirmed_status": "ONLINE",
+  "pending_status": "ONLINE",
+  "pending_count": 0,
+  "last_alert_status": "ONLINE",
+  "last_alert_at": 1755518400,
+  "last_status_edit_at": 1755520200
+}
 ```
 
 > [!IMPORTANT]
-> The database table stores operational message IDs and state machine counters **ONLY**. Webhook secrets or tokens must **NEVER** be stored in the database.
+> The state file stores operational timestamps, message IDs, and byte counters **ONLY**. Secrets and webhook URLs are strictly forbidden from `discord-state.json`.
 
 ---
 
-## 10. Scheduler & Execution Architecture
+## 9. Secret Management & Webhook Configuration
+
+- **Environment File**: `/etc/neko-traffic-monitor.env` (existing legacy) $\rightarrow$ `/etc/neko/discord.env` (unified target).
+- **Permissions**: Root-owned `0600` (`chmod 600`).
+- **Webhook Reuse**: Reuse existing provisioned Discord webhook (`REUSE_EXISTING_WEBHOOK = YES`). No unnecessary rotation needed.
+- **Git / Web Safety**: Never committed to Git, never exposed to Vercel/Web bundle, never printed in logs.
+
+---
+
+## 10. Legacy Migration & Production Cutover Plan (Phase T7 V1C)
 
 ```text
-DISCORD_STATUS_SCHEDULER   = VERCEL_CRON / SERVER_SCHEDULED_WORKER
-DASHBOARD_BROWSER_REQUIRED = NO
+=============================================================================
+PRODUCTION CUTOVER SEQUENCE (PHASE T7 V1C)
+=============================================================================
+1. Stage unified Discord worker & state directories on Lightsail VPS.
+2. Validate permissions, environment files, and counter baseline.
+3. Start unified worker service & timer.
+4. Verify persistent status message creation and traffic average posting.
+5. Disable legacy publisher:
+   systemctl stop neko-traffic-monitor.service
+   systemctl disable neko-traffic-monitor.service
+6. Verify exactly ONE publisher remains active on the VPS.
+7. Verify channel history contains zero duplicate messages.
+=============================================================================
 ```
 
-- **Execution Cadence**: Runs every **1 minute** (`* * * * *`).
-- **Execution Target**: Trusted serverless worker route `POST /api/server/integrations/discord/tick` (protected by internal authorization bearer token or Vercel Cron HMAC).
-- **Execution Flow**:
-  1. Worker reads `public.server_metrics_latest` snapshot and active session counts.
-  2. Worker loads state record from `public.server_status_integrations`.
-  3. Worker computes current health state (`ONLINE`, `DEGRADED`, `STALE`, `UNKNOWN`).
-  4. Worker edits persistent status message (or creates first message and stores `status_message_id` if missing).
-  5. Worker checks anti-flap confirmation counters and state transitions.
-  6. If transition confirmed and outside cooldown, worker posts alert / recovery message.
-  7. Worker commits updated state record to PostgreSQL.
+> [!CAUTION]
+> In Phase T7 V1A, the legacy publisher `neko-traffic-monitor.service` remains running. Do **NOT** stop or disable it during discovery/architecture freeze.
 
 ---
 
-## 11. Secret Management & Failure Isolation
-
-### 11.1 Secret Management
-- **Environment Key**: `DISCORD_SERVER_STATUS_WEBHOOK_URL`
-- **Location**: Vercel Production Environment Variables (`WEBHOOK_LOCATION = SERVER_SIDE_ONLY`).
-- **Restrictions**:
-  - `WEBHOOK_IN_FRONTEND = NO`
-  - Webhook secret must never be committed to Git.
-  - Webhook secret must never be pasted into chat or logged in backend output.
-
-### 11.2 Failure Isolation Contract
-```text
-DISCORD_FAILURE_ISOLATION = YES
-```
-The Discord integration is completely decoupled from core proxy operations:
-- If Discord API is down, rate-limited (`429`), or returns `5xx`, the worker logs the error and exits cleanly.
-- If the webhook secret is invalid or missing, the worker enters an inactive state.
-- Under **NO** circumstances will Discord failure affect VPS metrics ingestion, PostgreSQL storage, Shadowsocks routing, Launcher operations, or game client connections.
-
----
-
-## 12. Rate Limiting & Bounded Retry Policy
-
-- **Rate Limit Handling (`HTTP 429`)**:
-  - Inspect `Retry-After` header.
-  - Abort current tick immediately and back off until the specified reset window.
-  - Never execute rapid polling or retry loops upon receiving `429`.
-- **Transient Network / `5xx` Failures**:
-  - Maximum of **1 immediate retry** with a 2-second backoff.
-  - If retry fails, record failure and wait for next scheduled 60s tick.
-- **Client Error (`4xx` Invalid Webhook / Deleted Message)**:
-  - Do not retry within the tick.
-  - If persistent message returns `404 Not Found` (message deleted by moderator), clear `status_message_id` in database so next tick creates a fresh message.
-
----
-
-## 13. Phase T7 Roadmap & Phased Split
+## 11. Phase Roadmap
 
 ```text
 +-------------------------------------------------------------------------------+
 |                             PHASE T7 ROADMAP                                  |
 +-------------------------------------------------------------------------------+
-| Phase T7A: Discord Status Architecture & Documentation Contract [CURRENT]     |
-|            - Frozen embed layouts, status models, anti-spam rules, schemas.   |
-|            - Zero source code changes, docs-only commit.                      |
+| Phase T7 V1A: Legacy Discovery & Architecture Freeze             [COMPLETED]  |
+|               - Lightsail legacy discovery, traffic source & formula freeze,  |
+|                 redefine Traffic Summary as average throughput, docs updated. |
 |                                                                               |
-| Phase T7B: Server-Side Implementation & Automated Test Matrix   [NEXT]        |
-|            - Integration worker implementation, database migration,          |
-|              state machine, unit tests, mock Discord payload tests.           |
+| Phase T7 V1B: Unified Discord Worker Implementation & Tests      [NEXT]       |
+|               - Develop unified Python worker, time-weighted average calc,    |
+|                 state machine, systemd units, unit tests, mock Discord tests. |
 |                                                                               |
-| Phase T7C: Production Secret Provisioning & Live Proof          [PLANNED]     |
-|            - Channel webhook creation, Vercel env variable setup,             |
-|              live cron activation, live Discord update & alert verification.  |
+| Phase T7 V1C: Production Staging & Legacy Cutover                [PLANNED]    |
+|               - Stage worker on Lightsail, live proof, legacy retirement.     |
 +-------------------------------------------------------------------------------+
 ```
-
----
-
-## 14. Phase T7B Test Plan Matrix
-
-When Phase T7B implementation commences, the following automated test suites must be developed:
-
-1. **Payload Formatting Tests**:
-   - `ONLINE` snapshot renders correct embed fields, green indicator, and `VPS → Upstream` label.
-   - `DEGRADED` snapshot renders correct warning emoji and specifies failed service.
-   - `STALE` snapshot renders stale notice with exact observation age and no offline claims.
-   - `UNKNOWN` snapshot handles missing metrics with clean `—` placeholders.
-   - Rate conversions accurately compute bps, Kbps, Mbps, and Gbps without 8x errors.
-   - Byte totals accurately compute KB, MB, GB, and TB.
-2. **State Machine & Anti-Spam Tests**:
-   - `ONLINE` $\rightarrow$ `ONLINE` produces status edit only; no alert message posted.
-   - Single transient unhealthy sample does not trigger alert (Anti-flap confirmation = 2).
-   - Confirmed 2 consecutive unhealthy samples triggers single alert message.
-   - Consecutive `DEGRADED` samples do not produce duplicate alerts.
-   - Transition from `DEGRADED` $\rightarrow$ `ONLINE` (2 consecutive healthy) triggers single recovery notification.
-   - Safety cooldown prevents rapid repeat alerts within 300 seconds.
-3. **Privacy & Security Tests**:
-   - Verify payload contains zero user IDs, usernames, session IDs, or client PIDs.
-   - Verify active user count is strictly integer session aggregate.
-   - Verify webhook URL is not logged or exposed in responses.
-4. **Resilience & Error Handling Tests**:
-   - Mock Discord `429 Too Many Requests` handled with backoff.
-   - Mock Discord `500 Internal Error` triggers bounded single retry.
-   - Missing / revoked webhook secret fails cleanly without impacting database or ingestion.
-   - Deleted Discord message (`404`) resets `status_message_id` and creates replacement on next tick.
-
----
-
-## 15. Phase T7C Production Proof Criteria
-
-Production sign-off in Phase T7C requires verification of:
-1. **Persistent Status Live**: A real Discord embed appears and updates smoothly every ~60s.
-2. **Real VPS Telemetry**: Live ping, loss, RX/TX, and Host Uptime match production database.
-3. **Session Count Real**: Active Users integer reflects real unrevoked sessions.
-4. **Transition & Recovery Proof**: Simulated service stop triggers alert; service restore triggers recovery.
-5. **No Spam Confirmed**: Channel history confirms exactly 1 persistent message and zero duplicate alerts.
-6. **Secret Secrecy**: Webhook URL remains strictly confined to Vercel production environment.

@@ -44,44 +44,47 @@ The Admin Web is powered by two distinct, decoupled authority channels:
 
 ```text
 +-------------------------------------------------------------------------------+
-|                      TWO INDEPENDENT DATA PLANES                              |
+|                      INDEPENDENT OPERATIONAL PROJECTIONS                      |
 +-------------------------------------------------------------------------------+
 |                                                                               |
-|  [ DATA PLANE 1: SERVER AGGREGATE ]                                           |
-|  Japan VPS (Host & SS Service)                                                |
-|       │                                                                       |
-|       ▼ (Outbound HTTPS Push with Pre-Shared Ingest Secret)                   |
-|  Backend Ingest API -> Persisted Snapshot Table (Latest & History)            |
-|       │                                                                       |
-|       ├─► (Admin Query API) ────────────────────────► Admin Web Dashboard    |
-|       │                                               [ Server Health Panel ] |
-|       │                                                                       |
-|       └─► (Planned Phase T7 Outbound Integration) ──► Discord Channel Status  |
-|           Trusted Backend / Scheduled Worker          & Transition Alerts     |
-|           (Aggregate Operational Projection Only)                             |
+|  [ JAPAN VPS ]                                                                |
+|  ├─ Shadowsocks Service (`shadowsocks-libev.service`)                         |
+|  │                                                                            |
+|  ├─ Monitoring Agent (`neko-server-monitor.service`)                          |
+|  │       │                                                                    |
+|  │       ▼ (HTTPS Push with SERVER_METRICS_INGEST_SECRET)                     |
+|  │  Backend Ingest API -> Persisted Snapshot Table (Latest & History)         |
+|  │       │                                                                    |
+|  │       ▼ (Admin Query API)                                                  |
+|  │  Admin Web Dashboard [ Server Health Panel ]                               |
+|  │                                                                            |
+|  └─ Discord Worker (`neko-discord-worker.service` / `.timer`) [Phase T7 V1]   |
+|          │                                                                    |
+|          ▼ (Local Metric Evaluation & Direct Webhook Push)                    |
+|     Discord Channel Status, Traffic Summary & Transition Alerts               |
+|     (Public VPS Operational Status Only — ZERO Client/Session Data)           |
 |                                                                               |
 |  ───────────────────────────────────────────────────────────────────────────  |
 |                                                                               |
-|  [ DATA PLANE 2: SESSION AUTHORITY ]                                          |
+|  [ SESSION DATA PLANE ]                                                       |
 |  Launcher Client                                                              |
 |       │                                                                       |
 |       ▼ (Minimal Heartbeat: session_id every 30s)                             |
 |  Supabase `launcher_sessions` Table (DB Freshness: 90s, Admin Freshness: 120s)|
 |       │                                                                       |
-|       ├─► (Admin Overview / Session Query) ─────────► Admin Web Dashboard    |
-|       │                                               [ Active Users Panel ]  |
-|       │                                                                       |
-|       └─► (Planned Phase T7 Session Aggregation) ───► Discord Status Embed    |
-|           (Session-Only Integer Count: unrevoked && last_seen_at <= 120s)     |
+|       ▼ (Admin Overview / Session Query)                                      |
+|  Admin Web Dashboard [ Active Users Panel ]                                   |
 |                                                                               |
 +-------------------------------------------------------------------------------+
 ```
 
-### Outbound Operational Projections (Current vs Planned T7):
-- **Current Deployed Path (T4B/T5/T6)**:
-  `Japan VPS` $\rightarrow$ `Monitoring Backend` $\rightarrow$ `Supabase (Latest + History)` $\rightarrow$ `Admin Web Dashboard`.
-- **Planned Outbound Path (Phase T7 — Designed / Not Yet Deployed)**:
-  `Trusted Backend Worker / Scheduler` $\rightarrow$ `Discord Webhook` (Receives aggregate operational projection and session-only active user count only; zero client/user identity).
+### Outbound Operational Projections:
+- **Admin Dashboard Path (T4B/T5/T6 Deployed)**:
+  `Japan VPS Monitoring Agent` $\rightarrow$ `Backend Ingest API` $\rightarrow$ `Supabase (Latest + History)` $\rightarrow$ `Admin Web Dashboard`.
+- **Discord Outbound Path (Phase T7 V1 — Approved Architecture)**:
+  `Japan VPS Discord Worker` $\rightarrow$ `Discord Webhook` (Local Lightsail execution only; evaluates local VPS health and raw network counters directly; **ZERO** dependency on Backend, Supabase, Vercel, or Client/Session data).
+- **Session Data Boundary**:
+  Discord Worker does **NOT** query or obtain client/session data (`ACTIVE_USERS = REMOVED`).
 
 ---
 
