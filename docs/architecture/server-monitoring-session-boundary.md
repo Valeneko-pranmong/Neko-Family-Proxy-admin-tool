@@ -3,7 +3,7 @@
 
 ```text
 DOCUMENT:               docs/architecture/server-monitoring-session-boundary.md
-STATUS:                 DESIGN_FROZEN (T4A Contract)
+STATUS:                 DESIGN_FROZEN (T4A Contract — Corrected & Authority Closed)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & CONTRACT
 OWNER:                  TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
@@ -35,32 +35,32 @@ CLIENT SCOPE  = DEEP LOCAL OBSERVABILITY & DIAGNOSTICS (LOCAL ONLY)
 WEB != CLIENT OBSERVABILITY
 ```
 
-### Two Independent Data Authorities:
+### Two Independent Data Authorities (Decoupled Planes):
 The Admin Web is powered by two distinct, decoupled authority channels:
-1. **Server Aggregate Channel**: Originates strictly on the **Japan VPS** via a dedicated server monitoring daemon, reporting fleet-level infrastructure and proxy service health.
-2. **User Session Authority Channel**: Originates in the **Auth / Database Backend (Supabase)**, tracking user sessions, licenses, and heartbeat liveness.
+1. **Server Aggregate Channel (Server Plane)**: Originates strictly on the **Japan VPS** via a dedicated server monitoring daemon, reporting fleet-level infrastructure and proxy service health into an authenticated Backend Ingest API.
+2. **User Session Authority Channel (Session Plane)**: Originates in the **Auth / Database Backend (Supabase)**, tracking user sessions, licenses, and heartbeat liveness.
 
 ```text
 +-------------------------------------------------------------------------------+
-|                            TWO INDEPENDENT CHANNELS                           |
+|                      TWO INDEPENDENT DATA PLANES                              |
 +-------------------------------------------------------------------------------+
 |                                                                               |
-|  [ CHANNEL 1: SERVER AGGREGATE ]                                              |
+|  [ DATA PLANE 1: SERVER AGGREGATE ]                                           |
 |  Japan VPS (Host & SS Service)                                                |
 |       │                                                                       |
-|       ▼ (Outbound HTTPS Push with Ingest Secret)                              |
-|  Backend Ingest API -> Stored Snapshot (Latest Only)                          |
+|       ▼ (Outbound HTTPS Push with Pre-Shared Ingest Secret)                   |
+|  Backend Ingest API -> Persisted Snapshot Table (Latest Only)                 |
 |       │                                                                       |
 |       ▼ (Admin Query API)                                                     |
 |  Admin Web Dashboard [ Server Health Panel ]                                  |
 |                                                                               |
 |  ───────────────────────────────────────────────────────────────────────────  |
 |                                                                               |
-|  [ CHANNEL 2: SESSION AUTHORITY ]                                             |
+|  [ DATA PLANE 2: SESSION AUTHORITY ]                                          |
 |  Launcher Client                                                              |
 |       │                                                                       |
 |       ▼ (Minimal Heartbeat: session_id every 30s)                             |
-|  Supabase `launcher_sessions` Table (Heartbeat Freshness <= 120s)             |
+|  Supabase `launcher_sessions` Table (DB Freshness: 90s, Admin Freshness: 120s)|
 |       │                                                                       |
 |       ▼ (Admin Overview / Session Query)                                      |
 |  Admin Web Dashboard [ Active Users & Session Management Panel ]              |
@@ -76,88 +76,93 @@ Every field presented on the Admin Web dashboard is mapped to an authoritative o
 
 | Metric | Authoritative Source | Collection Method | Sampling / Push Cadence | Storage Required | Web Display Scope | Privacy Class |
 |---|---|---|---|---|---|---|
-| `server_online` | Japan VPS Monitoring Agent | Agent heartbeat / push to Ingest API | 5s – 10s | Latest Snapshot | Host reachability indicator | `SERVER_AGGREGATE` |
-| `server_ping_ms` | Japan VPS -> PSO2 JP Upstream | Low-frequency ICMP / TCP ping from VPS | 15s – 30s | Latest Snapshot | VPS to Upstream Latency | `SERVER_AGGREGATE` |
-| `server_packet_loss_percent` | Japan VPS -> PSO2 JP Upstream | Sampled ICMP ping bursts (5 pkts) | 30s | Latest Snapshot | Upstream packet loss % | `SERVER_AGGREGATE` |
-| `server_rx_bytes_total` | Japan VPS Interface (`eth0`) | `/proc/net/dev` or `/sys/class/net` | 5s – 10s | Latest Snapshot | VPS Total Bytes Received | `SERVER_AGGREGATE` |
-| `server_tx_bytes_total` | Japan VPS Interface (`eth0`) | `/proc/net/dev` or `/sys/class/net` | 5s – 10s | Latest Snapshot | VPS Total Bytes Sent | `SERVER_AGGREGATE` |
-| `server_rx_bps` | Japan VPS Monitoring Agent | Rate delta: $\Delta \text{rx\_bytes} / \Delta t$ | 5s – 10s | Latest Snapshot | VPS Download Speed | `SERVER_AGGREGATE` |
-| `server_tx_bps` | Japan VPS Monitoring Agent | Rate delta: $\Delta \text{tx\_bytes} / \Delta t$ | 5s – 10s | Latest Snapshot | VPS Upload Speed | `SERVER_AGGREGATE` |
-| `server_uptime_seconds` | Japan VPS Host Kernel | `/proc/uptime` | 10s – 30s | Latest Snapshot | VPS Host Uptime | `SERVER_AGGREGATE` |
-| `proxy_service_status` | Japan VPS Systemd Manager | `systemctl is-active shadowsocks` | 5s – 10s | Latest Snapshot | Daemon process status | `SERVER_AGGREGATE` |
-| `shadowsocks_service_status` | Japan VPS Local Listener | Local TCP socket probe (`127.0.0.1:<port>`) | 5s – 10s | Latest Snapshot | Service listening health | `SERVER_AGGREGATE` |
-| `active_user_count` | Supabase `launcher_sessions` | Count unrevoked sessions with fresh heartbeat | On Admin Request (Cached) | Existing DB Table | Fleet Active Users | `SESSION_AUTHORITY` |
-| `server_cpu_percent` (Optional) | Japan VPS Kernel | `/proc/stat` delta | 10s | Latest Snapshot | VPS CPU Load % | `SERVER_AGGREGATE` |
-| `server_memory_percent` (Optional) | Japan VPS Kernel | `/proc/meminfo` | 10s | Latest Snapshot | VPS RAM Usage % | `SERVER_AGGREGATE` |
+| `host_status` | Japan VPS Monitoring Agent | Agent heartbeat / push to Ingest API | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | Host reachability & agent liveness | `SERVER_AGGREGATE` |
+| `proxy_service_status` | Japan VPS Systemd Manager | `systemctl is-active shadowsocks` | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | Daemon process status | `SERVER_AGGREGATE` |
+| `shadowsocks_service_status` | Japan VPS Local Listener | Local TCP socket probe (`127.0.0.1:<port>`) | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | Service listening health | `SERVER_AGGREGATE` |
+| `server_ping_ms` | Japan VPS -> `CONFIGURED_UPSTREAM_MONITOR_TARGET` | Low-frequency ICMP / TCP ping from VPS | 15s – 30s | Latest Snapshot (`server_metrics_latest`) | VPS to Upstream Latency | `SERVER_AGGREGATE` |
+| `server_ping_status` | Japan VPS Monitoring Agent | Ping probe outcome (`AVAILABLE`/`TIMEOUT`/`UNSUPPORTED`/`UNKNOWN`) | 15s – 30s | Latest Snapshot (`server_metrics_latest`) | Probe availability state | `SERVER_AGGREGATE` |
+| `server_packet_loss_percent` | Japan VPS -> `CONFIGURED_UPSTREAM_MONITOR_TARGET` | Sampled ICMP ping bursts (5 pkts) | 30s | Latest Snapshot (`server_metrics_latest`) | Upstream packet loss % | `SERVER_AGGREGATE` |
+| `server_rx_bytes_total` | Japan VPS Interface (`eth0`/default route) | `/proc/net/dev` or `/sys/class/net` | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | VPS Total Bytes Received | `SERVER_AGGREGATE` |
+| `server_tx_bytes_total` | Japan VPS Interface (`eth0`/default route) | `/proc/net/dev` or `/sys/class/net` | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | VPS Total Bytes Sent | `SERVER_AGGREGATE` |
+| `server_rx_bps` | Japan VPS Monitoring Agent | Rate delta: $\Delta \text{rx\_bytes} / \Delta t$ | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | VPS Download Speed | `SERVER_AGGREGATE` |
+| `server_tx_bps` | Japan VPS Monitoring Agent | Rate delta: $\Delta \text{tx\_bytes} / \Delta t$ | 5s – 10s | Latest Snapshot (`server_metrics_latest`) | VPS Upload Speed | `SERVER_AGGREGATE` |
+| `server_uptime_seconds` | Japan VPS Host Kernel | `/proc/uptime` | 10s – 30s | Latest Snapshot (`server_metrics_latest`) | VPS Host Uptime | `SERVER_AGGREGATE` |
+| `online_session_count` | Supabase `launcher_sessions` | Unrevoked sessions with fresh heartbeat | On Admin Request (Cached) | Existing DB Table | Active raw session total | `SESSION_AUTHORITY` |
+| `entitled_active_user_count` | Supabase `launcher_sessions` + `licenses` | Unrevoked sessions with fresh heartbeat + active license | On Admin Request (Cached) | Existing DB Table | Entitled active user total | `SESSION_AUTHORITY` |
+| `server_cpu_percent` (Optional) | Japan VPS Kernel | `/proc/stat` delta | 10s | Latest Snapshot (`server_metrics_latest`) | VPS CPU Load % | `SERVER_AGGREGATE` |
+| `server_memory_percent` (Optional) | Japan VPS Kernel | `/proc/meminfo` | 10s | Latest Snapshot (`server_metrics_latest`) | VPS RAM Usage % | `SERVER_AGGREGATE` |
 
 ---
 
 ## 3. Detailed Metric Semantics & Boundary Rules
 
-### 3.1 Server Online Semantics
-`server_online` must not be conflated across different architectural components. The system defines a three-tier health hierarchy:
+### 3.1 Split Host and Service Health Semantics
+Server health must **NEVER** be collapsed into a single overloaded `server_online` boolean. The architecture enforces three distinct, non-overlapping status concepts:
 
 ```text
-[ Host Layer ]       host_online                 VPS kernel responds and agent pushes data
-         │
-         ▼
-[ Process Layer ]    proxy_service_status        Shadowsocks systemd service is active/running
-         │
-         ▼
-[ Port Layer ]       shadowsocks_service_status  Local proxy port is listening and accepting connections
++---------------------------------------------------------------------------------+
+|                          THREE-TIER SERVER HEALTH MODEL                         |
++---------------------------------------------------------------------------------+
+| [ 1. Host Layer ]     host_status                                               |
+|                       Whether fresh authenticated reports (<= 30s) are received |
+|                       from the Japan VPS agent.                                 |
+|                                                                                 |
+| [ 2. Process Layer ]  proxy_service_status                                      |
+|                       Authoritative systemd daemon state (`active`/`inactive`/  |
+|                       `failed`).                                                |
+|                                                                                 |
+| [ 3. Port Layer ]     shadowsocks_service_status                                |
+|                       Authoritative local TCP listener probe on proxy port      |
+|                       (`listening`/`closed`/`error`).                           |
++---------------------------------------------------------------------------------+
 ```
 
-- **Degraded State**: If `host_online == True` but `proxy_service_status != "running"`, the dashboard displays `Degraded (Service Down)`.
-- **Offline State**: If no metrics have been received from the VPS agent for $\ge 30\text{ seconds}$, the entire server status transitions to `Offline / Stale`.
+- **Health Rule**: A down Shadowsocks service does **NOT** mean the host is offline.
+- **UI State Derivation**:
+  - `ONLINE`: Fresh metrics received ($\le 30\text{s}$), `proxy_service_status == "active"`, and `shadowsocks_service_status == "listening"`.
+  - `DEGRADED`: `host_status == "ONLINE"` (fresh report $\le 30\text{s}$), but `proxy_service_status != "active"` or `shadowsocks_service_status != "listening"`.
+  - `STALE`: No fresh report received from the VPS agent for $> 30\text{ seconds}$.
+  - `UNKNOWN`: Initial state, uninitialized snapshot, or probe collection failure.
+  - `OFFLINE`: Confirmed host unreachability (or prolonged staleness beyond offline threshold $\ge 300\text{s}$ with independent corroboration). Stale metrics must not be prematurely reported as OFFLINE.
 
 ---
 
-### 3.2 Ping & Latency Semantics
-Latency metrics must be explicitly defined and truthfully labeled.
+### 3.2 Ping Target Authority & ICMP Failure Semantics
+Ping targets must be explicitly configured and bounded. Wildcards such as `gs*.pso2.jp / JP IX` are prohibited in executable contracts.
 
 ```text
-THREE DISTINCT LATENCY MEASUREMENTS:
-
-1. Client (Thailand) ──(Game Traffic)──> Japan VPS
-   - Scope: Layer 2 Local Diagnostics ONLY
-   - Origin: Desktop Launcher
-   - Target: Japan VPS Shadowsocks endpoint
-   - Boundary: NEVER uploaded to Backend; visible ONLY on local user's screen.
-
-2. Japan VPS ──(Health Probe)──> PSO2 JP Upstream (e.g., gs*.pso2.jp / JP IX)
-   - Scope: Layer 3 Server Aggregate Monitoring
-   - Origin: Japan VPS Server Agent
-   - Target: Japanese game server upstream / Tokyo gateway
-   - Boundary: Uploaded by Server Agent; displayed on Admin Web.
-   - Recommended UI Label: "VPS → PSO2 Upstream Latency (ms)"
-
-3. Admin Backend (Vercel) ──(API Probe)──> Japan VPS
-   - Scope: Optional Backend Infrastructure Diagnostic
-   - Origin: Vercel serverless function
-   - Target: Japan VPS public endpoint
-   - Boundary: Internal operational check.
-   - Recommended UI Label: "Backend → VPS Latency (ms)"
+PING MEASUREMENT ARCHITECTURE:
+- PING_ORIGIN:             JAPAN_VPS (Monitoring Daemon)
+- PING_TARGET_AUTHORITY:   CONFIGURED_UPSTREAM_MONITOR_TARGET (Managed server-side via VPS env config)
+- RECOMMENDED UI LABEL:    "VPS → Upstream" (or "VPS → PSO2 JP" if target is configured to a known PSO2 JP endpoint)
 ```
 
-> [!CRITICAL]
-> The Admin Web MUST NOT label Japan VPS upstream latency as "User Ping". A monitoring agent located in Japan cannot honestly measure Thailand-to-Japan client latency.
+#### ICMP Failure & Probe Semantics:
+- ICMP packets may be dropped or filtered by intermediate firewalls even when proxy and game TCP services are fully functional.
+- **Invariant**: Ping probe failure $\ne$ server offline; ping probe failure $\ne$ PSO2 offline.
+- Explicit probe states:
+  ```text
+  PING_STATUS = AVAILABLE | TIMEOUT | UNSUPPORTED | UNKNOWN
+  ```
+- If ICMP is blocked in an environment, T4B may optionally configure a bounded TCP connect probe against the upstream target. Packet-loss or ICMP timeout must never mark the server down.
 
 ---
 
 ### 3.3 Packet Loss Semantics
 - **Origin**: Japan VPS monitoring daemon.
-- **Target**: Upstream gateway / Japanese upstream DNS or IX endpoint.
+- **Target**: `CONFIGURED_UPSTREAM_MONITOR_TARGET`.
 - **Measurement Policy**: Send small bursts (5 ICMP echo requests) every 30 seconds with a 1000ms timeout per packet.
 - **Calculation**: $\text{loss\_percent} = \frac{\text{lost\_packets}}{\text{total\_packets}} \times 100\%$.
-- **Protection**: High-frequency ICMP flooding is strictly forbidden to avoid network throttling or upstream firewall blocks.
+- **Protection**: High-frequency ICMP flooding is strictly forbidden to prevent network throttling or upstream firewall blocking.
 
 ---
 
 ### 3.4 Server Network RX/TX & Speed Calculation
 Server network throughput must represent actual VPS infrastructure traffic:
 
-- **Data Layer**: Whole VPS network interface (`eth0` / primary public interface).
-- **Accounting Method**: Read raw 64-bit byte counters from `/proc/net/dev` or `/sys/class/net/eth0/statistics/`.
+- **Data Layer**: Whole VPS network interface (`SERVER_RX_TX_LAYER = WHOLE_VPS_INTERFACE`).
+- **Interface Selection**: `SERVER_RX_TX_INTERFACE_SELECTION = CONFIGURED_OR_DEFAULT_ROUTE_INTERFACE` (Discovered via default route inspection or configured in `/etc/neko/server-agent.env`, defaulting to `eth0` with dynamic fallback).
+- **Accounting Method**: Read raw 64-bit byte counters from `/proc/net/dev` or `/sys/class/net/<interface>/statistics/`.
 - **Instantaneous Bandwidth Formula**:
   $$\text{rx\_bps} = \max\left(0, \frac{\text{current\_rx\_bytes} - \text{prev\_rx\_bytes}}{\text{current\_timestamp} - \text{prev\_timestamp}}\right) \times 8$$
   $$\text{tx\_bps} = \max\left(0, \frac{\text{current\_tx\_bytes} - \text{prev\_tx\_bytes}}{\text{current\_timestamp} - \text{prev\_timestamp}}\right) \times 8$$
@@ -174,18 +179,57 @@ Server network throughput must represent actual VPS infrastructure traffic:
 
 ---
 
-## 4. Active User Count & Session Authority
+## 4. Heartbeat Freshness Authority & Active User Semantics
 
-### 4.1 Authoritative Active User Definition
-The metric `active_user_count` represents verified user session liveness from authentication authority.
+### 4.1 Exact Heartbeat Freshness Authority Mapping
+The repository defines four distinct, non-conflicting timing constants across the stack. Each has a specific, authoritative purpose:
 
 ```text
-ACTIVE USER RULE:
-An active user is defined as an account having:
-1. An unrevoked row in `public.launcher_sessions` (`revoked_at IS NULL`), AND
-2. A recent heartbeat timestamp (`last_seen_at >= now() - interval '120 seconds'`), AND
-3. An active, unexpired license for 'neko-family-proxy'.
++------------------------------------+------------+-----------------------------------------------------------+
+| Timing Rule                        | Value      | Exact Codebase Authority / Source File                    |
++------------------------------------+------------+-----------------------------------------------------------+
+| HEARTBEAT_WRITE_INTERVAL           | 30 seconds | `launcher/src/neko_launcher/ui/app_window.py`             |
+|                                    | (30,000ms) | `HEARTBEAT_INTERVAL_MS = 30_000` (Launcher push cadence)   |
+|                                    |            |                                                           |
+| SESSION_HEARTBEAT_ACCEPTANCE_RULE  | 90 seconds | `supabase/migrations/20260813120000_*.sql`                |
+| (DB Staleness Invalidation Limit)  |            | `launcher.heartbeat_session`: `last_seen_at > now() - 90s`|
+|                                    |            | `launcher.authorize_launch_permit`: `HeartbeatStale`      |
+|                                    |            |                                                           |
+| ADMIN_ONLINE_FRESHNESS_RULE        | 120 seconds| `server/dashboard.mjs:2`                                  |
+| (UI Overview Reporting Tolerance)  | (120,000ms)| `RECENT_ONLINE_WINDOW_MS = 2 * 60 * 1000`                  |
+|                                    |            | `standalone/src/sections/render.js:37`                    |
+|                                    |            |                                                           |
+| ACTIVE_USER_COUNT_FRESHNESS_RULE   | 120 seconds| `server/dashboard.mjs:36-66`                              |
+| (Overview KPI Aggregation Filter)  |            | `hasFreshHeartbeat`: `last_seen_at >= now - 120s`         |
++------------------------------------+------------+-----------------------------------------------------------+
 ```
+
+#### Why 90s and 120s Both Exist (Authority Resolution):
+- **90 seconds** is the **strict Database RPC enforcement window**. A client that misses 3 consecutive 30s heartbeats is rejected from refreshing its session in PostgreSQL (`launcher.heartbeat_session`).
+- **120 seconds** is the **Admin Dashboard UI aggregation window** (`RECENT_ONLINE_WINDOW_MS`). It provides a small reporting tolerance for network transit time and serverless query execution without premature UI flicker.
+- `HEARTBEAT_AUTHORITY_AMBIGUOUS = NO`
+
+---
+
+### 4.2 Active User Exact Semantics
+Active user counts are divided into two distinct metrics to avoid conflating session presence with license entitlement:
+
+```text
+1. ONLINE_SESSION_COUNT (Raw Active Sessions):
+   - Predicate 1: `launcher_sessions.revoked_at IS NULL`
+   - Predicate 2: `launcher_sessions.last_seen_at >= now() - interval '120 seconds'`
+   - Source: `server/dashboard.mjs` (`summarizeCurrentSessions.recentlyOnline`)
+
+2. ENTITLED_ACTIVE_USER_COUNT (Active Users with Valid Entitlement):
+   - Predicate 1: `launcher_sessions.revoked_at IS NULL`
+   - Predicate 2: `launcher_sessions.last_seen_at >= now() - interval '120 seconds'`
+   - Predicate 3: Session is bound to an active license for product 'neko-family-proxy'
+                  (`licenses.status = 'active'` AND `valid_from <= now()` AND `valid_until > now()`)
+   - Source: `server/dashboard.mjs` (`countRecentlyOnlineSessions`)
+```
+
+- **Entitlement Rule**: `ENTITLEMENT_PART_OF_ONLINE_COUNT = NO` (Raw session presence is tracked independently from license entitlement).
+- `ACTIVE_USER_SOURCE_CLASS = SESSION_AUTHORITY`
 
 ```text
 FORBIDDEN METHODS FOR COUNTING ACTIVE USERS:
@@ -195,14 +239,38 @@ FORBIDDEN METHODS FOR COUNTING ACTIVE USERS:
 ❌ Counting raw network flows or netfilter state entries
 ```
 
-### 4.2 Heartbeat Freshness Policy
-- **Launcher Heartbeat Cadence**: Launcher sends heartbeat every `30 seconds` (`HEARTBEAT_INTERVAL_MS = 30_000`).
-- **Database Freshness Rule**: `launcher.heartbeat_session` requires `s.last_seen_at > now() - interval '90 seconds'` to update.
-- **Admin Web Dashboard Threshold**: `RECENT_ONLINE_WINDOW_MS = 120_000` (2 minutes). A session without a heartbeat for $> 120\text{s}$ is marked offline in overview KPIs.
+---
+
+## 5. Privacy Boundary & Admin Web Session Fields
+
+### 5.1 Web-Visible Session Contract
+To prevent client tracking and maintain privacy invariants, device details and hardware identifiers are removed from the T4 monitoring and session dashboard contract:
+
+```text
+ALLOWED WEB SESSION FIELDS:
+- user_id                  (Account identifier)
+- username / email         (Admin identity display)
+- session_id               (Unique session reference)
+- created_at               (Session login / claim timestamp)
+- last_seen_at             (Last successful heartbeat timestamp)
+- revoked_at               (Session revocation timestamp / null if active)
+- license_id               (Bound license reference)
+```
+
+```text
+STRICTLY EXCLUDED FROM WEB SESSION CONTRACT:
+❌ device / device name
+❌ machine ID / hardware ID
+❌ installation key hash / installation fingerprint
+❌ client OS details
+❌ client process names / PIDs
+```
+
+- `WEB_DEVICE_DETAIL = NOT_EXPOSED`
 
 ---
 
-## 5. Session Administration Semantics (Kick & Revoke)
+## 6. Session Administration Semantics (Kick & Revoke)
 
 The Admin Web exercises **Session Authority**, not **Machine Control**.
 
@@ -237,34 +305,25 @@ Under no circumstances may the Admin Web or Backend issue:
 
 ---
 
-## 6. Server Monitoring Agent Architecture
+## 7. Server Monitoring Agent Architecture
 
-### 6.1 Push vs Pull Architecture Decision
+### 7.1 Push Architecture
+The Japan VPS agent periodically pushes metrics via HTTPS POST to the Backend Ingest API.
 
-```text
-EVALUATION:
-Option A (Push Model): VPS Agent periodically pushes HTTPS POST to Backend API.
-Option B (Pull Model): Backend API periodically polls VPS HTTP endpoint.
-
-DECISION:
-Option A (PUSH MODEL) is selected for V1.
-```
-
-| Criteria | Push Model (Recommended) | Pull Model (Rejected) |
-|---|---|---|
-| **VPS Attack Surface** | Inbound ports remain 100% closed (Zero open HTTP ports) | Requires public HTTP port or reverse tunnel on VPS |
-| **Serverless Compatibility** | Fully compatible with Vercel / Edge Functions | Vercel cannot run background polling cron continuously |
-| **Firewall / NAT** | Outbound HTTPS only (443) | Requires firewall rules, dynamic DNS, or static IP allowlists |
-| **Failure Mode** | VPS stops pushing -> Backend detects stale snapshot | Polling timeout delays admin page loads |
+| Criteria | Push Model (Authoritative) |
+|---|---|
+| **VPS Attack Surface** | Inbound ports remain 100% closed (Zero open HTTP ports on VPS) |
+| **Serverless Compatibility** | Fully compatible with Vercel / Edge Functions |
+| **Firewall / NAT** | Outbound HTTPS only (443) |
+| **Failure Mode** | VPS stops pushing -> Backend detects stale snapshot |
 
 ---
 
-### 6.2 Trust Boundary & Agent Authentication
-
+### 7.2 Trust Boundary & Agent Authentication
 1. **Authentication Mechanism**: The VPS agent authenticates to the Backend Ingest API using a dedicated high-entropy secret token passed via HTTP header:
    ```http
    POST /api/server/metrics/ingest
-   Authorization: Bearer <SERVER_INGEST_KEY>
+   Authorization: Bearer <SERVER_METRICS_INGEST_SECRET>
    Content-Type: application/json
    ```
 2. **Secret Storage**:
@@ -273,35 +332,33 @@ Option A (PUSH MODEL) is selected for V1.
 3. **Trust Rules**:
    - The Server Agent is **NOT** a user client and never uses user JWTs.
    - The Server Agent has **NO** access to Supabase service-role keys.
-   - The Browser / Admin Web has **NO** access to the VPS SSH credentials or the Server Ingest Key.
+   - The Browser / Admin Web frontend bundle **NEVER** receives the ingest secret (`WEB_HAS_SERVER_INGEST_SECRET = NO`).
+   - Do NOT reuse Supabase service-role keys, user JWTs, Launcher tokens, permit keys, or Shadowsocks passwords.
 
 ---
 
-### 6.3 Sampling Cadence, Staleness & Storage Model
-
-```text
-CADENCE & RETENTION POLICIES:
-
-- Agent Sample & Push Frequency:   5.0s – 10.0s
-- Backend Stale Threshold:         30.0s
-- Storage Model for V1:            LATEST_ONLY (Single-row snapshot in DB or in-memory cache)
-```
-
-- **Stale Transition**: If $\text{now} - \text{snapshot.observed\_at} > 30\text{s}$, the API returns `status: "stale"` and the Admin Web displays a warning banner ("Server metrics stale — last seen X seconds ago").
+### 7.3 Metrics Storage Authority
+- **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_ONLY`
+- **Storage Authority**: `SERVER_METRICS_STORAGE_AUTHORITY = PERSISTED_SNAPSHOT_TABLE` (Dedicated single-row persisted snapshot table per server in PostgreSQL, e.g. `public.server_metrics_latest`).
+- **Stateless Ingest Invariant**: Process memory in serverless functions (Vercel) is ephemeral and not durable across requests; therefore, authoritative metrics state is persisted in the database snapshot table.
+- **Staleness Cadence**:
+  - Push Cadence: 5s – 10s
+  - Stale Threshold: 30s ($> 30\text{s}$ without report $\rightarrow$ `is_stale = true`, `host_status = STALE`)
 
 ---
 
-## 7. Data Schemas & API Contracts
+## 8. Data Schemas & API Contracts
 
-### 7.1 Agent Ingest Request Contract (VPS Agent -> Backend)
+### 8.1 Agent Ingest Request Contract (VPS Agent -> Backend)
 
 ```json
 {
   "observed_at": "2026-08-18T08:00:00.000Z",
   "host_uptime_seconds": 1204850,
-  "service_status": "running",
-  "port_listening": true,
+  "proxy_service_status": "active",
+  "shadowsocks_service_status": "listening",
   "upstream_ping_ms": 12.4,
+  "upstream_ping_status": "AVAILABLE",
   "upstream_packet_loss_percent": 0.0,
   "rx_bytes_total": 48291048291,
   "tx_bytes_total": 51928491028,
@@ -314,33 +371,35 @@ CADENCE & RETENTION POLICIES:
 
 ---
 
-### 7.2 Sanitized Web Monitoring Response Contract (Backend -> Admin Web)
+### 8.2 Sanitized Web Monitoring Response Contract (Backend -> Admin Web)
 
 ```json
 {
   "ok": true,
   "server": {
-    "status": "healthy",
+    "host_status": "ONLINE",
+    "proxy_service_status": "active",
+    "shadowsocks_service_status": "listening",
     "is_stale": false,
     "observed_at": "2026-08-18T08:00:00.000Z",
     "uptime_seconds": 1204850,
     "ping_ms": 12.4,
-    "ping_target": "upstream_pso2_jp",
+    "ping_status": "AVAILABLE",
+    "ping_target_label": "VPS → Upstream",
     "packet_loss_percent": 0.0,
     "rx_bytes_total": 48291048291,
     "tx_bytes_total": 51928491028,
     "rx_bps": 15420000,
     "tx_bps": 16800000,
-    "proxy_service_status": "active",
-    "shadowsocks_port_status": "listening",
-    "active_users": 18
+    "online_session_count": 18,
+    "entitled_active_user_count": 16
   }
 }
 ```
 
 ---
 
-## 8. Comprehensive Prohibited Client Data Boundary
+## 9. Comprehensive Prohibited Client Data Boundary
 
 Under **NO circumstances** may any backend endpoint, table, log, or Web UI receive, store, or display:
 
@@ -358,23 +417,13 @@ STRICTLY FORBIDDEN CLIENT / CORE DATA IN BACKEND & ADMIN WEB
 ❌ Packet Content:         Raw packet payloads, stream buffers, PCAP dumps
 ❌ Diagnostics & Logs:     Core internal trace logs, memory dumps, stack traces
 ❌ Security Material:      Shadowsocks passwords, JWT tokens, Permits, private keys
+❌ Client Hardware Data:   Device serials, machine IDs, hardware hashes, MAC addresses
 =============================================================================
 ```
 
----
-
-## 9. Security & Access Control (RLS) Review
-
-1. **Admin Web Authorization**:
-   - Access to server monitoring and session management is strictly protected by signed HttpOnly SameSite=Strict `admin_session` cookies.
-   - Admin identity and active status are verified against `public.profiles` on every API request.
-2. **Server Ingest Endpoint Protection**:
-   - Protected by `SERVER_METRICS_INGEST_SECRET`.
-   - Rate-limited to max 1 request per 3 seconds per IP.
-   - Reject any payload containing unauthorized or unrecognized client telemetry fields.
-3. **PostgreSQL RLS Invariant**:
-   - Tables `launcher_sessions` and `audit_events` remain inaccessible to anonymous or unauthenticated public users.
-   - Session revocation requires authenticated admin actor ID recorded in immutable audit logs.
+- `CLIENT_TELEMETRY_FIELDS_ACCEPTED_BY_SERVER_API = NONE`
+- `CLIENT_CORE_TELEMETRY_USED = NO`
+- `CLIENT_LAUNCHER_TELEMETRY_USED = NO`
 
 ---
 
@@ -411,23 +460,26 @@ When implementation begins in Phase T4B, the following test suites must be devel
 
 1. **Server Monitoring Agent Tests**:
    - Network byte counter delta calculation and rate derivation.
+   - Dynamic interface fallback (`eth0` vs default route).
    - Counter reset / reboot handling without negative rates.
-   - Systemd service status parsing.
-   - ICMP ping sampling and packet loss rate calculation.
+   - Systemd service status and local port listener probing.
+   - ICMP ping sampling and packet loss rate calculation with `PING_STATUS` fallback.
    - Ingest secret inclusion and payload schema conformance.
 2. **Backend / API Tests**:
    - Ingest authentication (valid secret passes, invalid secret returns `401`).
    - Rate limiting and input sanitization on ingest endpoint.
-   - Snapshot staleness detection ($> 30\text{s}$ returns `stale: true`).
+   - Snapshot staleness detection ($> 30\text{s}$ returns `is_stale: true`, `host_status: "STALE"`).
    - Active user query correctness (filtering by `revoked_at IS NULL` and $120\text{s}$ heartbeat).
-   - Admin authorization check for server metrics retrieval.
+   - Separate verification of `online_session_count` and `entitled_active_user_count`.
+   - Rejection of payloads containing client telemetry.
 3. **Admin Web UI Tests**:
-   - Server health panel rendering (Healthy, Degraded, Stale, Offline).
+   - Server health panel rendering (ONLINE, DEGRADED, STALE, UNKNOWN, OFFLINE).
+   - Verification that ping failure does not mark server offline.
    - Correct formatting of speeds (Kbps, Mbps, Gbps) and uptime (days, hours, minutes).
-   - Session list display and revoke button triggers.
-   - Complete absence of client PID, client SOCKS port, or client DNS fields.
+   - Session list display without `device` or machine fingerprint columns.
+   - Session revoke button action triggers.
 4. **Privacy Regression Gate**:
-   - Explicit negative tests asserting backend rejects payloads containing `core_pid`, `client_rx_bytes`, `pso2_pid`, or destination IPs.
+   - Explicit negative tests asserting backend rejects payloads containing `core_pid`, `client_rx_bytes`, `pso2_pid`, `device_id`, or destination IPs.
 
 ---
 
