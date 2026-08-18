@@ -4,6 +4,14 @@
 # local credentials
 /.env
 /.env.local
+.env*
+*.pem
+*.key
+*.p12
+*.pfx
+docs/Server/.env
+docs/Server/*.pem
+docs/Server/*.key
 
 # test output
 /coverage/
@@ -13,6 +21,5 @@ npm-debug.log*
 *.devserver*.log
 /work/
 .vercel
-.env*
 __pycache__/
 *.py[cod]
