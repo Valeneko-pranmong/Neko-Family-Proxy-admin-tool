@@ -7,6 +7,7 @@ import { tableGet } from "../server/supabase.mjs";
 import {
   getLatestServerSnapshot,
   ingestServerMetrics,
+  queryServerMetricsHistory,
 } from "../server/server-metrics.mjs";
 
 const configuredSessionTtlMs = Number(
@@ -242,6 +243,14 @@ export default async function handler(request, response) {
       const serverId = url.searchParams.get("server_id") || undefined;
       const server = await getLatestServerSnapshot(serverId);
       return sendJson(response, 200, { ok: true, server });
+    }
+    if (request.method === "GET" && url.pathname === "/api/server/metrics/history") {
+      const session = await getSession(parseCookies(request).admin_session);
+      if (!session) return sendError(response, 401, "Admin login required");
+      const serverId = url.searchParams.get("server_id") || url.searchParams.get("serverId") || undefined;
+      const range = url.searchParams.get("range") || "";
+      const result = await queryServerMetricsHistory({ serverId, range });
+      return sendJson(response, 200, result);
     }
     if (url.pathname !== "/api/admin") return sendError(response, 404, "Not found");
 

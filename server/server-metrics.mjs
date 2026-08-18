@@ -4,6 +4,30 @@ import { rpcPost, tableGet } from "./supabase.mjs";
 export const STALE_THRESHOLD_MS = 30 * 1000;
 export const DEFAULT_SERVER_ID = "japan-vps-1";
 
+// Phase T6B Exact Timestamp Acceptance Boundaries
+export const FUTURE_TOLERANCE_MS = 2 * 60 * 1000; // 2 minutes future tolerance
+export const MAX_INGEST_SAMPLE_AGE_MS = 10 * 60 * 1000; // 10 minutes maximum past age
+
+export const SUPPORTED_HISTORY_RANGES = new Set(["1h", "24h", "7d"]);
+
+export const RANGE_CONFIGS = {
+  "1h": {
+    durationMs: 60 * 60 * 1000,
+    bucketSeconds: 60,
+    maxPoints: 60,
+  },
+  "24h": {
+    durationMs: 24 * 60 * 60 * 1000,
+    bucketSeconds: 300,
+    maxPoints: 288,
+  },
+  "7d": {
+    durationMs: 7 * 24 * 60 * 60 * 1000,
+    bucketSeconds: 1800,
+    maxPoints: 336,
+  },
+};
+
 const VALID_SERVICE_STATUSES = new Set(["active", "inactive", "failed", "unknown"]);
 const VALID_LISTENER_STATUSES = new Set(["listening", "closed", "error", "unknown"]);
 const VALID_PING_STATUSES = new Set(["AVAILABLE", "TIMEOUT", "UNSUPPORTED", "UNKNOWN"]);
@@ -125,9 +149,14 @@ export function validateIngestPayload(body, now = new Date()) {
   if (!observedAtRaw || !Number.isFinite(observedAtMs)) {
     throw validationError("Invalid observed_at timestamp");
   }
-  // Clock skew guard: observed_at cannot be more than 60s in the future
-  if (observedAtMs > now.getTime() + 60 * 1000) {
-    throw validationError("observed_at is too far in the future");
+
+  const nowMs = now.getTime();
+  // Exact timestamp window validation (T6B freeze: now - 10m <= observed_at <= now + 2m)
+  if (observedAtMs > nowMs + FUTURE_TOLERANCE_MS) {
+    throw validationError("observed_at is too far in the future", 400);
+  }
+  if (observedAtMs < nowMs - MAX_INGEST_SAMPLE_AGE_MS) {
+    throw validationError("observed_at is too old", 400);
   }
 
   const hostUptimeSeconds = Number(body.host_uptime_seconds);
@@ -312,30 +341,47 @@ export async function ingestServerMetrics(body, authHeader, now = new Date()) {
 
   const sanitized = validateIngestPayload(body, now);
 
-  // Privileged RPC upsert with atomic replay/stale-write protection
-  const accepted = await rpcPost("upsert_server_metrics_latest", {
-    p_server_id: sanitized.server_id,
-    p_observed_at: sanitized.observed_at,
-    p_host_uptime_seconds: sanitized.host_uptime_seconds,
-    p_shadowsocks_service_status: sanitized.shadowsocks_service_status,
-    p_shadowsocks_listener_status: sanitized.shadowsocks_listener_status,
-    p_ping_ms: sanitized.ping_ms,
-    p_ping_status: sanitized.ping_status,
-    p_packet_loss_percent: sanitized.packet_loss_percent,
-    p_rx_bytes_total: sanitized.rx_bytes_total,
-    p_tx_bytes_total: sanitized.tx_bytes_total,
-    p_rx_bps: sanitized.rx_bps,
-    p_tx_bps: sanitized.tx_bps,
-    p_cpu_percent: sanitized.cpu_percent,
-    p_memory_percent: sanitized.memory_percent,
-  });
+  try {
+    // Primary Atomic Ingest RPC (Phase T6B Authority)
+    const result = await rpcPost("store_server_metrics_sample", {
+      p_server_id: sanitized.server_id,
+      p_observed_at: sanitized.observed_at,
+      p_host_uptime_seconds: sanitized.host_uptime_seconds,
+      p_shadowsocks_service_status: sanitized.shadowsocks_service_status,
+      p_shadowsocks_listener_status: sanitized.shadowsocks_listener_status,
+      p_ping_ms: sanitized.ping_ms,
+      p_ping_status: sanitized.ping_status,
+      p_packet_loss_percent: sanitized.packet_loss_percent,
+      p_rx_bytes_total: sanitized.rx_bytes_total,
+      p_tx_bytes_total: sanitized.tx_bytes_total,
+      p_rx_bps: sanitized.rx_bps,
+      p_tx_bps: sanitized.tx_bps,
+      p_cpu_percent: sanitized.cpu_percent,
+      p_memory_percent: sanitized.memory_percent,
+    });
 
-  return {
-    ok: true,
-    accepted: Boolean(accepted),
-    server_id: sanitized.server_id,
-    observed_at: sanitized.observed_at,
-  };
+    return {
+      ok: true,
+      accepted: Boolean(result?.latest_updated),
+      server_id: sanitized.server_id,
+      observed_at: sanitized.observed_at,
+      history_inserted: Boolean(result?.history_inserted),
+      latest_updated: Boolean(result?.latest_updated),
+      is_idempotent_retry: Boolean(result?.is_idempotent_retry),
+    };
+  } catch (error) {
+    const message = String(error?.supabaseMessage || error?.message || "");
+    if (message.includes("sample_conflict")) {
+      throw validationError("Conflicting duplicate sample rejected", 409);
+    }
+    if (message.includes("future_timestamp_rejected")) {
+      throw validationError("observed_at is too far in the future", 400);
+    }
+    if (message.includes("sample_too_old")) {
+      throw validationError("observed_at is too old", 400);
+    }
+    throw error;
+  }
 }
 
 export async function getLatestServerSnapshot(serverId = DEFAULT_SERVER_ID, now = new Date()) {
@@ -345,4 +391,67 @@ export async function getLatestServerSnapshot(serverId = DEFAULT_SERVER_ID, now 
   });
   const snapshot = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   return computeServerFreshness(snapshot, now);
+}
+
+export async function queryServerMetricsHistory({
+  serverId = DEFAULT_SERVER_ID,
+  range = "1h",
+  now = new Date(),
+} = {}) {
+  const normalizedServerId = String(serverId || DEFAULT_SERVER_ID).trim().toLowerCase();
+  if (!/^[a-z0-9_-]{1,64}$/.test(normalizedServerId)) {
+    throw validationError("Invalid server_id", 400);
+  }
+
+  const normalizedRange = String(range || "").trim().toLowerCase();
+  if (!SUPPORTED_HISTORY_RANGES.has(normalizedRange)) {
+    throw validationError("Invalid range parameter. Expected 1h, 24h, or 7d.", 400);
+  }
+
+  const config = RANGE_CONFIGS[normalizedRange];
+  const nowIso = now.toISOString();
+
+  // Call PostgreSQL RPC for query-time downsampling
+  const rpcResult = await rpcPost("query_server_metrics_history", {
+    p_server_id: normalizedServerId,
+    p_range: normalizedRange,
+    p_now: nowIso,
+  });
+
+  if (rpcResult && typeof rpcResult === "object" && Array.isArray(rpcResult.points)) {
+    return {
+      ok: true,
+      server_id: normalizedServerId,
+      range: normalizedRange,
+      bucket_seconds: config.bucketSeconds,
+      window_start: rpcResult.window_start || new Date(now.getTime() - config.durationMs).toISOString(),
+      window_end: rpcResult.window_end || nowIso,
+      available_since: rpcResult.available_since || null,
+      points_count: rpcResult.points.length,
+      points: rpcResult.points.slice(0, config.maxPoints),
+    };
+  }
+
+  return {
+    ok: true,
+    server_id: normalizedServerId,
+    range: normalizedRange,
+    bucket_seconds: config.bucketSeconds,
+    window_start: new Date(now.getTime() - config.durationMs).toISOString(),
+    window_end: nowIso,
+    available_since: null,
+    points_count: 0,
+    points: [],
+  };
+}
+
+export async function pruneServerMetricsHistory(retentionDays = 7) {
+  const deletedCount = await rpcPost("prune_server_metrics_history", {
+    p_retention_days: retentionDays,
+  });
+  return {
+    ok: true,
+    deleted_count: Number(deletedCount || 0),
+    retention_days: retentionDays,
+  };
 }

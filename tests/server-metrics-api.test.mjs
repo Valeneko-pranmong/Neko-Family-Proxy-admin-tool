@@ -10,6 +10,9 @@ const {
   computeServerFreshness,
   DEFAULT_SERVER_ID,
   STALE_THRESHOLD_MS,
+  FUTURE_TOLERANCE_MS,
+  MAX_INGEST_SAMPLE_AGE_MS,
+  RANGE_CONFIGS,
   validateIngestPayload,
   verifyIngestAuthorization,
 } = await import("../server/server-metrics.mjs");
@@ -77,6 +80,45 @@ test("validateIngestPayload normalizes valid VPS metrics payload", () => {
   assert.equal(sanitized.tx_bps, 25000.0);
 });
 
+test("validateIngestPayload enforces exact timestamp boundaries (now - 10m to now + 2m)", () => {
+  const baseValid = {
+    server_id: "japan-vps-1",
+    host_uptime_seconds: 100,
+    shadowsocks_service_status: "active",
+    shadowsocks_listener_status: "listening",
+    rx_bytes_total: 100,
+    tx_bytes_total: 100,
+    rx_bps: 100,
+    tx_bps: 100,
+  };
+
+  // 1. Within future tolerance (now + 1 minute) -> ACCEPTED
+  const futureAccepted = validateIngestPayload(
+    { ...baseValid, observed_at: "2026-08-18T12:01:00.000Z" },
+    now,
+  );
+  assert.equal(futureAccepted.observed_at, "2026-08-18T12:01:00.000Z");
+
+  // 2. Beyond future tolerance (now + 3 minutes) -> REJECTED 400
+  assert.throws(
+    () => validateIngestPayload({ ...baseValid, observed_at: "2026-08-18T12:03:00.000Z" }, now),
+    (err) => err.status === 400 && /future/.test(err.message),
+  );
+
+  // 3. Within past tolerance (now - 8 minutes) -> ACCEPTED
+  const pastAccepted = validateIngestPayload(
+    { ...baseValid, observed_at: "2026-08-18T11:52:00.000Z" },
+    now,
+  );
+  assert.equal(pastAccepted.observed_at, "2026-08-18T11:52:00.000Z");
+
+  // 4. Beyond past tolerance (now - 12 minutes) -> REJECTED 400
+  assert.throws(
+    () => validateIngestPayload({ ...baseValid, observed_at: "2026-08-18T11:48:00.000Z" }, now),
+    (err) => err.status === 400 && /old/.test(err.message),
+  );
+});
+
 test("validateIngestPayload rejects invalid fields with safe 400 errors", () => {
   const baseValid = {
     server_id: "japan-vps-1",
@@ -112,12 +154,6 @@ test("validateIngestPayload rejects invalid fields with safe 400 errors", () => 
   assert.throws(
     () => validateIngestPayload({ ...baseValid, shadowsocks_service_status: "crashed_invalid" }, now),
     (err) => err.status === 400 && /shadowsocks_service_status/.test(err.message),
-  );
-
-  // Future timestamp > 60s
-  assert.throws(
-    () => validateIngestPayload({ ...baseValid, observed_at: "2026-08-18T12:05:00.000Z" }, now),
-    (err) => err.status === 400 && /future/.test(err.message),
   );
 });
 
@@ -198,4 +234,13 @@ test("ping timeout or packet loss does not mark host offline or degraded", () =>
   assert.equal(freshness.host_status, "ONLINE");
   assert.equal(freshness.ping_status, "TIMEOUT");
   assert.equal(freshness.packet_loss_percent, 100.0);
+});
+
+test("RANGE_CONFIGS defines exact bucket resolution and point bounds", () => {
+  assert.equal(RANGE_CONFIGS["1h"].bucketSeconds, 60);
+  assert.equal(RANGE_CONFIGS["1h"].maxPoints, 60);
+  assert.equal(RANGE_CONFIGS["24h"].bucketSeconds, 300);
+  assert.equal(RANGE_CONFIGS["24h"].maxPoints, 288);
+  assert.equal(RANGE_CONFIGS["7d"].bucketSeconds, 1800);
+  assert.equal(RANGE_CONFIGS["7d"].maxPoints, 336);
 });

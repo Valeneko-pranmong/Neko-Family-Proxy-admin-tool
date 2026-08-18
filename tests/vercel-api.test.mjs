@@ -349,6 +349,92 @@ function createFakeSupabase() {
         }));
         return;
       }
+      if (rpc === "store_server_metrics_sample") {
+        control.serverMetricsHistory ||= [];
+        const existing = control.serverMetricsHistory.find(
+          (h) => h.server_id === body.p_server_id && h.observed_at === body.p_observed_at,
+        );
+        if (existing) {
+          const isIdentical =
+            existing.rx_bytes_total === body.p_rx_bytes_total &&
+            existing.tx_bytes_total === body.p_tx_bytes_total &&
+            existing.rx_bps === body.p_rx_bps &&
+            existing.tx_bps === body.p_tx_bps &&
+            existing.host_uptime_seconds === body.p_host_uptime_seconds &&
+            existing.shadowsocks_service_status === body.p_shadowsocks_service_status &&
+            existing.shadowsocks_listener_status === body.p_shadowsocks_listener_status &&
+            existing.ping_status === body.p_ping_status;
+          if (isIdentical) {
+            response.writeHead(200, { "Content-Type": "application/json" });
+            response.end(
+              JSON.stringify({
+                ok: true,
+                history_inserted: false,
+                latest_updated: false,
+                is_idempotent_retry: true,
+              }),
+            );
+            return;
+          }
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(
+            JSON.stringify({
+              code: "P0001",
+              message: "sample_conflict",
+            }),
+          );
+          return;
+        }
+
+        control.serverMetricsHistory.push({
+          server_id: body.p_server_id,
+          observed_at: body.p_observed_at,
+          host_uptime_seconds: body.p_host_uptime_seconds,
+          shadowsocks_service_status: body.p_shadowsocks_service_status,
+          shadowsocks_listener_status: body.p_shadowsocks_listener_status,
+          ping_ms: body.p_ping_ms,
+          ping_status: body.p_ping_status,
+          packet_loss_percent: body.p_packet_loss_percent,
+          rx_bytes_total: body.p_rx_bytes_total,
+          tx_bytes_total: body.p_tx_bytes_total,
+          rx_bps: body.p_rx_bps,
+          tx_bps: body.p_tx_bps,
+          cpu_percent: body.p_cpu_percent,
+          memory_percent: body.p_memory_percent,
+        });
+
+        let latestUpdated = false;
+        if (!control.serverMetrics || body.p_observed_at > control.serverMetrics.observed_at) {
+          control.serverMetrics = {
+            server_id: body.p_server_id,
+            observed_at: body.p_observed_at,
+            host_uptime_seconds: body.p_host_uptime_seconds,
+            shadowsocks_service_status: body.p_shadowsocks_service_status,
+            shadowsocks_listener_status: body.p_shadowsocks_listener_status,
+            ping_ms: body.p_ping_ms,
+            ping_status: body.p_ping_status,
+            packet_loss_percent: body.p_packet_loss_percent,
+            rx_bytes_total: body.p_rx_bytes_total,
+            tx_bytes_total: body.p_tx_bytes_total,
+            rx_bps: body.p_rx_bps,
+            tx_bps: body.p_tx_bps,
+            cpu_percent: body.p_cpu_percent,
+            memory_percent: body.p_memory_percent,
+          };
+          latestUpdated = true;
+        }
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(
+          JSON.stringify({
+            ok: true,
+            history_inserted: true,
+            latest_updated: latestUpdated,
+            is_idempotent_retry: false,
+          }),
+        );
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
       if (control.falseRpcs.has(rpc)) {
         response.end("false");
@@ -440,6 +526,52 @@ function createFakeSupabase() {
           memory_percent: body.p_memory_percent,
         };
         response.end("true");
+        return;
+      }
+      if (rpc === "query_server_metrics_history") {
+        control.serverMetricsHistory ||= [];
+        const serverId = body.p_server_id || "japan-vps-1";
+        const range = body.p_range || "1h";
+        const points = control.serverMetricsHistory
+          .filter((h) => h.server_id === serverId)
+          .map((h) => ({
+            bucket_start: h.observed_at,
+            sample_count: 1,
+            rx_bps_avg: h.rx_bps,
+            rx_bps_max: h.rx_bps,
+            tx_bps_avg: h.tx_bps,
+            tx_bps_max: h.tx_bps,
+            ping_ms_avg: h.ping_ms,
+            ping_ms_min: h.ping_ms,
+            ping_ms_max: h.ping_ms,
+            packet_loss_percent_avg: h.packet_loss_percent,
+            packet_loss_percent_max: h.packet_loss_percent,
+            shadowsocks_service_healthy: h.shadowsocks_service_status === "active",
+            shadowsocks_listener_healthy: h.shadowsocks_listener_status === "listening",
+            had_service_failure: h.shadowsocks_service_status !== "active",
+            had_listener_failure: h.shadowsocks_listener_status !== "listening",
+          }));
+        response.end(
+          JSON.stringify({
+            ok: true,
+            server_id: serverId,
+            range,
+            bucket_seconds: range === "1h" ? 60 : range === "24h" ? 300 : 1800,
+            window_start: new Date(Date.now() - 3600000).toISOString(),
+            window_end: new Date().toISOString(),
+            available_since: control.serverMetricsHistory[0]?.observed_at || null,
+            points_count: points.length,
+            points,
+          }),
+        );
+        return;
+      }
+      if (rpc === "prune_server_metrics_history") {
+        control.serverMetricsHistory ||= [];
+        const cutoff = new Date(Date.now() - (body.p_retention_days || 7) * 86400000).toISOString();
+        const before = control.serverMetricsHistory.length;
+        control.serverMetricsHistory = control.serverMetricsHistory.filter((h) => h.observed_at >= cutoff);
+        response.end(JSON.stringify(before - control.serverMetricsHistory.length));
         return;
       }
     }
@@ -1160,6 +1292,102 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.equal(serverJson.server.core_pid, undefined);
     assert.equal(serverJson.server.client_rx_bytes, undefined);
     assert.equal(serverJson.server.device_id, undefined);
+
+    // --- Phase T6B Historical Server Metrics API Tests ---
+    // 6a. GET /api/server/metrics/history without auth -> 401
+    const unauthHistory = await fetch(`${base}/api/server/metrics/history?range=1h`);
+    assert.equal(unauthHistory.status, 401);
+
+    // 6b. GET /api/server/metrics/history with invalid range -> 400
+    const invalidRange = await fetch(`${base}/api/server/metrics/history?range=invalid_range`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(invalidRange.status, 400);
+
+    // 6c. GET /api/server/metrics/history?range=1h (authenticated) -> 200
+    const history1h = await fetch(`${base}/api/server/metrics/history?range=1h`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(history1h.status, 200);
+    const h1Json = await history1h.json();
+    assert.equal(h1Json.ok, true);
+    assert.equal(h1Json.server_id, "japan-vps-1");
+    assert.equal(h1Json.range, "1h");
+    assert.equal(h1Json.bucket_seconds, 60);
+    assert.ok(Array.isArray(h1Json.points));
+    assert.ok(h1Json.points.length <= 60);
+
+    // 6d. GET /api/server/metrics/history?range=24h (authenticated) -> 200
+    const history24h = await fetch(`${base}/api/server/metrics/history?range=24h`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(history24h.status, 200);
+    const h24Json = await history24h.json();
+    assert.equal(h24Json.ok, true);
+    assert.equal(h24Json.range, "24h");
+    assert.equal(h24Json.bucket_seconds, 300);
+    assert.ok(h24Json.points.length <= 288);
+
+    // 6e. GET /api/server/metrics/history?range=7d (authenticated) -> 200
+    const history7d = await fetch(`${base}/api/server/metrics/history?range=7d`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(history7d.status, 200);
+    const h7dJson = await history7d.json();
+    assert.equal(h7dJson.ok, true);
+    assert.equal(h7dJson.range, "7d");
+    assert.equal(h7dJson.bucket_seconds, 1800);
+    assert.ok(h7dJson.points.length <= 336);
+
+    // 6f. Ingestion Identical Retry -> 200 { ok: true, accepted: true, is_idempotent_retry: true }
+    const identicalRetryReq = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validSecret}`,
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: validTime,
+        host_uptime_seconds: 50000,
+        shadowsocks_service_status: "active",
+        shadowsocks_listener_status: "listening",
+        upstream_ping_ms: 12.4,
+        upstream_ping_status: "AVAILABLE",
+        upstream_packet_loss_percent: 0.0,
+        rx_bytes_total: 1000000,
+        tx_bytes_total: 2000000,
+        rx_bps: 15400.0,
+        tx_bps: 16800.0,
+        cpu_percent: 10.5,
+        memory_percent: 22.0,
+      }),
+    });
+    assert.equal(identicalRetryReq.status, 200);
+    const identicalJson = await identicalRetryReq.json();
+    assert.equal(identicalJson.ok, true);
+    assert.equal(identicalJson.is_idempotent_retry, true);
+
+    // 6g. Ingestion Conflicting Duplicate -> 409 Conflict
+    const conflictingReq = await fetch(ingestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validSecret}`,
+      },
+      body: JSON.stringify({
+        server_id: "japan-vps-1",
+        observed_at: validTime, // Same timestamp
+        host_uptime_seconds: 50000,
+        shadowsocks_service_status: "failed", // DIFFERENT payload!
+        shadowsocks_listener_status: "closed",
+        rx_bytes_total: 9999999,
+        tx_bytes_total: 9999999,
+        rx_bps: 99999.0,
+        tx_bps: 99999.0,
+      }),
+    });
+    assert.equal(conflictingReq.status, 409);
 
     // 7. GET /api/admin?resource=overview (authenticated)
     const overviewRes = await fetch(`${base}/api/admin?resource=overview`, {
