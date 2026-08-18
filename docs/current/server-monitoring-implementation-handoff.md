@@ -1,5 +1,15 @@
 # Server Monitoring Data Plane — Implementation Handoff (T4B)
 
+```text
+STATUS:                     CLOSED
+PHASE:                      T4B (Server Monitoring Data Plane & Production Deploy)
+PREDECESSOR:                T4A (Server Monitoring Architecture Contract — CLOSED)
+SUCCESSOR:                  T5 (Admin Dashboard Polish — CLOSED) -> T6A (Historical Metrics Design — ACTIVE)
+CURRENT_STORAGE_AUTHORITY:  LATEST_ONLY (public.server_metrics_latest)
+HISTORICAL_STORAGE:         NOT PART OF T4B (Designed in docs/architecture/historical-server-metrics.md)
+LAST_UPDATED:               2026-08-18
+```
+
 ## 1. Overview & Data Flow
 
 Phase **T4B** implements the end-to-end data plane for Japan VPS server infrastructure monitoring, decoupling it entirely from Client telemetry and Launcher session authority.

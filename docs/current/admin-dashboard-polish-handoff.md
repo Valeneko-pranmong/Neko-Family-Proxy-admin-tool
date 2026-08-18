@@ -1,5 +1,17 @@
 # Phase T5 Admin Dashboard Polish & Live Visualization Handoff
 
+```text
+STATUS:                     CLOSED
+PHASE:                      T5 (Admin Dashboard Polish & Live Visualization)
+PREDECESSOR:                T4B (Server Monitoring Data Plane — CLOSED)
+SUCCESSOR:                  T6A (Historical Server Metrics Architecture — ACTIVE)
+PRODUCTION_RUNTIME_SOURCE:  840adc18da08cd3af284c5e2cbffbb20d5ef5d6a
+PRODUCTION_EVIDENCE_COMMIT: 41067701f6aa4498ba928fbf0359e939c705a5f0 (Docs-only commit)
+LIVE_GRAPH_AUTHORITY:       BROWSER_LOCAL_ROLLING (60 samples, ~5 minutes, resets on reload)
+HISTORICAL_SERVER_DATABASE: NOT PRESENT IN T5 (Designed in docs/architecture/historical-server-metrics.md)
+LAST_UPDATED:               2026-08-18
+```
+
 ## Overview
 Phase T5 focused on improving the visual coherence, accessibility, operational hierarchy, and statistical honesty of the Neko Family Proxy Admin Dashboard (**Neko Control Room**).
 

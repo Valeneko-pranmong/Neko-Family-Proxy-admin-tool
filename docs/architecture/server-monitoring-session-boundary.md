@@ -3,12 +3,14 @@
 
 ```text
 DOCUMENT:               docs/architecture/server-monitoring-session-boundary.md
-STATUS:                 DESIGN_FROZEN (T4A Contract — Corrected & Authority Closed)
+STATUS:                 DEPLOYED_AUTHORITY (T4B/T5 Deployed — T6 Extension Planned)
 CLASSIFICATION:         HARD ARCHITECTURE INVARIANT & CONTRACT
 OWNER:                  TEAM_WEB
 SUPPORT_TEAM:           TEAM_COORDINATION
 CONSUMERS:              ADMIN WEB, BACKEND API, SERVER INFRASTRUCTURE
 CORE / LAUNCHER SCOPE:  NO ACTION — READ-ONLY REFERENCE ONLY
+CURRENT_STORAGE_STATUS: LATEST_ONLY (Deployed in public.server_metrics_latest)
+PLANNED_T6_EXTENSION:   LATEST + HISTORY (Designed in docs/architecture/historical-server-metrics.md)
 DATE:                   2026-08-18
 ```
 
@@ -338,12 +340,21 @@ The Japan VPS agent periodically pushes metrics via HTTPS POST to the Backend In
 ---
 
 ### 7.3 Metrics Storage Authority
+
+#### CURRENT [DEPLOYED IN PRODUCTION (T4B/T5)]:
 - **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_ONLY`
-- **Storage Authority**: `SERVER_METRICS_STORAGE_AUTHORITY = PERSISTED_SNAPSHOT_TABLE` (Dedicated single-row persisted snapshot table per server in PostgreSQL, e.g. `public.server_metrics_latest`).
+- **Storage Authority**: `SERVER_METRICS_STORAGE_AUTHORITY = PERSISTED_SNAPSHOT_TABLE` (Dedicated single-row persisted snapshot table per server in PostgreSQL: `public.server_metrics_latest`).
 - **Stateless Ingest Invariant**: Process memory in serverless functions (Vercel) is ephemeral and not durable across requests; therefore, authoritative metrics state is persisted in the database snapshot table.
 - **Staleness Cadence**:
   - Push Cadence: 5s – 10s
   - Stale Threshold: 30s ($> 30\text{s}$ without report $\rightarrow$ `is_stale = true`, `host_status = STALE`)
+
+#### PLANNED [NOT YET IMPLEMENTED / DESIGNED IN T6A]:
+- **Storage Model**: `SERVER_METRICS_STORAGE_MODEL = LATEST_AND_HISTORY`
+- **Storage Authority**:
+  - Current state: `public.server_metrics_latest` (Preserved for instant status evaluation).
+  - Historical state: `public.server_metrics_history` (Additive composite-key time-series table, 7-day rolling retention, query-time aggregation).
+- **Design Specification**: See [docs/architecture/historical-server-metrics.md](file:///D:/Github/Neko-Family-Proxy-admin-tool/docs/architecture/historical-server-metrics.md).
 
 ---
 
