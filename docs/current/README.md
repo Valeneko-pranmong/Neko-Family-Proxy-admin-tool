@@ -2,11 +2,12 @@
 
 ```text
 DOCUMENT:                       docs/current/README.md
-STATUS:                         PRE-T10 CLOSED — T10 READY
-PHASE:                          PRE-T10 CLOSED
+STATUS:                         T10 COMMERCIAL LAUNCHER UI/UX
+PHASE:                          T10A CLOSED — T10B NEXT
+T10:                            IN PROGRESS
+T10A:                           DESIGN FROZEN
+T10B:                           COMMERCIAL UI IMPLEMENTATION NEXT
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
-NEXT_PRODUCT_PHASE:             T10 COMMERCIAL LAUNCHER UI/UX
-T10:                            NOT STARTED
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 DATE:                           2026-08-18
 ```
@@ -19,7 +20,9 @@ DATE:                           2026-08-18
 
 The project has completed all production operations hardening, automated monitoring, historical time-series telemetry, unified Discord status integration, automated weekly maintenance lifecycles, and cross-repository Git hygiene (**Phases T1 through T9 and PRE-T10 Baseline**).
 
-All infrastructure is operational and verified in production on AWS Lightsail Japan (`18.178.140.8`). The repository baseline is **`PRE-T10 CLOSED — T10 READY`** preparing for **Phase T10 (Commercial Launcher UI/UX)**.
+All infrastructure is operational and verified in production on AWS Lightsail Japan (`18.178.140.8`).
+
+**Phase T10A (Commercial Launcher UI/UX Design Freeze)** is **CLOSED**. The commercial UI architecture, customer status translation layer, single-instance Settings window design, and capability matrix are frozen in Launcher repository (`docs/current/t10-commercial-ui-ux-design-freeze.md`). The next active phase is **T10B (Commercial UI Implementation)**.
 
 > [!IMPORTANT]
 > **Active Client Security Release Blocker:**
@@ -34,7 +37,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | **`main`** | `8d45435e...` | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | **CURRENT PRODUCT BASELINE** (CI Verified Green) |
+| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `9c73b025...` (T10A Doc Head) | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | **T10 BASE:** `8d45435536...`<br>**T10A DESIGN FROZEN** (CI Verified Green) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
 | **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
@@ -76,14 +79,14 @@ SSH_PRODUCTION_CREDENTIAL       = ROTATED & SECURED (Ed25519; old key revoked fr
 
 ---
 
-## 5. Next Product Phase: T10 Commercial Launcher UI/UX
+## 5. Active Product Phase: T10 Commercial Launcher UI/UX
 
 > [!NOTE]
 > **Phase T10 Scope & Design Philosophy:**
-> - **Main Window:** Clean, read-only customer dashboard showing connection status, server health indicator, quick connect/disconnect toggle, and live status.
-> - **Settings:** Separate top-level window for configuration, routing modes, credentials, and advanced options.
-> - **Diagnostics:** Support and diagnostic tool embedded inside Settings.
-> - **Status:** **`NOT STARTED`**. No UI source code modifications are authorized during Pre-T10 hygiene.
+> - **Main Window:** Clean, read-only customer dashboard showing connection status, server health indicator, membership summary, live network metrics, and passive guidance.
+> - **Settings Window:** Separate single-instance top-level window for account management, password change, coupon redemption, game path, Tweaker path, and local diagnostics.
+> - **Diagnostics:** Support and diagnostic tool embedded inside Settings > Diagnostics (strict local client observability privacy boundary).
+> - **Phase Status:** **`T10A CLOSED (Design Frozen) — T10B NEXT (Implementation)`**.
 
 ---
 
