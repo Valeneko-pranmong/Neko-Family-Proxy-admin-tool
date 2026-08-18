@@ -31,17 +31,18 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 ## 2. Global Cross-Repository Authority Matrix
 
-| Repository | Active Branch | Role / Responsibility | Commit Authority | Artifact / Deployment State |
+| Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | `feature/neko-auth-lite-v1-launcher-backend` | Launcher Desktop App, Backend Edge Functions, Server Maintenance & Worker Agents | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | Source Line Active; `main` is stale product branch (26 commits behind) |
-| **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | C# / C++ Proxy Core Engine, Lite Verification, Named Pipe Telemetry, NetFilter | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Source Authority:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
-| **`Neko-Family-Proxy-admin-tool`** | `main` | Admin Web Dashboard & **Global Project Status Authority** | Current tip | **Global Documentation & Status Authority** |
+| **`Neko-Family-Proxy`** | `feature/neko-auth-lite-v1-launcher-backend` | `bf366035...` | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | Source Line Active; `main` is stale product branch (26 commits behind) |
+| **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
+| **`Neko-Family-Proxy-admin-tool`** | `main` | `2d9b0e9a...` | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
 ### Core Authority Distinction:
-- `LATEST_SOURCE_AUTHORITY`: `feature/neko-auth-lite-v1-core` (`f2696273...`)
-- `HISTORICAL_S0_BASELINE`: `origin/feature/neko-headless` / `b3c9d085...`
-- `V2RAY_LIVE_DATA_PLANE_FIX`: `c3e3fb09...` (Proven with live PSO2 game client)
-- `DEPLOYED_OR_PACKAGED_ARTIFACT_AUTHORITY`: `AMBIGUOUS / NOT YET REFROZEN` (Hosted Lite cutover is pending cross-component E2E)
+- `CORE_BRANCH_HEAD`: `b592725f...`
+- `CORE_RUNTIME_SOURCE_COMMIT`: `f2696273...` (`feature/neko-auth-lite-v1-core`)
+- `CORE_HISTORICAL_S0_BASELINE`: `b3c9d085...` (`origin/feature/neko-headless`)
+- `CORE_V2RAY_LIVE_DATA_PLANE_FIX`: `c3e3fb09...` (Proven with live PSO2 game client)
+- `CORE_DEPLOYED_ARTIFACT_SOURCE`: `AMBIGUOUS / NOT YET REFROZEN` (Hosted Lite cutover pending cross-component E2E)
 
 ---
 
