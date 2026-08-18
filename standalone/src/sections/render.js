@@ -3,9 +3,11 @@ import {
   formatBps,
   formatBytes,
   formatDate,
+  formatRelativeAge,
   formatTime,
   formatTrendBucket,
   formatUptime,
+  statusIcon,
 } from "../ui/escape.js";
 import { cell, dateCell, statusBadge, table } from "../ui/table.js";
 
@@ -28,8 +30,8 @@ export function renderSectionRefreshNotice(ui = {}) {
   return "";
 }
 
-function actionButton(action, id, label, extra = "") {
-  return `<button class="button button-small ${extra}" data-action="${action}" data-id="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
+function actionButton(action, id, label, extra = "", busy = false) {
+  return `<button class="button button-small ${extra}" data-action="${action}" data-id="${escapeHtml(id)}" ${busy ? "disabled" : ""}>${busy ? "กำลังดำเนินการ…" : escapeHtml(label)}</button>`;
 }
 
 export function renderServerHealth(server = {}, stats = {}) {
@@ -48,6 +50,7 @@ export function renderServerHealth(server = {}, stats = {}) {
   const rxTotal = formatBytes(server?.rx_bytes_total);
   const txTotal = formatBytes(server?.tx_bytes_total);
   const uptime = formatUptime(server?.uptime_seconds);
+  const relativeAge = formatRelativeAge(server?.age_seconds);
 
   const ssService = String(server?.shadowsocks_service_status || "unknown").toLowerCase();
   const ssListener = String(server?.shadowsocks_listener_status || "unknown").toLowerCase();
@@ -56,62 +59,183 @@ export function renderServerHealth(server = {}, stats = {}) {
   const entitledUsers = server?.entitled_active_user_count ?? stats.entitledActiveUserCount ?? stats.recentlyOnline ?? 0;
 
   const staleNotice = server?.is_stale
-    ? `<span class="server-stale-warn">ข้อมูลค้าง (>30s)</span>`
+    ? `<span class="server-stale-warn"><span class="status-glyph" aria-hidden="true">◷</span> ข้อมูลค้าง (>30s)</span>`
     : "";
 
   return `
-    <section class="panel server-health-panel">
+    <section class="panel server-health-panel" aria-label="สถานะเซิร์ฟเวอร์หลัก Japan VPS">
       <div class="panel-title-row">
         <div>
+          <div class="panel-eyebrow">INFRASTRUCTURE AUTHORITY</div>
           <h3>เซิร์ฟเวอร์หลัก (Japan VPS)</h3>
           <p class="muted">ข้อมูลโครงสร้างพื้นฐานโดยรวมจาก VPS และสถิติผู้ใช้ออนไลน์จาก Session Authority</p>
         </div>
         <div class="server-status-badge">
           ${staleNotice}
-          <span class="status status-${escapeHtml(hostStatus.toLowerCase())}">${escapeHtml(hostStatus)}</span>
+          <span class="status status-${escapeHtml(hostStatus.toLowerCase())}">
+            <span class="status-glyph" aria-hidden="true">${statusIcon(hostStatus)}</span>
+            ${escapeHtml(hostStatus)}
+          </span>
         </div>
       </div>
       <div class="server-metrics-grid">
+        <div class="server-metric-card host-status-card">
+          <span class="metric-label">Host Status</span>
+          <strong class="metric-value">
+            <span class="status status-${escapeHtml(hostStatus.toLowerCase())}">
+              <span class="status-glyph" aria-hidden="true">${statusIcon(hostStatus)}</span>
+              ${escapeHtml(hostStatus)}
+            </span>
+          </strong>
+          <small class="metric-sub">สังเกตล่าสุด: ${escapeHtml(relativeAge)}</small>
+        </div>
         <div class="server-metric-card">
           <span class="metric-label">${pingLabel}</span>
           <strong class="metric-value">${escapeHtml(pingDisplay)}</strong>
           <small class="metric-sub">Loss: ${escapeHtml(lossDisplay)} · Probe: ${escapeHtml(pingStatus)}</small>
         </div>
         <div class="server-metric-card">
+          <span class="metric-label">Packet Loss</span>
+          <strong class="metric-value">${escapeHtml(lossDisplay)}</strong>
+          <small class="metric-sub">สถานะโพรบ: ${escapeHtml(pingStatus)}</small>
+        </div>
+        <div class="server-metric-card">
           <span class="metric-label">VPS Download (RX)</span>
-          <strong class="metric-value">${escapeHtml(rxRate)}</strong>
+          <strong class="metric-value rx-value">${escapeHtml(rxRate)}</strong>
           <small class="metric-sub">รวมทั้งโฮสต์: ${escapeHtml(rxTotal)}</small>
         </div>
         <div class="server-metric-card">
           <span class="metric-label">VPS Upload (TX)</span>
-          <strong class="metric-value">${escapeHtml(txRate)}</strong>
+          <strong class="metric-value tx-value">${escapeHtml(txRate)}</strong>
           <small class="metric-sub">รวมทั้งโฮสต์: ${escapeHtml(txTotal)}</small>
         </div>
-        <div class="server-metric-card">
-          <span class="metric-label">สถานะ Shadowsocks</span>
-          <strong class="metric-value">
-            <span class="status status-${escapeHtml(ssService)}">${escapeHtml(ssService)}</span>
-            <span class="status status-${escapeHtml(ssListener)}">${escapeHtml(ssListener)}</span>
-          </strong>
-          <small class="metric-sub">Daemon: ${escapeHtml(ssService)} · Listener: ${escapeHtml(ssListener)}</small>
-        </div>
-        <div class="server-metric-card">
-          <span class="metric-label">Host Uptime</span>
-          <strong class="metric-value">${escapeHtml(uptime)}</strong>
-          <small class="metric-sub">Server: ${escapeHtml(server?.server_id || "japan-vps-1")}</small>
-        </div>
-        <div class="server-metric-card">
+        <div class="server-metric-card active-users-card">
           <span class="metric-label">ผู้ใช้ออนไลน์ (Active Users)</span>
           <strong class="metric-value">${escapeHtml(activeUsers)}</strong>
           <small class="metric-sub">${escapeHtml(entitledUsers)} มี License ใช้งานได้</small>
+        </div>
+      </div>
+      <div class="server-details-bar">
+        <div class="detail-item">
+          <span class="detail-label">Host Uptime</span>
+          <span class="detail-value">${escapeHtml(uptime)}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Shadowsocks Daemon</span>
+          <span class="detail-value">${statusBadge(ssService)}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Shadowsocks Listener</span>
+          <span class="detail-value">${statusBadge(ssListener)}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Server ID</span>
+          <span class="detail-value server-id-chip">${escapeHtml(server?.server_id || "japan-vps-1")}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Last Observation</span>
+          <span class="detail-value">${server?.observed_at ? escapeHtml(formatTime(server.observed_at)) : "—"}</span>
         </div>
       </div>
     </section>
   `;
 }
 
+export function renderLiveServerChart(history = [], server = {}) {
+  const points = Array.isArray(history) ? history : [];
+  const latestPoint = points.length > 0 ? points[points.length - 1] : null;
+  const currentRx = latestPoint ? formatBps(latestPoint.rxBps) : formatBps(server?.rx_bps);
+  const currentTx = latestPoint ? formatBps(latestPoint.txBps) : formatBps(server?.tx_bps);
+
+  let statusBadgeHtml = "";
+  if (server?.is_stale || server?.host_status === "STALE") {
+    statusBadgeHtml = `<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">◷</span> ข้อมูลค้าง (>30s) — หยุดรับจุดชั่วคราว</span>`;
+  } else if (points.length === 0) {
+    statusBadgeHtml = `<span class="live-status-tag"><span class="status-glyph" aria-hidden="true">○</span> รอรับข้อมูล Snapshot แรก…</span>`;
+  } else {
+    statusBadgeHtml = `<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">●</span> Live (${points.length}/60 จุด · ~5 นาที)</span>`;
+  }
+
+  const width = 840;
+  const height = 240;
+  const pad = { left: 68, right: 20, top: 24, bottom: 36 };
+
+  let chartBody = "";
+  if (points.length === 0) {
+    chartBody = `
+      <div class="chart-empty">
+        <strong>ยังไม่มีข้อมูล Live Network Activity ในเซสชันนี้</strong>
+        <span>กราฟจะบันทึกข้อมูลแบบ Rolling ในหน่วยความจำเบราว์เซอร์ตั้งแต่เปิดหน้านี้ (ไม่สร้างประวัติย้อนหลังจำลอง)</span>
+      </div>
+    `;
+  } else {
+    const maxVal = Math.max(1000, ...points.flatMap((p) => [Number(p.rxBps) || 0, Number(p.txBps) || 0]));
+    const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, points.length - 1);
+    const y = (value) => height - pad.bottom - ((Number(value) || 0) * (height - pad.top - pad.bottom)) / maxVal;
+
+    const rxPolyline = points.map((p, i) => `${x(i)},${y(p.rxBps)}`).join(" ");
+    const txPolyline = points.map((p, i) => `${x(i)},${y(p.txBps)}`).join(" ");
+
+    const rxDots = points.map((p, i) => {
+      const title = `${formatTime(p.observedAt)} · VPS Download: ${formatBps(p.rxBps)}`;
+      return `<circle tabindex="0" cx="${x(i)}" cy="${y(p.rxBps)}" r="3.5" fill="#3f76b7" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+    }).join("");
+
+    const txDots = points.map((p, i) => {
+      const title = `${formatTime(p.observedAt)} · VPS Upload: ${formatBps(p.txBps)}`;
+      return `<circle tabindex="0" cx="${x(i)}" cy="${y(p.txBps)}" r="3.5" fill="#287b5b" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+    }).join("");
+
+    const timeLabels = points.map((p, i) => {
+      const step = Math.max(1, Math.floor(points.length / 5));
+      if (i % step !== 0 && i !== points.length - 1) return "";
+      return `<text x="${x(i)}" y="${height - 12}" text-anchor="middle" class="chart-time-label">${escapeHtml(formatTime(p.observedAt))}</text>`;
+    }).join("");
+
+    chartBody = `
+      <div class="chart-wrap" role="img" aria-label="กราฟ Live Network Activity">
+        <svg class="activity-chart live-network-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${y(maxVal / 2)}" x2="${width - pad.right}" y2="${y(maxVal / 2)}" class="chart-grid" />
+          <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
+          <text x="8" y="${pad.top + 5}" class="chart-max">${escapeHtml(formatBps(maxVal))}</text>
+          <text x="8" y="${y(maxVal / 2) + 4}" class="chart-max">${escapeHtml(formatBps(maxVal / 2))}</text>
+          <text x="36" y="${height - pad.bottom + 4}" class="chart-max">0 bps</text>
+          <polyline points="${rxPolyline}" fill="none" stroke="#3f76b7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <polyline points="${txPolyline}" fill="none" stroke="#287b5b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          ${rxDots}
+          ${txDots}
+          ${timeLabels}
+        </svg>
+      </div>
+    `;
+  }
+
+  return `
+    <section class="panel live-chart-panel" aria-label="Live Network Activity">
+      <div class="panel-title-row">
+        <div>
+          <div class="panel-eyebrow">REAL-TIME TRAFFIC</div>
+          <h3>Live Network Activity</h3>
+          <p class="muted">Live — Since Dashboard Opened · บันทึกในหน่วยความจำเบราว์เซอร์ (Rolling Buffer สูงสุด 60 จุด / ~5 นาที)</p>
+        </div>
+        <div class="chart-meta-actions">
+          ${statusBadgeHtml}
+        </div>
+      </div>
+      <div class="live-chart-legend">
+        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download: <strong>${escapeHtml(currentRx)}</strong></span>
+        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload: <strong>${escapeHtml(currentTx)}</strong></span>
+      </div>
+      ${chartBody}
+    </section>
+  `;
+}
+
 export function renderOverview(data = {}) {
   const stats = data.stats || {};
+  const server = data.server || {};
+  const liveServerHistory = data.liveServerHistory || [];
   const safeCount = (value) => {
     const number = Number(value);
     return Number.isFinite(number) && number >= 0 ? number : 0;
@@ -169,25 +293,49 @@ export function renderOverview(data = {}) {
   const error = data._ui?.error ? `<div class="inline-alert" role="alert">อัปเดตไม่สำเร็จ: ${escapeHtml(data._ui.error)} · กำลังแสดงข้อมูลล่าสุดที่มี</div>` : "";
   return `
     <div class="dashboard-head">
-      <div><span class="system-status"><i></i> เชื่อมต่อ Admin API แล้ว</span><h2>ภาพรวมระบบ</h2><p class="muted">Metrics ที่แยก Session, Online ล่าสุด และ Installation อย่างชัดเจน</p></div>
-      <div class="refresh-meta"><span>อัปเดต ${escapeHtml(formatTime(data.generatedAt))}</span><span>${escapeHtml(data.timezone || "Asia/Bangkok")} (UTC+7)</span><div>${refreshState}<button class="button" data-action="refresh_overview" aria-label="รีเฟรชข้อมูล Dashboard" ${data._ui?.refreshing ? "disabled" : ""}>↻ รีเฟรช</button></div></div>
+      <div>
+        <span class="system-status"><i></i> เชื่อมต่อ Admin API แล้ว · Auto-polling 5s</span>
+        <h2>ภาพรวมระบบ</h2>
+        <p class="muted">Metrics ที่แยก Session, Online ล่าสุด, VPS Infrastructure และ Live Network อย่างถูกต้อง</p>
+      </div>
+      <div class="refresh-meta">
+        <span>อัปเดต ${escapeHtml(formatTime(data.generatedAt))}</span>
+        <span>${escapeHtml(data.timezone || "Asia/Bangkok")} (UTC+7)</span>
+        <div>
+          ${refreshState}
+          <button class="button" data-action="refresh_overview" aria-label="รีเฟรชข้อมูล Dashboard" ${data._ui?.refreshing ? "disabled" : ""}>↻ รีเฟรช</button>
+        </div>
+      </div>
     </div>
     ${error}
+    ${renderServerHealth(server, stats)}
+    ${renderLiveServerChart(liveServerHistory, server)}
+    <div class="section-title-divider">
+      <h3>สถิติสมาชิกและสิทธิ์การใช้งาน (Session Authority)</h3>
+    </div>
     <section class="stats-grid">${cards
       .map(([label, value, tone, explanation, secondary]) => `<article class="stat-card stat-${tone}"><span>${label}</span><strong>${escapeHtml(safeCount(value))}</strong><p>${explanation}</p><small>${escapeHtml(secondary)}</small></article>`)
       .join("")}</section>
-    ${renderServerHealth(data.server, stats)}
     <section class="panel chart-panel">
-      <div class="panel-title-row"><div><h3>Launcher Activity</h3><p class="muted">Session เริ่มใหม่และการใช้คูปองสำเร็จ · เวลา Asia/Bangkok</p></div><div class="range-switch" aria-label="ช่วงเวลากราฟ">${["24h", "7d", "14d", "30d"].map((value) => `<button class="${value === range ? "is-selected" : ""}" data-action="set_range" data-range="${value}" aria-pressed="${value === range}">${value.toUpperCase()}</button>`).join("")}</div></div>
+      <div class="panel-title-row">
+        <div>
+          <div class="panel-eyebrow">HISTORICAL AGGREGATE</div>
+          <h3>Launcher Activity</h3>
+          <p class="muted">Session เริ่มใหม่และการใช้คูปองสำเร็จ · เวลา Asia/Bangkok</p>
+        </div>
+        <div class="range-switch" aria-label="ช่วงเวลากราฟ">
+          ${["24h", "7d", "14d", "30d"].map((value) => `<button class="${value === range ? "is-selected" : ""}" data-action="set_range" data-range="${value}" aria-pressed="${value === range}">${value.toUpperCase()}</button>`).join("")}
+        </div>
+      </div>
       <div class="chart-legend"><span><i class="legend-sessions"></i>Session เริ่มใหม่</span><span><i class="legend-redemptions"></i>ใช้คูปองสำเร็จ</span></div>
       ${graph}
     </section>
     <section class="ops-grid">
       <article class="panel ops-summary"><h3>Operational summary</h3><dl><div><dt>สมาชิก Active</dt><dd>${safeCount(stats.userBreakdown?.active)}</dd></div><div><dt>License หมดอายุ</dt><dd>${safeCount(stats.licenseBreakdown?.expired)}</dd></div><div><dt>License ถูกยกเลิก</dt><dd>${safeCount(stats.licenseBreakdown?.revoked)}</dd></div></dl></article>
-    <section class="panel">
-      <div class="panel-title-row"><h3>กิจกรรมล่าสุด</h3></div>
-      ${table(["รายการ", "รายละเอียด", "เวลา"], recent)}
-    </section>
+      <section class="panel">
+        <div class="panel-title-row"><h3>กิจกรรมล่าสุด</h3></div>
+        ${table(["รายการ", "รายละเอียด", "เวลา"], recent)}
+      </section>
     </section>
   `;
 }
@@ -304,25 +452,44 @@ export function couponForm() {
   `;
 }
 
-export function renderSessions(rows = []) {
+export function renderSessions(rows = [], busyId = null, nowMs = Date.now()) {
   const body = rows.map((row) => {
+    const isRevoked = Boolean(row.revoked_at);
+    const lastSeenMs = Date.parse(row.last_seen_at);
+    const isFresh = Number.isFinite(lastSeenMs) && (nowMs - lastSeenMs <= 120 * 1000);
+
+    // Mandatory Correction 3: Online (<=120s), Offline (>120s), Revoked (revoked_at present)
+    const sessionStatus = isRevoked ? "revoked" : isFresh ? "online" : "offline";
+    const sessionLabel = isRevoked ? "Revoked" : isFresh ? "Online" : "Offline";
+
     const sessionId = row.id
-      ? `<span class="truncated-id" title="${escapeHtml(row.id)}">${escapeHtml(row.id.slice(0, 8))}</span>`
+      ? `<span class="truncated-id copyable-cell" title="คัดลอก Session ID: ${escapeHtml(row.id)}" data-copy="${escapeHtml(row.id)}">${escapeHtml(row.id.slice(0, 8))}…</span>`
       : "—";
     const license = row.license_id
-      ? `<span class="truncated-id" title="${escapeHtml(row.license_id)}">${escapeHtml(row.license_id.slice(0, 8))}</span>`
+      ? `<span class="truncated-id copyable-cell" title="คัดลอก License ID: ${escapeHtml(row.license_id)}" data-copy="${escapeHtml(row.license_id)}">${escapeHtml(row.license_id.slice(0, 8))}…</span>`
       : "—";
-    return `<tr>${cell(row.username, "primary")}<td>${sessionId}</td><td>${license}</td><td>${statusBadge(row.revoked_at ? "revoked" : "active")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${row.revoked_at ? "" : actionButton("revoke_session", row.id, "ยกเลิก", "button-danger")}</td></tr>`;
+
+    const isBusy = busyId === row.id;
+    const actionCell = isRevoked
+      ? `<span class="muted">ยุติแล้ว</span>`
+      : actionButton("revoke_session", row.id, "ยุติเซสชัน", "button-danger", isBusy);
+
+    return `<tr>${cell(row.username, "primary")}<td>${statusBadge(sessionStatus, sessionLabel)}</td><td>${sessionId}</td><td>${license}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${actionCell}</td></tr>`;
   });
-  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "Session ID", "License", "สถานะ", "เริ่มเมื่อ", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "สถานะ", "Session ID", "License", "เริ่มเมื่อ", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มี Launcher session ในระบบ")}`;
 }
 
-export function renderInstallations(rows = []) {
+export function renderInstallations(rows = [], busyId = null) {
   const body = rows.map(
-    (row) =>
-      `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge("remembered")}</td><td>${row.owns_active_session ? statusBadge("เครื่องที่กำลังใช้งาน") : "ประวัติการติดตั้ง"}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${row.active_session_id ? actionButton("revoke_session", row.active_session_id, "ยุติเซสชันปัจจุบัน", "button-danger") : ""}</td></tr>`,
+    (row) => {
+      const isBusy = busyId === row.active_session_id;
+      const actionCell = row.active_session_id
+        ? actionButton("revoke_session", row.active_session_id, "ยุติเซสชันปัจจุบัน", "button-danger", isBusy)
+        : "—";
+      return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge("remembered", "จดจำไว้")}</td><td>${row.owns_active_session ? statusBadge("online", "เครื่องที่กำลังใช้งาน") : statusBadge("inactive", "ประวัติการติดตั้ง")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${actionCell}</td></tr>`;
+    },
   );
-  return `${heading("การติดตั้งที่จดจำไว้", "อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน บัญชีมีเซสชันปัจจุบันได้หนึ่งรายการ และการเข้าใช้เครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("การติดตั้งที่จดจำไว้", "อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน บัญชีมีเซสชันปัจจุบันได้หนึ่งรายการ และการเข้าใช้เครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มีประวัติการติดตั้ง")}`;
 }
 
 export function renderRedemptions(rows = []) {
@@ -330,7 +497,7 @@ export function renderRedemptions(rows = []) {
     (row) =>
       `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.batch)}<td>${statusBadge(row.succeeded ? "success" : "rejected")}</td>${cell(row.error_code)}${dateCell(row.attempted_at)}</tr>`,
   );
-  return `${heading("การใช้คูปอง", "ประวัติความสำเร็จและข้อผิดพลาดในการใช้คูปอง")}${table(["สมาชิก", "สินค้า", "ชุด", "ผลลัพธ์", "ข้อผิดพลาด", "เวลา"], body)}`;
+  return `${heading("การใช้คูปอง", "ประวัติความสำเร็จและข้อผิดพลาดในการใช้คูปอง")}${table(["สมาชิก", "สินค้า", "ชุด", "ผลลัพธ์", "ข้อผิดพลาด", "เวลา"], body, "ยังไม่มีประวัติการใช้คูปอง")}`;
 }
 
 export function renderAudit(rows = []) {
@@ -338,17 +505,17 @@ export function renderAudit(rows = []) {
     (row) =>
       `<tr>${cell(row.title, "primary")}${cell(row.username)}${cell(row.detail)}${dateCell(row.time)}</tr>`,
   );
-  return `${heading("ประวัติการใช้งาน", "Audit log ที่คัดเฉพาะ metadata ที่ปลอดภัยและมีประโยชน์")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body)}`;
+  return `${heading("ประวัติการใช้งาน", "Audit log ที่คัดเฉพาะ metadata ที่ปลอดภัยและมีประโยชน์")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body, "ยังไม่มีบันทึก Audit event")}`;
 }
 
-export function renderSection(section, data, viewer = null) {
+export function renderSection(section, data, viewer = null, busyId = null) {
   if (section === "users") return renderUsers(data, viewer);
   if (section === "products") return renderProducts(data);
   if (section === "licenses") return renderLicenses(data);
   if (section === "coupons") return renderCoupons(data);
   if (section === "redemptions") return renderRedemptions(data);
-  if (section === "installations") return renderInstallations(data);
-  if (section === "sessions") return renderSessions(data);
+  if (section === "installations") return renderInstallations(data, busyId);
+  if (section === "sessions") return renderSessions(data, busyId);
   if (section === "audit") return renderAudit(data);
   return renderOverview(data);
 }

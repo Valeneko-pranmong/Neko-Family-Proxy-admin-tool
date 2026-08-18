@@ -29,6 +29,7 @@ export function formatTime(value) {
   return new Intl.DateTimeFormat("th-TH", {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     timeZone: "Asia/Bangkok",
   }).format(date);
 }
@@ -60,13 +61,33 @@ export function formatBps(bps) {
 
 export function formatUptime(seconds) {
   const num = Number(seconds);
-  if (!Number.isFinite(num) || num <= 0) return "0s";
+  if (!Number.isFinite(num) || num <= 0) return "—";
   const days = Math.floor(num / 86400);
   const hours = Math.floor((num % 86400) / 3600);
   const minutes = Math.floor((num % 3600) / 60);
   const secs = Math.floor(num % 60);
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m ${secs}s`;
   return `${secs}s`;
+}
+
+export function formatRelativeAge(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  const num = Number(seconds);
+  if (!Number.isFinite(num) || num < 0) return "—";
+  if (num === 0) return "เมื่อสักครู่";
+  if (num < 60) return `${num}s ที่แล้ว`;
+  const mins = Math.floor(num / 60);
+  const secs = num % 60;
+  return `${mins}m ${secs}s ที่แล้ว`;
+}
+
+export function statusIcon(value) {
+  const status = String(value || "unknown").toLowerCase();
+  if (["online", "available", "active", "listening", "success"].includes(status)) return "●";
+  if (["degraded", "expiring", "suspended", "scheduled"].includes(status)) return "▲";
+  if (["stale"].includes(status)) return "◷";
+  if (["offline", "revoked", "rejected", "banned", "expired", "closed", "failed", "timeout"].includes(status)) return "■";
+  return "○";
 }

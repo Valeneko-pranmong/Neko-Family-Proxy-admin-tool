@@ -6,7 +6,7 @@ import {
   saveCouponCodes,
 } from "./coupon-archive.js";
 import { createSessionController } from "./session.js";
-import { createStore } from "./state.js";
+import { appendLiveServerSample, createStore } from "./state.js";
 import {
   couponForm,
   renderRecoveryCodeDialog,
@@ -17,6 +17,8 @@ import { loginView, shellView } from "./ui/layout.js";
 import { escapeHtml } from "./ui/escape.js";
 import { toast } from "./ui/toast.js";
 
+const POLL_CADENCE_MS = 5000;
+
 const root = document.querySelector("#app");
 const store = createStore();
 let loginError = "";
@@ -24,10 +26,13 @@ let recoveryCodeDialog = null;
 let recoveryCountdownTimer = null;
 let loadRequestId = 0;
 let actionInFlight = false;
+let pollTimer = null;
+let pollInFlight = false;
 
 function render() {
   if (!session.authenticated) {
     recoveryCodeDialog = null;
+    stopPolling();
     root.innerHTML = loginView(loginError);
     return;
   }
@@ -46,7 +51,11 @@ function render() {
             has_archived_codes: hasCouponCodes(row.id),
           }))
         : store.state.active === "overview"
-          ? { ...(sectionData || {}), _ui: { refreshing: store.state.refreshing, error: store.state.error } }
+          ? {
+              ...(sectionData || {}),
+              liveServerHistory: store.state.liveServerHistory,
+              _ui: { refreshing: store.state.refreshing, error: store.state.error },
+            }
           : sectionData;
     const refreshNotice = store.state.active === "overview"
       ? ""
@@ -54,7 +63,12 @@ function render() {
           refreshing: store.state.refreshing,
           error: store.state.error,
         });
-    content.innerHTML = `${refreshNotice}${renderSection(store.state.active, renderedData, session.viewer)}`;
+    content.innerHTML = `${refreshNotice}${renderSection(
+      store.state.active,
+      renderedData,
+      session.viewer,
+      store.state.actionBusyId,
+    )}`;
     if (store.state.couponFormOpen) {
       const host = root.querySelector("#coupon-form-host");
       if (host) host.innerHTML = couponForm();
@@ -65,8 +79,57 @@ function render() {
 
 async function handleUnauthorized(error) {
   if (error?.status !== 401) return false;
+  stopPolling();
   await session.logout({ forceLocal: true });
   return true;
+}
+
+async function pollOverview() {
+  if (
+    !session.authenticated ||
+    store.state.active !== "overview" ||
+    document.visibilityState !== "visible" ||
+    pollInFlight
+  ) {
+    return;
+  }
+  pollInFlight = true;
+  try {
+    const result = await api.loadResource("overview", {
+      range: store.state.overviewRange,
+    });
+    if (store.state.active !== "overview") return;
+    const nextHistory = appendLiveServerSample(
+      store.state.liveServerHistory,
+      result.data?.server,
+    );
+    store.patch({
+      data: { ...store.state.data, overview: result.data },
+      liveServerHistory: nextHistory,
+      refreshing: false,
+      error: "",
+    });
+  } catch (error) {
+    if (await handleUnauthorized(error)) return;
+    store.patch({
+      refreshing: false,
+      error: error instanceof Error ? error.message : "อัปเดตข้อมูล Real-time ไม่สำเร็จ",
+    });
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollOverview, POLL_CADENCE_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 }
 
 async function load(section = store.state.active) {
@@ -79,11 +142,19 @@ async function load(section = store.state.active) {
       range: section === "overview" ? store.state.overviewRange : undefined,
     });
     if (requestId !== loadRequestId || section !== store.state.active) return;
+    const nextHistory =
+      section === "overview"
+        ? appendLiveServerSample(store.state.liveServerHistory, result.data?.server)
+        : store.state.liveServerHistory;
     store.patch({
       data: { ...store.state.data, [section]: result.data },
+      liveServerHistory: nextHistory,
       loading: false,
       refreshing: false,
     });
+    if (section === "overview") {
+      startPolling();
+    }
   } catch (error) {
     if (requestId !== loadRequestId || section !== store.state.active) return;
     if (await handleUnauthorized(error)) return;
@@ -99,6 +170,7 @@ async function load(section = store.state.active) {
 }
 
 async function action(name, id) {
+  if (actionInFlight || store.state.actionBusyId) return;
   const row = (store.state.data[store.state.active] || []).find(
     (item) =>
       item.id === id
@@ -133,13 +205,13 @@ async function action(name, id) {
     }[nextStatus];
     const targetIdentity = row?.username || id;
     if (!window.confirm(`${confirmation}\nเป้าหมาย: ${targetIdentity}`)) return;
-    await run({ action: "set_user_status", userId: id, status: nextStatus });
+    await run({ action: "set_user_status", userId: id, status: nextStatus }, id);
     return;
   }
   if (name === "extend_license") {
     const days = Number(window.prompt("ต้องการต่ออายุกี่วัน", "30"));
     if (!Number.isInteger(days) || days < 1) return;
-    await run({ action: "extend_license", licenseId: id, days });
+    await run({ action: "extend_license", licenseId: id, days }, id);
     return;
   }
   const targetLabel = [
@@ -163,7 +235,7 @@ async function action(name, id) {
     delete_batch: { action: name, batchId: id },
   }[name];
   if (payload) {
-    const succeeded = await run(payload);
+    const succeeded = await run(payload, id);
     if (succeeded && name === "delete_batch") deleteCouponCodes(id);
   }
 }
@@ -226,9 +298,10 @@ async function submitRecoveryCode(form) {
   }
 }
 
-async function run(payload) {
+async function run(payload, busyId = null) {
   if (actionInFlight) return false;
   actionInFlight = true;
+  if (busyId) store.patch({ actionBusyId: busyId });
   try {
     await api.runAction(payload);
     toast("ดำเนินการสำเร็จ", "success");
@@ -240,6 +313,7 @@ async function run(payload) {
     return false;
   } finally {
     actionInFlight = false;
+    if (busyId) store.patch({ actionBusyId: null });
   }
 }
 
@@ -298,6 +372,16 @@ const session = createSessionController(() => {
 
 store.subscribe(render);
 
+document.addEventListener("visibilitychange", () => {
+  if (
+    document.visibilityState === "visible" &&
+    session.authenticated &&
+    store.state.active === "overview"
+  ) {
+    void pollOverview();
+  }
+});
+
 root.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (event.target.id === "login-form") {
@@ -319,6 +403,20 @@ root.addEventListener("submit", async (event) => {
 });
 
 root.addEventListener("click", async (event) => {
+  const copyTarget = event.target.closest("[data-copy]");
+  if (copyTarget) {
+    const textToCopy = copyTarget.dataset.copy;
+    if (textToCopy) {
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+        toast("คัดลอกรหัสแล้ว", "success");
+      } catch {
+        window.prompt("คัดลอกรหัส", textToCopy);
+      }
+      return;
+    }
+  }
+
   const target = event.target.closest("[data-section], [data-action]");
   if (!target) return;
   if (target.dataset.section) {
@@ -341,6 +439,7 @@ root.addEventListener("click", async (event) => {
   }
   if (name === "logout") {
     closeRecoveryCodeDialog();
+    stopPolling();
     try {
       await session.logout();
     } catch {

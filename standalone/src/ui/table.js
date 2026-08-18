@@ -1,4 +1,4 @@
-import { escapeHtml, display, formatDate } from "./escape.js";
+import { escapeHtml, display, formatDate, statusIcon } from "./escape.js";
 
 export function table(headers, rows, empty = "ยังไม่มีข้อมูล") {
   if (!rows.length) return `<div class="empty">${escapeHtml(empty)}</div>`;
@@ -17,7 +17,9 @@ export const cell = (value, className = "") =>
 
 export const dateCell = (value) => cell(formatDate(value), "date-cell");
 
-export const statusBadge = (value) => {
+export const statusBadge = (value, labelOverride = "") => {
   const status = String(value || "unknown").toLowerCase();
-  return `<span class="status status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+  const icon = statusIcon(status);
+  const label = labelOverride || status;
+  return `<span class="status status-${escapeHtml(status)}"><span class="status-glyph" aria-hidden="true">${icon}</span> ${escapeHtml(label)}</span>`;
 };

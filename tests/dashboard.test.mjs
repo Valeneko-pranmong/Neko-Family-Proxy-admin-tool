@@ -10,7 +10,22 @@ import {
   normalizeTrendRange,
   summarizeCurrentSessions,
 } from "../server/dashboard.mjs";
-import { renderOverview, renderSectionRefreshNotice } from "../standalone/src/sections/render.js";
+import {
+  formatBps,
+  formatBytes,
+  formatRelativeAge,
+  formatUptime,
+  statusIcon,
+} from "../standalone/src/ui/escape.js";
+import { statusBadge } from "../standalone/src/ui/table.js";
+import { appendLiveServerSample, MAX_LIVE_SAMPLES } from "../standalone/src/state.js";
+import {
+  renderLiveServerChart,
+  renderOverview,
+  renderSectionRefreshNotice,
+  renderServerHealth,
+  renderSessions,
+} from "../standalone/src/sections/render.js";
 
 const now = new Date("2026-08-09T10:00:00.000Z");
 
@@ -198,4 +213,302 @@ test("standalone build output uses repository-normalized LF line endings", async
     "utf8",
   );
   assert.equal(bundle.includes(String.fromCharCode(13)), false);
+});
+
+// -----------------------------------------------------------------------------
+// Phase T5 Polish & Visualization Tests
+// -----------------------------------------------------------------------------
+
+test("formatBps formats rates accurately across bps, Kbps, Mbps, and Gbps", () => {
+  assert.equal(formatBps(0), "0 bps");
+  assert.equal(formatBps(null), "0 bps");
+  assert.equal(formatBps(500), "500 bps");
+  assert.equal(formatBps(1500), "1.5 Kbps");
+  assert.equal(formatBps(12500000), "12.50 Mbps");
+  assert.equal(formatBps(2400000000), "2.40 Gbps");
+});
+
+test("formatBytes formats byte totals accurately across B, KB, MB, GB, and TB", () => {
+  assert.equal(formatBytes(0), "0 B");
+  assert.equal(formatBytes(null), "0 B");
+  assert.equal(formatBytes(512), "512 B");
+  assert.equal(formatBytes(1024 * 1024), "1.00 MB");
+  assert.equal(formatBytes(1024 * 1024 * 1024 * 2.5), "2.50 GB");
+  assert.equal(formatBytes(1024 * 1024 * 1024 * 1024 * 4), "4.00 TB");
+});
+
+test("formatUptime formats seconds to days, hours, and minutes cleanly", () => {
+  assert.equal(formatUptime(0), "—");
+  assert.equal(formatUptime(null), "—");
+  assert.equal(formatUptime(45), "45s");
+  assert.equal(formatUptime(125), "2m 5s");
+  assert.equal(formatUptime(3600 * 5 + 60 * 31), "5h 31m");
+  assert.equal(formatUptime(86400 * 3 + 3600 * 12), "3d 12h");
+});
+
+test("formatRelativeAge formats observation age accurately and handles zero and invalid", () => {
+  assert.equal(formatRelativeAge(null), "—");
+  assert.equal(formatRelativeAge(undefined), "—");
+  assert.equal(formatRelativeAge(0), "เมื่อสักครู่");
+  assert.equal(formatRelativeAge(8), "8s ที่แล้ว");
+  assert.equal(formatRelativeAge(75), "1m 15s ที่แล้ว");
+});
+
+test("statusBadge renders accessible glyphs and text for ONLINE, DEGRADED, STALE, and UNKNOWN", () => {
+  assert.match(statusBadge("online"), /status-online/);
+  assert.match(statusBadge("online"), /●/);
+  assert.match(statusBadge("online"), /online/);
+
+  assert.match(statusBadge("degraded"), /status-degraded/);
+  assert.match(statusBadge("degraded"), /▲/);
+  assert.match(statusBadge("degraded"), /degraded/);
+
+  assert.match(statusBadge("stale"), /status-stale/);
+  assert.match(statusBadge("stale"), /◷/);
+  assert.match(statusBadge("stale"), /stale/);
+
+  assert.match(statusBadge("unknown"), /status-unknown/);
+  assert.match(statusBadge("unknown"), /○/);
+  assert.match(statusBadge("unknown"), /unknown/);
+});
+
+test("renderServerHealth presents authoritative host states without inferring OFFLINE", () => {
+  const onlineHtml = renderServerHealth({
+    host_status: "ONLINE",
+    is_stale: false,
+    ping_ms: 12.4,
+    ping_status: "AVAILABLE",
+    ping_target_label: "VPS → Upstream",
+    packet_loss_percent: 0.0,
+    rx_bps: 12500000,
+    tx_bps: 25000000,
+    rx_bytes_total: 1073741824,
+    tx_bytes_total: 2147483648,
+    uptime_seconds: 86400 * 3,
+    age_seconds: 5,
+    shadowsocks_service_status: "active",
+    shadowsocks_listener_status: "listening",
+    server_id: "japan-vps-1",
+  });
+  assert.match(onlineHtml, /ONLINE/);
+  assert.doesNotMatch(onlineHtml, /status-offline/);
+
+  const staleHtml = renderServerHealth({
+    host_status: "STALE",
+    is_stale: true,
+    age_seconds: 45,
+    ping_ms: 12.0,
+    ping_status: "AVAILABLE",
+  });
+  assert.match(staleHtml, /STALE/);
+  assert.match(staleHtml, /ข้อมูลค้าง \(>30s\)/);
+  assert.doesNotMatch(staleHtml, /status-offline/);
+});
+
+test("renderServerHealth displays strictly VPS → Upstream and handles unavailable probe metrics", () => {
+  const html = renderServerHealth({
+    host_status: "ONLINE",
+    ping_ms: null,
+    ping_status: "TIMEOUT",
+    ping_target_label: "VPS → Upstream",
+    packet_loss_percent: 100.0,
+  });
+  assert.match(html, /VPS → Upstream/);
+  assert.match(html, /Timeout/);
+  assert.match(html, /100%/);
+  assert.doesNotMatch(html, /PSO2 JP/);
+  assert.doesNotMatch(html, /Thailand → Japan/);
+});
+
+test("renderServerHealth displays explicit aggregate RX/TX labels and uptime", () => {
+  const html = renderServerHealth({
+    host_status: "ONLINE",
+    rx_bps: 5000000,
+    tx_bps: 10000000,
+    rx_bytes_total: 52428800,
+    tx_bytes_total: 104857600,
+    uptime_seconds: 3600 * 5 + 60 * 31,
+  });
+  assert.match(html, /VPS Download \(RX\)/);
+  assert.match(html, /VPS Upload \(TX\)/);
+  assert.match(html, /5.00 Mbps/);
+  assert.match(html, /10.00 Mbps/);
+  assert.match(html, /50.00 MB/);
+  assert.match(html, /100.00 MB/);
+  assert.match(html, /Host Uptime/);
+  assert.match(html, /5h 31m/);
+});
+
+test("appendLiveServerSample appends first fresh snapshot and deduplicates by observed_at", () => {
+  const sample1 = {
+    observed_at: "2026-08-18T10:00:00.000Z",
+    rx_bps: 1500000,
+    tx_bps: 3000000,
+    host_status: "ONLINE",
+    is_stale: false,
+  };
+
+  const history1 = appendLiveServerSample([], sample1, 60);
+  assert.equal(history1.length, 1);
+  assert.equal(history1[0].observedAt, "2026-08-18T10:00:00.000Z");
+  assert.equal(history1[0].rxBps, 1500000);
+
+  // Duplicate poll with same observed_at must be ignored
+  const history2 = appendLiveServerSample(history1, sample1, 60);
+  assert.equal(history2.length, 1);
+
+  // New sample with newer observed_at is appended
+  const sample2 = {
+    observed_at: "2026-08-18T10:00:05.000Z",
+    rx_bps: 2000000,
+    tx_bps: 4000000,
+    host_status: "ONLINE",
+    is_stale: false,
+  };
+  const history3 = appendLiveServerSample(history2, sample2, 60);
+  assert.equal(history3.length, 2);
+  assert.equal(history3[1].observedAt, "2026-08-18T10:00:05.000Z");
+});
+
+test("appendLiveServerSample bounds live history to MAX_LIVE_SAMPLES (60) dropping oldest", () => {
+  let history = [];
+  for (let i = 1; i <= 65; i++) {
+    const timestamp = new Date(Date.parse("2026-08-18T10:00:00.000Z") + i * 5000).toISOString();
+    history = appendLiveServerSample(history, {
+      observed_at: timestamp,
+      rx_bps: i * 1000,
+      tx_bps: i * 2000,
+      host_status: "ONLINE",
+      is_stale: false,
+    }, 60);
+  }
+
+  assert.equal(history.length, 60);
+  // Oldest remaining point is sample 6 (since 1-5 dropped)
+  assert.equal(history[0].observedAt, new Date(Date.parse("2026-08-18T10:00:00.000Z") + 6 * 5000).toISOString());
+  assert.equal(history[59].observedAt, new Date(Date.parse("2026-08-18T10:00:00.000Z") + 65 * 5000).toISOString());
+});
+
+test("appendLiveServerSample does not create fake zero samples on STALE or UNKNOWN snapshots", () => {
+  const existingHistory = [
+    { observedAt: "2026-08-18T10:00:00.000Z", rxBps: 5000000, txBps: 8000000, pingMs: 12.0 },
+  ];
+
+  // Stale snapshot
+  const staleSample = {
+    observed_at: "2026-08-18T10:00:45.000Z",
+    host_status: "STALE",
+    is_stale: true,
+    rx_bps: 0,
+    tx_bps: 0,
+  };
+  const historyAfterStale = appendLiveServerSample(existingHistory, staleSample, 60);
+  assert.equal(historyAfterStale.length, 1);
+  assert.equal(historyAfterStale[0].rxBps, 5000000);
+
+  // UNKNOWN snapshot
+  const unknownSample = {
+    observed_at: "2026-08-18T10:01:00.000Z",
+    host_status: "UNKNOWN",
+    is_stale: false,
+  };
+  const historyAfterUnknown = appendLiveServerSample(historyAfterStale, unknownSample, 60);
+  assert.equal(historyAfterUnknown.length, 1);
+});
+
+test("renderLiveServerChart renders empty state without fabricating historical data", () => {
+  const html = renderLiveServerChart([], { host_status: "ONLINE", is_stale: false });
+  assert.match(html, /Live Network Activity/);
+  assert.match(html, /Live — Since Dashboard Opened/);
+  assert.match(html, /ยังไม่มีข้อมูล Live Network Activity ในเซสชันนี้/);
+  assert.match(html, /ไม่สร้างประวัติย้อนหลังจำลอง/);
+  assert.doesNotMatch(html, /<polyline/);
+});
+
+test("renderLiveServerChart renders live polylines and points when fresh samples exist", () => {
+  const history = [
+    { observedAt: "2026-08-18T10:00:00.000Z", rxBps: 10000000, txBps: 5000000, pingMs: 12.0 },
+    { observedAt: "2026-08-18T10:00:05.000Z", rxBps: 20000000, txBps: 15000000, pingMs: 12.2 },
+  ];
+  const html = renderLiveServerChart(history, { host_status: "ONLINE", is_stale: false });
+  assert.match(html, /Live Network Activity/);
+  assert.match(html, /<polyline/);
+  assert.match(html, /10.00 Mbps/);
+  assert.match(html, /20.00 Mbps/);
+});
+
+test("renderSessions enforces Online <=120s, Offline >120s, Revoked, and does not invent Idle", () => {
+  const mockNowMs = Date.parse("2026-08-18T12:00:00.000Z");
+  const sessions = [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      username: "alice",
+      created_at: "2026-08-18T11:00:00.000Z",
+      last_seen_at: "2026-08-18T11:59:30.000Z", // 30s ago (<=120s) -> Online
+      revoked_at: null,
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      username: "bob",
+      created_at: "2026-08-18T10:00:00.000Z",
+      last_seen_at: "2026-08-18T11:55:00.000Z", // 5m ago (>120s) -> Offline
+      revoked_at: null,
+    },
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      username: "charlie",
+      created_at: "2026-08-18T09:00:00.000Z",
+      last_seen_at: "2026-08-18T09:30:00.000Z",
+      revoked_at: "2026-08-18T09:35:00.000Z", // Revoked
+    },
+  ];
+
+  const html = renderSessions(sessions, null, mockNowMs);
+  assert.match(html, /status-online/);
+  assert.match(html, /Online/);
+  assert.match(html, /status-offline/);
+  assert.match(html, /Offline/);
+  assert.match(html, /status-revoked/);
+  assert.match(html, /Revoked/);
+  assert.doesNotMatch(html, /Idle/);
+});
+
+test("renderSessions prevents double-click duplicate revoke by applying disabled busy state", () => {
+  const busyId = "11111111-1111-4111-8111-111111111111";
+  const sessions = [
+    {
+      id: busyId,
+      username: "alice",
+      created_at: "2026-08-18T11:00:00.000Z",
+      last_seen_at: "2026-08-18T11:59:30.000Z",
+      revoked_at: null,
+    },
+  ];
+  const html = renderSessions(sessions, busyId);
+  assert.match(html, /disabled/);
+  assert.match(html, /กำลังดำเนินการ…/);
+});
+
+test("renderSessions strictly respects privacy boundaries and excludes client hardware/PID telemetry", () => {
+  const sessions = [
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      username: "secret_user",
+      created_at: "2026-08-18T11:00:00.000Z",
+      last_seen_at: "2026-08-18T11:59:30.000Z",
+      revoked_at: null,
+      device_name: "MY-SECRET-PC",
+      machine_id: "HW-12345",
+      core_pid: 9999,
+      game_pid: 8888,
+      client_rx_bps: 123456,
+    },
+  ];
+  const html = renderSessions(sessions);
+  assert.doesNotMatch(html, /MY-SECRET-PC/);
+  assert.doesNotMatch(html, /HW-12345/);
+  assert.doesNotMatch(html, /9999/);
+  assert.doesNotMatch(html, /8888/);
+  assert.doesNotMatch(html, /123456/);
+  assert.match(html, /secret_user/);
 });
