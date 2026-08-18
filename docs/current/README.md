@@ -4,10 +4,10 @@
 DOCUMENT:               docs/current/README.md
 STATUS:                 AUTHORITATIVE CURRENT PROJECT STATUS
 CLASSIFICATION:         PRIMARY ORIENTATION & GOVERNANCE AUTHORITY
-CURRENT_PHASE:          T7 V1A COMPLETED — LEGACY DISCORD DISCOVERY & ARCHITECTURE FREEZE
+CURRENT_PHASE:          T7 V1B IN PROGRESS — UNIFIED LIGHTSAIL DISCORD WORKER
 LAST_CLOSED_PHASE:      T7 V1A (Legacy Discord Discovery & Unified Lightsail Architecture Freeze)
-ACTIVE_PHASE:           T7 V1A (Completed / Authority Frozen)
-NEXT_PHASE:             T7 V1B (Unified Lightsail Discord Worker Implementation & Tests)
+ACTIVE_PHASE:           T7 V1B (Local Candidate Implementation & Tests — IN PROGRESS)
+NEXT_PHASE:             T7 V1C (Production Deployment & Legacy Cutover)
 DATE:                   2026-08-18
 ```
 
@@ -17,12 +17,13 @@ DATE:                   2026-08-18
 
 **Neko Family Proxy** is a high-performance proxy routing and management platform for *Phantasy Star Online 2 (PSO2 JP)*.
 
-The project has completed **Phase T6 (Historical Server Metrics)** in its entirety and has completed **Phase T7 V1A (Legacy Discord Discovery & Architecture Freeze)**:
+The project has completed **Phase T6 (Historical Server Metrics)** and **Phase T7 V1A (Discovery & Architecture Freeze)** and is actively executing **Phase T7 V1B (Unified Discord Worker Local Candidate)**:
 - **Phase T4B (Closed)** established the live server monitoring pipeline from Japan VPS to Backend to Admin Dashboard.
 - **Phase T5 (Closed)** polished the Admin Dashboard UI and added an honest browser-local rolling 5-minute live network graph.
 - **Phase T6 (Closed)** designed, implemented, migrated, and production-verified 7-day raw historical server time-series storage, automated hourly retention pruning via `pg_cron`, and historical range queries (1h, 24h, 7d).
 - **Phase T7 Original Design (Superseded)**: The initial T7A plan (Vercel Cron + Backend Active Users query + Supabase persistence) was **superseded by Owner Decision** in favor of a low-maintenance, resilient, AWS Lightsail-local architecture (**T7 V1**).
 - **Phase T7 V1A (Closed / Authority Frozen)**: Discovered existing legacy Lightsail Discord integration (`neko-traffic-monitor.service`), classified its traffic source (`AF_PACKET` on `ens5:8388`) and calculation (`TOTAL_BYTES_DURING_WINDOW`), froze the unified Lightsail Discord Worker architecture, redefined Traffic Summary as time-weighted average throughput, removed Active Users/Backend/Vercel dependencies, and established local state persistence.
+- **Phase T7 V1B (In Progress)**: Implementing the unified long-running systemd worker candidate (`neko_discord_worker.py`), preserving proven `AF_PACKET` :8388 packet accounting, calculating time-weighted average throughput, managing persistent status embed and transition alerts, and establishing deterministic unit tests.
 
 ---
 
@@ -40,8 +41,8 @@ The project has completed **Phase T6 (Historical Server Metrics)** in its entire
 | **Phase T6C** | Admin Dashboard Historical Charts UI | **CLOSED** | Commit `6b5940bd...` / UI Range Selectors & Gap Splitting |
 | **Phase T6D** | Production Deployment & Historical Proof | **CLOSED** | Backend `852bfb67...` / Retention `pg_cron` / Remote Proof Verified |
 | **Original T7A** | Vercel Cron / Backend Discord Architecture | **SUPERSEDED** | Commit `d242c598...` (Superseded by Owner Decision in favor of T7 V1) |
-| **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | `docs/architecture/discord-server-status.md` / `docs/current/discord-server-status-handoff.md` |
-| **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **PLANNED / NEXT** | Local Worker script, time-weighted average calc, state persistence, unit tests |
+| **Phase T7 V1A** | Legacy Discord Discovery & Lightsail Architecture Freeze | **CLOSED (AUTHORITY FROZEN)** | Commit `6a59900a...` / Discovery & Architecture Freeze |
+| **Phase T7 V1B** | Unified Lightsail Discord Worker & Tests | **IN PROGRESS** | Long-running service, time-weighted average, state machine, tests |
 | **Phase T7 V1C** | Production Deployment & Legacy Cutover | **PLANNED** | Staging on Lightsail, legacy publisher retirement, live proof |
 
 ### Git Authority Identifiers:

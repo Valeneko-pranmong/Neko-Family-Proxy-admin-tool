@@ -11,7 +11,7 @@ CONSUMERS:              DISCORD WORKER ON JAPAN VPS
 TEAM_CORE SCOPE:        NO ACTION (Frozen at Phase T2)
 TEAM_LAUNCHER SCOPE:    NO ACTION (Frozen at Phase T3)
 CURRENT_DEPLOYMENT:     LEGACY PUBLISHER ACTIVE (neko-traffic-monitor.service)
-UNIFIED_T7_V1_STATUS:   DESIGNED & FROZEN (T7 V1A Complete — Implementation Planned for T7 V1B)
+UNIFIED_T7_V1_STATUS:   IN PROGRESS (Phase T7 V1B Local Candidate Implementation)
 SUPERSEDED_COMMIT:      d242c5981d04b2b11fdbae79aa908bd646275eb7 (Original T7A Vercel-Side Plan)
 DATE:                   2026-08-18
 ```
@@ -54,16 +54,17 @@ RATIONALE:
 +-------------------------------------------------------------------------------+
 |                       PHASE T7 V1 ARCHITECTURAL GOAL                          |
 +-------------------------------------------------------------------------------+
-| 1. ONE Discord Publisher on AWS Lightsail (Unified Worker).                   |
+| 1. ONE Discord Publisher on AWS Lightsail (Unified Long-Running Worker).      |
 | 2. ONE Discord Webhook (Reused from protected VPS environment).               |
-| 3. THREE Core Responsibilities:                                               |
+| 3. THREE Core Responsibilities in ONE Process:                                |
 |    A. Persistent Operational Status: One pinned/editable message (~60s).      |
 |    B. Traffic Summary: Chronological usage record per interval (30m),         |
-|       reporting TIME-WEIGHTED AVERAGE THROUGHPUT as primary metric.           |
+|       reporting TIME-WEIGHTED AVERAGE THROUGHPUT on port 8388 as primary.     |
 |    C. Transition Alerts: Standalone messages posted ONLY on confirmed health   |
 |       state transitions (ONLINE -> DEGRADED/STALE, or RECOVERY).              |
 | 4. ZERO Active Users / ZERO Backend / ZERO Supabase / ZERO Vercel Cron.       |
 | 5. Protected Local State Persistence (/var/lib/neko/discord-state.json).      |
+| 6. Long-Running Systemd Service (NO systemd timer; continuous capture).       |
 +-------------------------------------------------------------------------------+
 ```
 
@@ -81,6 +82,7 @@ LEGACY_SERVICE:               neko-traffic-monitor.service
 SERVICE_PATH:                 /etc/systemd/system/neko-traffic-monitor.service
 EXECUTION_MODEL:              LONG_RUNNING_DAEMON (Type=simple with select() loop)
 LEGACY_SCRIPT:                /usr/local/lib/neko-traffic-monitor/neko_traffic_monitor.py
+LEGACY_SCRIPT_SHA256:         3056e3bd6ac6628fa9119d90b28bbee146fc0a27adfaedd13e46c6516bd684ac
 RUNTIME_USER:                 root (Capabilities: CAP_NET_RAW)
 LEGACY_SCHEDULE:              30-minute epoch-aligned windows (MONITOR_INTERVAL_SECONDS=1800)
 REPORT_THRESHOLD:             1,048,576 bytes (1 MB minimum; skips interval if below)
@@ -104,10 +106,11 @@ WEBHOOK_SECRET_PRINTED:       NO
 ```
 
 ### 2.1 Key Insights from Legacy Discovery
-1. **Source Precision**: The legacy script captures traffic specifically on Shadowsocks port `8388` using raw packet sniffing (`AF_PACKET`).
+1. **Source Precision**: The legacy script captures traffic specifically on Shadowsocks port `8388` using raw packet sniffing (`AF_PACKET`). Whole-interface ens5 counters must NOT replace this authority.
 2. **Missing Rate Authority**: Legacy traffic summary calculates only total cumulative bytes in the interval (e.g. `319.5 MB`), but does **not** compute average throughput or data rate.
 3. **No Persistent Status / Alerts**: Legacy script does not manage a persistent status message and does not send health degradation/recovery alerts.
 4. **State Fragility**: Current state is purely in-memory. If the service restarts mid-interval, partial byte counts are lost.
+5. **Runtime Model**: Continuous AF_PACKET packet sniffing requires a **long-running systemd service**. A systemd timer would miss packets between one-shot runs (`SYSTEMD_TIMER = NO`).
 
 ---
 
@@ -115,43 +118,45 @@ WEBHOOK_SECRET_PRINTED:       NO
 
 ### 3.1 Traffic Summary: Time-Weighted Average Throughput (Frozen Authority)
 
-The owner decision freezes the primary metric of the Discord Traffic Summary as **Average Throughput over the reporting window**:
+The owner decision freezes the primary metric of the Discord Traffic Summary as **Average Throughput over the reporting window** on **Shadowsocks port 8388 filtered traffic**:
 
 ```text
+TRAFFIC_SOURCE           = SHADOWSOCKS_PORT_8388_FILTERED_TRAFFIC (ens5 TCP/UDP 8388)
 TRAFFIC_SUMMARY_METRIC   = TIME_WEIGHTED_AVERAGE_THROUGHPUT
-CALCULATION_AUTHORITY    = CUMULATIVE_BYTE_COUNTER_DELTA / REAL_ELAPSED_TIME
+AVERAGE_NUMERATOR        = FILTERED_PORT_8388_WINDOW_BYTES
+AVERAGE_DENOMINATOR      = REAL_ELAPSED_TIME
 RATE_UNIT_AUTHORITY      = BITS_PER_SECOND (bps, Kbps, Mbps, Gbps)
 WINDOW_TOTAL_BYTES       = OPTIONAL_SECONDARY
 ```
 
 #### Authoritative Calculation Formulas:
 
-$$\text{download\_avg\_bps} = \frac{(\text{download\_counter\_end} - \text{download\_counter\_start}) \times 8}{\text{actual\_elapsed\_seconds}}$$
+$$\text{download\_avg\_bps} = \frac{\text{filtered\_download\_bytes\_during\_window} \times 8}{\text{actual\_elapsed\_seconds}}$$
 
-$$\text{upload\_avg\_bps} = \frac{(\text{upload\_counter\_end} - \text{upload\_counter\_start}) \times 8}{\text{actual\_elapsed\_seconds}}$$
+$$\text{upload\_avg\_bps} = \frac{\text{filtered\_upload\_bytes\_during\_window} \times 8}{\text{actual\_elapsed\_seconds}}$$
 
 ```text
 =============================================================================
 CRITICAL CALCULATION INVARIANT:
 DO NOT DEFINE THE AUTHORITY AS: sum(sample_rates) / sample_count
+DO NOT USE: whole ens5 interface counter delta
 RATIONALE:
-Irregular sampling intervals or missing probe ticks will bias arithmetic
-sample averages. The cumulative counter delta divided by true elapsed time
-guarantees mathematically exact throughput across the entire interval.
+1. Irregular sampling intervals or missing probe ticks will bias arithmetic
+   sample averages. The cumulative counter delta divided by true elapsed time
+   guarantees mathematically exact throughput across the entire interval.
+2. Filtered port 8388 traffic reflects proxy usage directly without noise from
+   SSH, monitoring agent push, or VPS management traffic.
 =============================================================================
 ```
 
 ### 3.2 Real Elapsed Time Authority
-Never assume configured 30 minutes is exactly 1,800.0 seconds. Use real monotonic/epoch timestamps:
+Never assume configured 30 minutes is exactly 1,800.0 seconds. Use real monotonic timestamps:
 $$\text{actual\_elapsed\_seconds} = \text{end\_timestamp} - \text{start\_timestamp}$$
 
-### 3.3 Counter Reset Semantics (No Fake Throughput)
-Host reboots, network interface restarts, or counter overflows may cause:
-$$\text{counter\_end} < \text{counter\_start}$$
-
-**Required Handling**:
-- If `counter_end < counter_start`, do **NOT** calculate a massive wrapped integer value.
-- Mark interval as `COUNTER_RESET` or restart baseline collection.
+### 3.3 Counter Reset & Restart Semantics (No Fake Throughput)
+Host reboots or worker restarts mid-window:
+- Traffic missed while Worker was down cannot be reconstructed (`NO_FAKE_TRAFFIC_CONTINUITY = YES`).
+- Start new baseline from actual observation start time.
 - Never output fake spike throughput.
 
 ### 3.4 Unit Formatting Standards
@@ -181,17 +186,22 @@ $$\text{counter\_end} < \text{counter\_start}$$
 +-------------------------------------------------------------------------------+
 |                                                                               |
 |  [ LOCAL VPS DATA SOURCES ]                                                   |
-|  ├─ Interface Counters (/proc/net/dev or Port Sniffer on ens5)                |
+|  ├─ AF_PACKET Raw Socket (ens5 filtered to port 8388 TCP/UDP)                 |
 |  ├─ Systemd Manager (systemctl is-active shadowsocks-libev)                   |
 |  ├─ Socket Listener Probe (127.0.0.1:8388 TCP check)                          |
 |  ├─ Upstream Latency / Loss Probe (ICMP / TCP to upstream target)             |
 |  └─ Host Uptime (/proc/uptime)                                                |
 |                                                                               |
 |       │                                                                       |
-|       ▼ (Direct In-Process Evaluation)                                        |
-|  [ UNIFIED DISCORD WORKER ] (neko-discord-worker.service / .timer)            |
+|       ▼ (Direct In-Process Continuous Event Loop)                             |
+|  [ UNIFIED DISCORD WORKER ] (neko-discord-worker.service — Type=simple)       |
 |  ├─ Local State: /var/lib/neko/discord-state.json                             |
 |  ├─ Secret Config: /etc/neko/discord.env (chmod 600)                          |
+|  ├─ Cadence 1: Continuous Packet Capture                                      |
+|  ├─ Cadence 2: ~5s Health Probe & Current Rate Calculation                    |
+|  ├─ Cadence 3: ~60s Persistent Current Status Message Edit                    |
+|  ├─ Cadence 4: 30m Epoch-Aligned Traffic Summary Message Post                 |
+|  └─ Cadence 5: State Transition Alert Evaluation                              |
 |                                                                               |
 |       │                                                                       |
 |       ├─► [ Responsibility 1: Current Status ] ──► PATCH status_message_id    |
@@ -211,8 +221,7 @@ $$\text{counter\_end} < \text{counter\_start}$$
 SYSTEMD_SERVICES_ON_LIGHTSAIL:
   1. shadowsocks-libev.service    (Core proxy routing)
   2. neko-server-monitor.service  (Agent pushing telemetry to Admin Web Backend)
-  3. neko-discord-worker.service  (Local Discord status, summary, and alerts)
-  4. neko-discord-worker.timer    (Scheduler firing worker cadence)
+  3. neko-discord-worker.service  (Unified long-running Discord worker)
 ```
 
 ```text
@@ -351,6 +360,17 @@ STALE_EQUALS_OFFLINE = NO
 - **Cooldown**: 300-second safety cooldown prevents alert loops during rapid service restarts.
 - **Deduplication**: Never post duplicate alert embeds for unchanged states.
 
+### 7.3 Critical Limitation: Full Host Outage External Detection
+```text
+FULL_HOST_OUTAGE_EXTERNAL_DETECTION = NOT_PROVIDED_IN_T7_V1
+```
+Because the Discord Worker runs locally on the Japan Lightsail VPS itself, it cannot independently send a Discord alert if:
+1. The whole Lightsail VPS loses power or crashes.
+2. The entire upstream network interface is disconnected.
+3. The host kernel panics.
+
+In such catastrophic failure events, the Discord Worker process terminates along with the host, meaning the last posted status embed remains visible until refreshed or manually removed. An external watchdog is intentionally **OUT OF SCOPE** for T7 V1 to maintain zero external infrastructure maintenance.
+
 ---
 
 ## 8. Local State Persistence Contract
@@ -366,6 +386,7 @@ DATABASE_DEPENDENCY:   NONE (No PostgreSQL / Supabase required)
 ### 8.1 State Schema Contract
 ```json
 {
+  "version": 1,
   "status_message_id": "123456789012345678",
   "window_start_time": 1755518400,
   "window_start_rx_bytes": 841643967,
@@ -401,7 +422,7 @@ PRODUCTION CUTOVER SEQUENCE (PHASE T7 V1C)
 =============================================================================
 1. Stage unified Discord worker & state directories on Lightsail VPS.
 2. Validate permissions, environment files, and counter baseline.
-3. Start unified worker service & timer.
+3. Start unified worker service (systemctl start neko-discord-worker.service).
 4. Verify persistent status message creation and traffic average posting.
 5. Disable legacy publisher:
    systemctl stop neko-traffic-monitor.service
@@ -412,7 +433,7 @@ PRODUCTION CUTOVER SEQUENCE (PHASE T7 V1C)
 ```
 
 > [!CAUTION]
-> In Phase T7 V1A, the legacy publisher `neko-traffic-monitor.service` remains running. Do **NOT** stop or disable it during discovery/architecture freeze.
+> In Phase T7 V1A and T7 V1B, the legacy publisher `neko-traffic-monitor.service` remains running. Do **NOT** stop or disable it during local candidate development.
 
 ---
 
@@ -426,7 +447,7 @@ PRODUCTION CUTOVER SEQUENCE (PHASE T7 V1C)
 |               - Lightsail legacy discovery, traffic source & formula freeze,  |
 |                 redefine Traffic Summary as average throughput, docs updated. |
 |                                                                               |
-| Phase T7 V1B: Unified Discord Worker Implementation & Tests      [NEXT]       |
+| Phase T7 V1B: Unified Discord Worker Implementation & Tests      [IN PROGRESS]|
 |               - Develop unified Python worker, time-weighted average calc,    |
 |                 state machine, systemd units, unit tests, mock Discord tests. |
 |                                                                               |
