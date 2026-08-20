@@ -3,14 +3,18 @@
 ```text
 DOCUMENT:                       docs/current/README.md
 STATUS:                         T10 COMMERCIAL LAUNCHER UI/UX
-PHASE:                          T10B1 IMPLEMENTED CANDIDATE — OWNER VISUAL REVIEW PENDING
+CURRENT_PHASE:                  T10 COMMERCIAL LAUNCHER UI/UX
 T10:                            IN PROGRESS
-T10A:                           DESIGN FROZEN (CLOSED)
-T10B1:                          IMPLEMENTED CANDIDATE — OWNER VISUAL REVIEW PENDING
-T10B2:                          NEXT — SETTINGS FUNCTIONAL MIGRATION
+T10A:                           CLOSED
+T10B1:                          CLOSED — OWNER VISUAL APPROVAL PASS
+T10B1_APPROVED_LAUNCHER_COMMIT: 57698a853c0dc2b171617b19b15ae3f249afd606
+T10B2:                          IN PROGRESS — SETTINGS FUNCTIONAL MIGRATION
+T10B2_IMPLEMENTATION:           NOT YET STARTED
+LAUNCHER_ACTIVE_BRANCH:         feature/t10-commercial-launcher-ui
+LATEST_LAUNCHER_DOC_HEAD:       baf7a771f6af49c51ebca1d68d3fd4f60274ed47
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
-DATE:                           2026-08-18
+LAST_UPDATED:                   2026-08-20
 ```
 
 ---
@@ -27,7 +31,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 > [!IMPORTANT]
 > **Active Client Security Release Blocker:**
-> `PHASE_2_5_DISTINCT_AUTH_SESSION_PROOF` remains **`PREPARED ONLY / UNRESOLVED`**.
+> `PHASE_2_5_DISTINCT_AUTH_SESSION_PROOF` remains **`PREPARED ONLY / UNRESOLVED`** and is the **current public release blocker**.
 > - **Blocks UI Design / Implementation:** **NO**
 > - **Blocks Public Commercial Client Release:** **YES**
 > This proof must be executed and verified before any public release of the desktop client.
@@ -38,7 +42,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `9c73b025...` (T10A Doc Head) | `8832429a7546ab57dd8ac3a48b40b93387cb9f19` | **T10 BASE:** `8d45435536...`<br>**T10A DESIGN FROZEN** (CI Verified Green) |
+| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `baf7a771f6af49c51ebca1d68d3fd4f60274ed47` (T10B1 Close Doc Head) | `57698a853c0dc2b171617b19b15ae3f249afd606` (T10B1 Approved Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 IN PROGRESS** (Implementation not started) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
 | **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
@@ -87,7 +91,7 @@ SSH_PRODUCTION_CREDENTIAL       = ROTATED & SECURED (Ed25519; old key revoked fr
 > - **Main Window:** Clean, read-only customer dashboard showing connection status, server health indicator, membership summary, live network metrics, and passive guidance.
 > - **Settings Window:** Separate single-instance top-level window for account management, password change, coupon redemption, game path, Tweaker path, and local diagnostics.
 > - **Diagnostics:** Support and diagnostic tool embedded inside Settings > Diagnostics (strict local client observability privacy boundary).
-> - **Phase Status:** **`T10A CLOSED (Design Frozen) — T10B NEXT (Implementation)`**.
+> - **Phase Status:** **`T10A CLOSED — T10B1 CLOSED — T10B2 IN PROGRESS (Settings Functional Migration; implementation not started)`**.
 
 ---
 
