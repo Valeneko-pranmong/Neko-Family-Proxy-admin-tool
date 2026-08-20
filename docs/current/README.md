@@ -6,12 +6,14 @@ STATUS:                         T10 COMMERCIAL LAUNCHER UI/UX
 CURRENT_PHASE:                  T10 COMMERCIAL LAUNCHER UI/UX
 T10:                            IN PROGRESS
 T10A:                           CLOSED
-T10B1:                          CLOSED — OWNER VISUAL APPROVAL PASS
+T10B1:                          CLOSED
 T10B1_APPROVED_LAUNCHER_COMMIT: 57698a853c0dc2b171617b19b15ae3f249afd606
-T10B2:                          BLOCKED — FINAL AUTHENTICATED PACKAGED PROOF PENDING
-T10B2_IMPLEMENTATION:           SOURCE/TEST/BUILD PASS — FINAL PACKAGED AUTH PROOF BLOCKED
+T10B2:                          CLOSED — OWNER FUNCTIONAL/UI REVIEW PASS
+T10B2_APPROVED_LAUNCHER_COMMIT: b5497e35481ffacabdc3c43ffd1191342b6c2ae2
+T10B2_APPROVED_EXE_SHA256:      1A886ADEB4F142B031B5BD771F87939BA323445346F1361A4FA1EFDC8C19D4A6
+T10B3:                          IN PROGRESS — COMMERCIAL POLISH / FINAL UX
 LAUNCHER_ACTIVE_BRANCH:         feature/t10-commercial-launcher-ui
-LATEST_LAUNCHER_DOC_HEAD:       b5497e35481ffacabdc3c43ffd1191342b6c2ae2
+LATEST_LAUNCHER_DOC_HEAD:       52dabe8dfc83fc0cb8b74d862d292773ab5fafda
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 LAST_UPDATED:                   2026-08-20
@@ -42,7 +44,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `b5497e35481ffacabdc3c43ffd1191342b6c2ae2` (T10B2 Blocker-Fix Runtime) | `b5497e35481ffacabdc3c43ffd1191342b6c2ae2` (T10B2 Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 BLOCKED** (Final Authenticated Packaged Proof Pending) |
+| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `52dabe8dfc83fc0cb8b74d862d292773ab5fafda` (T10B2 Closure / T10B3 Open Docs) | `b5497e35481ffacabdc3c43ffd1191342b6c2ae2` (T10B2 Approved Runtime) | **T10B1 CLOSED**<br>**T10B2 CLOSED** (Engineering + Authenticated Packaged + Owner Review PASS)<br>**T10B3 IN PROGRESS** (Commercial Polish / Final UX) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
 | **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
@@ -91,7 +93,7 @@ SSH_PRODUCTION_CREDENTIAL       = ROTATED & SECURED (Ed25519; old key revoked fr
 > - **Main Window:** Clean, read-only customer dashboard showing connection status, server health indicator, membership summary, live network metrics, and passive guidance.
 > - **Settings Window:** Separate single-instance top-level window for account management, password change, coupon redemption, game path, Tweaker path, and local diagnostics.
 > - **Diagnostics:** Support and diagnostic tool embedded inside Settings > Diagnostics (strict local client observability privacy boundary).
-> - **Phase Status:** **`T10A CLOSED — T10B1 CLOSED — T10B2 IN PROGRESS (Settings Functional Migration; implementation not started)`**.
+> - **Phase Status:** **`T10A CLOSED — T10B1 CLOSED — T10B2 CLOSED — T10B3 IN PROGRESS (Commercial Polish / Final UX; implementation not started)`**.
 
 ---
 
