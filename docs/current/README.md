@@ -11,7 +11,7 @@ T10B1_APPROVED_LAUNCHER_COMMIT: 57698a853c0dc2b171617b19b15ae3f249afd606
 T10B2:                          BLOCKED — FINAL AUTHENTICATED PACKAGED PROOF PENDING
 T10B2_IMPLEMENTATION:           SOURCE/TEST/BUILD PASS — FINAL PACKAGED AUTH PROOF BLOCKED
 LAUNCHER_ACTIVE_BRANCH:         feature/t10-commercial-launcher-ui
-LATEST_LAUNCHER_DOC_HEAD:       4414b2819f3b6e1faabd496241ab36cd7c7e56fc
+LATEST_LAUNCHER_DOC_HEAD:       b5497e35481ffacabdc3c43ffd1191342b6c2ae2
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 LAST_UPDATED:                   2026-08-20
@@ -42,7 +42,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `4414b2819f3b6e1faabd496241ab36cd7c7e56fc` (T10B2 Blocker Status Doc) | `d09cfbf86af1a4894f1b62dc8cd6eea7771f06b4` (T10B2 Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 BLOCKED** (Final Authenticated Packaged Proof Pending) |
+| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `b5497e35481ffacabdc3c43ffd1191342b6c2ae2` (T10B2 Blocker-Fix Runtime) | `b5497e35481ffacabdc3c43ffd1191342b6c2ae2` (T10B2 Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 BLOCKED** (Final Authenticated Packaged Proof Pending) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
 | **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
