@@ -8,10 +8,10 @@ T10:                            IN PROGRESS
 T10A:                           CLOSED
 T10B1:                          CLOSED — OWNER VISUAL APPROVAL PASS
 T10B1_APPROVED_LAUNCHER_COMMIT: 57698a853c0dc2b171617b19b15ae3f249afd606
-T10B2:                          IN PROGRESS — SETTINGS FUNCTIONAL MIGRATION
-T10B2_IMPLEMENTATION:           NOT YET STARTED
+T10B2:                          IMPLEMENTED CANDIDATE — OWNER FUNCTIONAL/UI REVIEW PENDING
+T10B2_IMPLEMENTATION:           ENGINEERING PASS — NOT CLOSED
 LAUNCHER_ACTIVE_BRANCH:         feature/t10-commercial-launcher-ui
-LATEST_LAUNCHER_DOC_HEAD:       baf7a771f6af49c51ebca1d68d3fd4f60274ed47
+LATEST_LAUNCHER_DOC_HEAD:       bff675d62608844a9d55a36d72b00f2d0ce88cb2
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 LAST_UPDATED:                   2026-08-20
@@ -42,7 +42,7 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 
 | Repository | Active Branch | Branch HEAD (Doc/Hygiene Tip) | Runtime Source Commit | Artifact / Deployment State |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `baf7a771f6af49c51ebca1d68d3fd4f60274ed47` (T10B1 Close Doc Head) | `57698a853c0dc2b171617b19b15ae3f249afd606` (T10B1 Approved Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 IN PROGRESS** (Implementation not started) |
+| **`Neko-Family-Proxy`** | **`feature/t10-commercial-launcher-ui`** | `bff675d62608844a9d55a36d72b00f2d0ce88cb2` (T10B2 Implemented Candidate) | `bff675d62608844a9d55a36d72b00f2d0ce88cb2` (T10B2 Runtime) | **T10B1 CLOSED** (Engineering + Owner Visual PASS)<br>**T10B2 IMPLEMENTED CANDIDATE** (Owner Functional/UI Review Pending) |
 | **`NekoProxyCore`** | `feature/neko-auth-lite-v1-core` | `b592725f...` | `f269627351fc6a2c13b07c90f0e43ff69d17f058` | **Runtime Source:** `f269627`<br>**Production Artifact:** `AMBIGUOUS / NOT YET REFROZEN` |
 | **`Neko-Family-Proxy-admin-tool`** | `main` | Current Tip | `6b5940bdfcd2dcbaf1d5966213fab934c2a4c85d` (UI) | **Global Doc & Status Authority** (T1–T9 Verified in Production) |
 
