@@ -21,6 +21,10 @@ LATEST_LAUNCHER_DOC_HEAD:       1edfdb05042ed4a74128fc6826280f70f558b61d
 COMPLETED_PHASES:               T1-T9 + PRE-T10 REPOSITORY BASELINE (CLOSED)
 GLOBAL_STATUS_AUTHORITY:        D:\Github\Neko-Family-Proxy-admin-tool\docs\current\README.md
 LAST_UPDATED:                   2026-08-20
+PHASE_2_5:                       CLOSED
+TECHNICAL_SECURITY_GATE:         PASS
+PUBLIC_RELEASE_BLOCKER_PHASE_2_5: CLEARED
+PROCESS_COMPLIANCE:              FAIL — HISTORICAL FORCE-PUSH RECORDED
 ```
 
 ---
@@ -36,11 +40,17 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 **Phase T10A (Commercial Launcher UI/UX Design Freeze)** is **CLOSED**. The commercial UI architecture, customer status translation layer, single-instance Settings window design, and capability matrix are frozen in Launcher repository (`docs/current/t10-commercial-ui-ux-design-freeze.md`). The next active phase is **T10B (Commercial UI Implementation)**.
 
 > [!IMPORTANT]
-> **Active Client Security Release Blocker:**
-> `PHASE_2_5_DISTINCT_AUTH_SESSION_PROOF` remains **`PREPARED ONLY / UNRESOLVED`** and is the **current public release blocker**.
-> - **Blocks UI Design / Implementation:** **NO**
-> - **Blocks Public Commercial Client Release:** **YES**
-> This proof must be executed and verified before any public release of the desktop client.
+> **Phase 2.5 Distinct-Auth Session Proof:** **`CLOSED`** — **technical security gate `PASS`**.
+> The Phase 2.5 public release blocker is **`CLEARED`**.
+> - **Lite-v1:** active
+> - **Session policy:** `LATEST_CLAIM_WINS`
+> - **Original Edge evidence:** A missing; B/C pass
+> - **Supplemental Old-A Edge evidence:** PASS
+> - **Successful permits:** 0
+> - **Core starts/challenges:** 0
+> - **Test residue:** none
+>
+> The former **`PREPARED ONLY / UNRESOLVED`** entry is preserved as superseded historical status. The historical process-compliance finding remains **`FAIL — HISTORICAL FORCE-PUSH RECORDED`** and is not reclassified by this closure.
 
 ---
 
