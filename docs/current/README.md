@@ -81,13 +81,14 @@ All infrastructure is operational and verified in production on AWS Lightsail Ja
 For any engineer or agent joining the project, read these documents in order:
 
 1. **[Global Status & Orientation](README.md)** (`docs/current/README.md`) — Current phase, repository matrix, and production state.
-2. **[Admin Web Work Freeze](ADMIN_WEB_CURRENT_WORK_FREEZE.md)** (`docs/current/ADMIN_WEB_CURRENT_WORK_FREEZE.md`) — Admin Web boundaries, verified scope, and open blockers.
-3. **[Launcher Account Recovery Contract](LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md)** (`docs/current/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md`) — Active recovery code verification and password reset API contract.
-4. **[Server Monitoring Architecture](../architecture/server-monitoring-session-boundary.md)** (`docs/architecture/server-monitoring-session-boundary.md`) — Japan VPS metric collectors, data plane, and privacy boundaries.
-5. **[Historical Server Metrics](../architecture/historical-server-metrics.md)** (`docs/architecture/historical-server-metrics.md`) — 7-day raw time-series persistence, RPC queries, and automated `pg_cron` retention.
-6. **[Unified Discord Status Architecture](../architecture/discord-server-status.md)** (`docs/architecture/discord-server-status.md`) — Lightsail single-daemon Discord worker, transition alerts, and state persistence.
-7. **[Production Operations Hardening](../architecture/production-operations-hardening.md)** (`docs/architecture/production-operations-hardening.md`) — Systemd service recovery, restart backoff, journald caps, and operator diagnostics.
-8. **[Core Telemetry Contract](../architecture/core-telemetry-contract.md)** & **[Client Observability Privacy Boundary](../architecture/client-observability-privacy-boundary.md)** — Local Named Pipe telemetry format and strict client-side data privacy boundaries.
+2. **[Closed Beta Operator Runbook](closed-beta-operator-runbook.md)** (`docs/current/closed-beta-operator-runbook.md`) — Supported tester onboarding, entitlement/session operations, rollback, and monitoring.
+3. **[Admin Web Work Freeze](ADMIN_WEB_CURRENT_WORK_FREEZE.md)** (`docs/current/ADMIN_WEB_CURRENT_WORK_FREEZE.md`) — Admin Web boundaries, verified scope, and open blockers.
+4. **[Launcher Account Recovery Contract](LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md)** (`docs/current/LAUNCHER_ACCOUNT_RECOVERY_CONTRACT.md`) — Active recovery code verification and password reset API contract.
+5. **[Server Monitoring Architecture](../architecture/server-monitoring-session-boundary.md)** (`docs/architecture/server-monitoring-session-boundary.md`) — Japan VPS metric collectors, data plane, and privacy boundaries.
+6. **[Historical Server Metrics](../architecture/historical-server-metrics.md)** (`docs/architecture/historical-server-metrics.md`) — 7-day raw time-series persistence, RPC queries, and automated `pg_cron` retention.
+7. **[Unified Discord Status Architecture](../architecture/discord-server-status.md)** (`docs/architecture/discord-server-status.md`) — Lightsail single-daemon Discord worker, transition alerts, and state persistence.
+8. **[Production Operations Hardening](../architecture/production-operations-hardening.md)** (`docs/architecture/production-operations-hardening.md`) — Systemd service recovery, restart backoff, journald caps, and operator diagnostics.
+9. **[Core Telemetry Contract](../architecture/core-telemetry-contract.md)** & **[Client Observability Privacy Boundary](../architecture/client-observability-privacy-boundary.md)** — Local Named Pipe telemetry format and strict client-side data privacy boundaries.
 
 ---
 
