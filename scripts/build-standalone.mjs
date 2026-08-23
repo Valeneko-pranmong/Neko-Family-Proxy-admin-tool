@@ -27,11 +27,27 @@ if (!template.includes("</head>") || !template.includes(scriptMarker)) {
 const carriageReturn = String.fromCharCode(13);
 const normalizedTemplate = template.replaceAll(carriageReturn, "");
 const normalizedCss = css.replaceAll(carriageReturn, "");
+
+// Inline self-hosted fonts as base64 so the single-file HTML stays self-contained.
+const fontUrlPattern = /url\("\.\/fonts\/([^"]+\.woff2)"\)/g;
+let inlinedCss = normalizedCss;
+for (const [match, fontFile] of [...normalizedCss.matchAll(fontUrlPattern)]) {
+  const fontPath = resolve(sourceDir, "fonts", fontFile);
+  const fontData = await readFile(fontPath);
+  inlinedCss = inlinedCss.replaceAll(
+    match,
+    `url(data:font/woff2;base64,${fontData.toString("base64")})`,
+  );
+}
+
 const html = normalizedTemplate
-  .replace("</head>", `<style>${normalizedCss}</style></head>`)
+  .replace("</head>", `<style>${inlinedCss}</style></head>`)
   .replace(scriptMarker, `<script>${script}</script>`);
-if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(normalizedCss)) {
+if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(inlinedCss)) {
   throw new Error("Standalone build output is incomplete");
+}
+if (/url\("\.\/fonts\//.test(html)) {
+  throw new Error("Standalone build output still references external font files");
 }
 
 await mkdir(dirname(output), { recursive: true });

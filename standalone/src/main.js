@@ -19,6 +19,30 @@ import { toast } from "./ui/toast.js";
 
 const POLL_CADENCE_MS = 5000;
 const HISTORY_POLL_CADENCE_MS = 30000;
+const THEME_STORAGE_KEY = "neko-control-theme";
+
+function resolveInitialTheme() {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // storage unavailable — fall through to system preference
+  }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+let activeTheme = resolveInitialTheme();
+document.documentElement.dataset.theme = activeTheme;
+
+function toggleTheme() {
+  activeTheme = activeTheme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = activeTheme;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, activeTheme);
+  } catch {
+    // non-fatal — next visit just falls back to system preference
+  }
+}
 
 const root = document.querySelector("#app");
 const store = createStore();
@@ -465,15 +489,41 @@ document.addEventListener("visibilitychange", () => {
 root.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (event.target.id === "login-form") {
-    const form = new FormData(event.target);
-    const username = form.get("username");
-    const password = form.get("password");
+    const form = event.target;
+    const formData = new FormData(form);
+    const username = String(formData.get("username") || "");
+    const password = String(formData.get("password") || "");
+    const submitButton = form.querySelector('button[type="submit"]');
+    const errorBox = root.querySelector("#login-error");
+    const inputs = form.querySelectorAll("input");
+    const setBusy = (busy) => {
+      for (const input of inputs) input.disabled = busy;
+      if (submitButton) {
+        submitButton.disabled = busy;
+        submitButton.textContent = busy ? "กำลังเข้าสู่ระบบ…" : (submitButton.dataset.labelIdle || "เข้าสู่ระบบ");
+      }
+    };
+    if (errorBox) {
+      errorBox.hidden = true;
+      errorBox.textContent = "";
+    }
+    setBusy(true);
     try {
-      await session.login(String(username || ""), String(password || ""));
+      await session.login(username, password);
       await load("overview");
     } catch (error) {
       loginError = error instanceof Error ? error.message : "เข้าสู่ระบบไม่สำเร็จ";
-      render();
+      if (errorBox) {
+        errorBox.textContent = loginError;
+        errorBox.hidden = false;
+      } else {
+        render();
+      }
+    } finally {
+      if (!session.authenticated) {
+        setBusy(false);
+        root.querySelector("#admin-password")?.focus();
+      }
     }
   } else if (event.target.id === "coupon-form") {
     await submitCoupon(event.target);
@@ -483,6 +533,21 @@ root.addEventListener("submit", async (event) => {
 });
 
 root.addEventListener("click", async (event) => {
+  const passwordToggle = event.target.closest("[data-toggle-password]");
+  if (passwordToggle) {
+    const input = document.querySelector(passwordToggle.dataset.togglePassword);
+    if (input) {
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      passwordToggle.classList.toggle("is-visible", show);
+      passwordToggle.setAttribute("aria-label", show ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน");
+      input.focus({ preventScroll: true });
+      const caret = String(input.value).length;
+      input.setSelectionRange(caret, caret);
+    }
+    return;
+  }
+
   const copyTarget = event.target.closest("[data-copy]");
   if (copyTarget) {
     const textToCopy = copyTarget.dataset.copy;
@@ -506,6 +571,10 @@ root.addEventListener("click", async (event) => {
     return;
   }
   const name = target.dataset.action;
+  if (name === "toggle_theme") {
+    toggleTheme();
+    return;
+  }
   if (name === "refresh_overview") {
     await load("overview");
     if (store.state.serverChartRange !== "live") {
