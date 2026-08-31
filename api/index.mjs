@@ -9,6 +9,7 @@ import {
   ingestServerMetrics,
   queryServerMetricsHistory,
 } from "../server/server-metrics.mjs";
+import { getPublicProxyStatus } from "../server/public-proxy-status.mjs";
 
 const configuredSessionTtlMs = Number(
   process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000,
@@ -186,6 +187,10 @@ export default async function handler(request, response) {
     const url = new URL(request.url, "https://neko-control.invalid");
     if (request.method === "GET" && url.pathname === "/api/health") {
       return sendJson(response, 200, { ok: true });
+    }
+    if (request.method === "GET" && url.pathname === "/api/proxy/status") {
+      const proxy = await getPublicProxyStatus();
+      return sendJson(response, 200, { ok: true, proxy });
     }
     if (request.method === "POST" && url.pathname === "/api/login") {
       const body = await bodyJson(request);
