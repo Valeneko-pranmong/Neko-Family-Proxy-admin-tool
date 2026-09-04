@@ -45,6 +45,7 @@ function createFakeSupabase() {
     invalidTimestampRpcs: new Set(),
     errorRpcs: new Map(),
     serverMetrics: null,
+    runtimeConfigFailure: false,
     events: [],
   };
   const server = createServer(async (request, response) => {
@@ -435,6 +436,13 @@ function createFakeSupabase() {
         );
         return;
       }
+      if (rpc === "publish_runtime_proxy_config" && control.runtimeConfigFailure) {
+        response.writeHead(500, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({
+          message: `backend rejected ${body.p_credential}`,
+        }));
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
       if (control.falseRpcs.has(rpc)) {
         response.end("false");
@@ -446,6 +454,28 @@ function createFakeSupabase() {
       }
       if (control.invalidTimestampRpcs.has(rpc)) {
         response.end(JSON.stringify(control.invalidTimestampValue || "not-a-timestamp"));
+        return;
+      }
+      if (rpc === "get_active_runtime_proxy_config") {
+        response.end(JSON.stringify({
+          config_version: 17,
+          endpoint_id: "japan-vps-1",
+          host: "127.0.0.1",
+          port: 8388,
+          protocol: "shadowsocks",
+          cipher: "aes-256-gcm",
+          credential: "SENTINEL_PROXY_SECRET_42",
+          published_at: "2026-09-04T13:00:00.000Z",
+        }));
+        return;
+      }
+      if (rpc === "publish_runtime_proxy_config") {
+        response.end(JSON.stringify({
+          config_version: 18,
+          endpoint_id: body.p_endpoint_id,
+          published_at: "2026-09-04T13:01:00.000Z",
+          credential: body.p_credential,
+        }));
         return;
       }
       if (rpc === "admin_generate_coupon_batch") {
@@ -655,6 +685,8 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
 
     const unauthenticated = await fetch(`${base}/api/admin?resource=overview`);
     assert.equal(unauthenticated.status, 401);
+    const unauthenticatedRuntimeConfig = await fetch(`${base}/api/runtime-config`);
+    assert.equal(unauthenticatedRuntimeConfig.status, 401);
     const unauthenticatedRecovery = await fetch(`${base}/api/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -685,6 +717,112 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.equal(loginBody.viewer.username, "test_admin");
 
     const cookie = (login.headers.get("set-cookie") || "").split(";")[0];
+
+    const runtimeConfig = await fetch(`${base}/api/runtime-config`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(runtimeConfig.status, 200);
+    const runtimeConfigBody = await runtimeConfig.json();
+    assert.deepEqual(runtimeConfigBody, {
+      ok: true,
+      config: {
+        config_version: 17,
+        endpoint_id: "japan-vps-1",
+        published_at: "2026-09-04T13:00:00.000Z",
+      },
+    });
+    assert.doesNotMatch(JSON.stringify(runtimeConfigBody), /SENTINEL_PROXY_SECRET_42/);
+
+    const crossOriginRuntimeConfig = await fetch(`${base}/api/runtime-config`, {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+        Origin: "https://attacker.invalid",
+      },
+      body: JSON.stringify({
+        endpoint_id: "japan-vps-2",
+        host: "proxy.example.com",
+        port: 8389,
+        cipher: "aes-256-gcm",
+        credential: "SENTINEL_PROXY_SECRET_42",
+      }),
+    });
+    assert.equal(crossOriginRuntimeConfig.status, 403);
+
+    const invalidRuntimeConfig = await fetch(`${base}/api/runtime-config`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint_id: "japan-vps-2",
+        host: "proxy.example.com",
+        port: 8389,
+        cipher: "aes-256-gcm",
+        credential: "SENTINEL_PROXY_SECRET_42",
+        protocol: "shadowsocks",
+      }),
+    });
+    assert.equal(invalidRuntimeConfig.status, 400);
+
+    const publishedRuntimeConfig = await fetch(`${base}/api/runtime-config`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint_id: "japan-vps-2",
+        host: "proxy.example.com",
+        port: 8389,
+        cipher: "aes-256-gcm",
+        credential: "SENTINEL_PROXY_SECRET_42",
+      }),
+    });
+    assert.equal(publishedRuntimeConfig.status, 200);
+    const publishedRuntimeConfigBody = await publishedRuntimeConfig.json();
+    assert.deepEqual(publishedRuntimeConfigBody, {
+      ok: true,
+      config: {
+        config_version: 18,
+        endpoint_id: "japan-vps-2",
+        published_at: "2026-09-04T13:01:00.000Z",
+      },
+    });
+    assert.doesNotMatch(
+      JSON.stringify(publishedRuntimeConfigBody),
+      /SENTINEL_PROXY_SECRET_42/,
+    );
+    const publishEvent = fakeSupabase.control.events.find(
+      (event) => event.type === "rpc" && event.rpc === "publish_runtime_proxy_config",
+    );
+    assert.deepEqual(publishEvent.body, {
+      p_endpoint_id: "japan-vps-2",
+      p_host: "proxy.example.com",
+      p_port: 8389,
+      p_cipher: "aes-256-gcm",
+      p_credential: "SENTINEL_PROXY_SECRET_42",
+    });
+
+    fakeSupabase.control.runtimeConfigFailure = true;
+    const errorLogs = [];
+    const originalConsoleError = console.error;
+    console.error = (...args) => errorLogs.push(args.map(String).join(" "));
+    let failedRuntimeConfig;
+    try {
+      failedRuntimeConfig = await fetch(`${base}/api/runtime-config`, {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint_id: "japan-vps-2",
+          host: "proxy.example.com",
+          port: 8389,
+          cipher: "aes-256-gcm",
+          credential: "SENTINEL_PROXY_SECRET_42",
+        }),
+      });
+    } finally {
+      console.error = originalConsoleError;
+      fakeSupabase.control.runtimeConfigFailure = false;
+    }
+    assert.equal(failedRuntimeConfig.status, 502);
+    assert.doesNotMatch(errorLogs.join("\n"), /SENTINEL_PROXY_SECRET_42/);
 
     const crossOriginAction = await fetch(`${base}/api/admin`, {
       method: "POST",
