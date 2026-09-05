@@ -33,6 +33,31 @@ const installationId = "55555555-5555-4555-8555-555555555555";
 const licenseId = "66666666-6666-4666-8666-666666666666";
 const sessionId = "77777777-7777-4777-8777-777777777777";
 const batchId = "88888888-8888-4888-8888-888888888888";
+const softwareUpdateArtifactId = "launcher-win-x64-beta-0002";
+const softwareUpdateArtifactUrl =
+  "https://objects.example.invalid/launcher-win-x64-beta-0002";
+const softwareUpdateEnvelope = {
+  envelope_version: 1,
+  key_id: "neko-update-test-1",
+  payload_b64: "cGF5bG9hZA==",
+  signature_b64:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+};
+const softwareUpdateReleaseRecord = {
+  channel: "beta",
+  envelope: softwareUpdateEnvelope,
+  artifacts: {
+    [softwareUpdateArtifactId]: softwareUpdateArtifactUrl,
+  },
+};
+
+function assertPublicSoftwareUpdateResponse(response, bodyText) {
+  assert.equal(response.headers.get("set-cookie"), null);
+  assert.doesNotMatch(
+    bodyText,
+    /"(?:config_version|host|cipher|credential)"|test-secret|SUPABASE_SECRET_KEY|SENTINEL_PROXY_SECRET_42/i,
+  );
+}
 
 function createFakeSupabase() {
   const control = {
@@ -650,6 +675,8 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     "test-recovery-hmac-secret-that-is-long-enough";
   process.env.SERVER_METRICS_INGEST_SECRET =
     "test-server-metrics-ingest-secret-32-bytes";
+  process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON =
+    JSON.stringify(softwareUpdateReleaseRecord);
   process.env.VERCEL = "1";
   const { default: handler } = await import(
     `../api/index.mjs?test=${Date.now()}`
@@ -661,6 +688,173 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   try {
     const health = await fetch(`${base}/api/health`);
     assert.equal(health.status, 200);
+
+    const manifest = await fetch(
+      `${base}/api/software-update/manifest?channel=beta`,
+    );
+    assert.equal(manifest.status, 200);
+    const manifestText = await manifest.text();
+    assert.deepEqual(JSON.parse(manifestText), softwareUpdateEnvelope);
+    assertPublicSoftwareUpdateResponse(manifest, manifestText);
+
+    const savedSoftwareUpdateRelease =
+      process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
+    delete process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
+    try {
+      const noReleaseManifest = await fetch(
+        `${base}/api/software-update/manifest?channel=beta`,
+      );
+      assert.equal(noReleaseManifest.status, 404);
+      const noReleaseManifestText = await noReleaseManifest.text();
+      assert.deepEqual(JSON.parse(noReleaseManifestText), {
+        ok: false,
+        error: "No active software release",
+      });
+      assertPublicSoftwareUpdateResponse(
+        noReleaseManifest,
+        noReleaseManifestText,
+      );
+    } finally {
+      process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON =
+        savedSoftwareUpdateRelease;
+    }
+
+    for (const path of [
+      "/api/software-update/manifest",
+      "/api/software-update/manifest?channel=stable",
+      "/api/software-update/manifest?channel=beta&channel=beta",
+      "/api/software-update/manifest?channel=beta&extra=1",
+    ]) {
+      const invalidManifest = await fetch(`${base}${path}`);
+      assert.equal(invalidManifest.status, 400);
+      const invalidManifestText = await invalidManifest.text();
+      assert.deepEqual(JSON.parse(invalidManifestText), {
+        ok: false,
+        error: "Invalid software update channel",
+      });
+      assertPublicSoftwareUpdateResponse(
+        invalidManifest,
+        invalidManifestText,
+      );
+    }
+
+    const wrongManifestMethod = await fetch(
+      `${base}/api/software-update/manifest?channel=beta`,
+      { method: "POST" },
+    );
+    assert.equal(wrongManifestMethod.status, 405);
+    const wrongManifestMethodText = await wrongManifestMethod.text();
+    assert.deepEqual(JSON.parse(wrongManifestMethodText), {
+      ok: false,
+      error: "Method not allowed",
+    });
+    assertPublicSoftwareUpdateResponse(
+      wrongManifestMethod,
+      wrongManifestMethodText,
+    );
+
+    const grantStartedAt = Date.now();
+    const artifactGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artifact_id: softwareUpdateArtifactId }),
+      },
+    );
+    const grantFinishedAt = Date.now();
+    assert.equal(artifactGrant.status, 200);
+    const artifactGrantText = await artifactGrant.text();
+    const artifactGrantBody = JSON.parse(artifactGrantText);
+    assert.deepEqual(Object.keys(artifactGrantBody).sort(), [
+      "expires_at",
+      "url",
+    ]);
+    assert.equal(artifactGrantBody.url, softwareUpdateArtifactUrl);
+    assert.match(
+      artifactGrantBody.expires_at,
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+    const expiresAt = Date.parse(artifactGrantBody.expires_at);
+    assert.ok(expiresAt >= grantStartedAt + 10 * 60 * 1000);
+    assert.ok(expiresAt <= grantFinishedAt + 10 * 60 * 1000);
+    assertPublicSoftwareUpdateResponse(artifactGrant, artifactGrantText);
+
+    const wrongGrantMethod = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+    );
+    assert.equal(wrongGrantMethod.status, 405);
+    const wrongGrantMethodText = await wrongGrantMethod.text();
+    assert.deepEqual(JSON.parse(wrongGrantMethodText), {
+      ok: false,
+      error: "Method not allowed",
+    });
+    assertPublicSoftwareUpdateResponse(
+      wrongGrantMethod,
+      wrongGrantMethodText,
+    );
+
+    for (const body of [
+      {},
+      { artifact_id: 2 },
+      { artifact_id: softwareUpdateArtifactId, extra: true },
+    ]) {
+      const invalidGrant = await fetch(
+        `${base}/api/software-update/artifact-grant`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      assert.equal(invalidGrant.status, 400);
+      const invalidGrantText = await invalidGrant.text();
+      assert.deepEqual(JSON.parse(invalidGrantText), {
+        ok: false,
+        error: "Invalid artifact grant request",
+      });
+      assertPublicSoftwareUpdateResponse(invalidGrant, invalidGrantText);
+    }
+
+    const unknownArtifactGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifact_id: "launcher-win-x64-beta-9999",
+        }),
+      },
+    );
+    assert.equal(unknownArtifactGrant.status, 404);
+    const unknownArtifactGrantText = await unknownArtifactGrant.text();
+    assert.deepEqual(JSON.parse(unknownArtifactGrantText), {
+      ok: false,
+      error: "SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND",
+    });
+    assertPublicSoftwareUpdateResponse(
+      unknownArtifactGrant,
+      unknownArtifactGrantText,
+    );
+
+    const oversizedGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifact_id: softwareUpdateArtifactId,
+          padding: "x".repeat(1024 * 1024),
+        }),
+      },
+    );
+    assert.equal(oversizedGrant.status, 413);
+    const oversizedGrantText = await oversizedGrant.text();
+    assert.deepEqual(JSON.parse(oversizedGrantText), {
+      ok: false,
+      error: "Request too large",
+    });
+    assertPublicSoftwareUpdateResponse(oversizedGrant, oversizedGrantText);
 
     const wrongLogin = await fetch(`${base}/api/login`, {
       method: "POST",
@@ -1562,6 +1756,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     await once(apiServer, "close").catch(() => {});
     fakeSupabase.close();
     await once(fakeSupabase, "close").catch(() => {});
+    delete process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
   }
 });
 
