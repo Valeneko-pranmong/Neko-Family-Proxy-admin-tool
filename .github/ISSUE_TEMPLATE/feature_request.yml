@@ -1,0 +1,38 @@
+name: Feature Request
+description: Suggest an enhancement or new capability for Neko Control Room
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an idea or improvement. Please ensure feature requests adhere to our zero-trust client boundary and secret isolation model.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement / Motivation
+      description: What problem does this feature solve, or what need does it address?
+      placeholder: I am always frustrated when...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed enhancement or architectural approach.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+    validations:
+      required: false
+  - type: checkboxes
+    id: security_consideration
+    attributes:
+      label: Security Model Compliance
+      options:
+        - label: This proposed feature preserves backend secret isolation and does not expose proxy authority to client browsers.
+          required: true
