@@ -1,0 +1,50 @@
+name: Bug Report
+description: Report an issue or unexpected behavior in Neko Control Room
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please do NOT include real passwords, tokens, recovery codes, production URLs, or server secrets in this report.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the defect.
+      placeholder: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Provide step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Run '...'
+        2. Send request to '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment & Node Version
+      description: Provide your runtime details (e.g., Node 24.x, OS).
+      placeholder: Node.js 24.x, macOS / Linux / Windows
+    validations:
+      required: true
+  - type: checkboxes
+    id: security_check
+    attributes:
+      label: Security & Sanitization Confirmation
+      options:
+        - label: I confirm that no production secrets, tokens, credentials, or private server endpoints are contained in this issue.
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Reporting
+    url: https://github.com/Valeneko-pranmong/Neko-Family-Proxy-admin-tool/security/advisories/new
+    about: Privately disclose sensitive security vulnerabilities to maintainers.
+  - name: Production Control Room Status
+    url: https://neko-control-room.vercel.app/api/proxy/status
+    about: Check the live public status of the proxy cluster.
