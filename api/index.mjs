@@ -10,6 +10,10 @@ import {
   queryServerMetricsHistory,
 } from "../server/server-metrics.mjs";
 import { getPublicProxyStatus } from "../server/public-proxy-status.mjs";
+import {
+  getRuntimeConfigMetadata,
+  publishRuntimeConfig,
+} from "../server/runtime-config.mjs";
 
 const configuredSessionTtlMs = Number(
   process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000,
@@ -256,6 +260,26 @@ export default async function handler(request, response) {
       const range = url.searchParams.get("range") || "";
       const result = await queryServerMetricsHistory({ serverId, range });
       return sendJson(response, 200, result);
+    }
+    if (url.pathname === "/api/runtime-config") {
+      const session = await getSession(parseCookies(request).admin_session);
+      if (!session) return sendError(response, 401, "Admin login required");
+      if (request.method === "GET") {
+        return sendJson(response, 200, {
+          ok: true,
+          config: await getRuntimeConfigMetadata(),
+        });
+      }
+      if (request.method === "POST") {
+        if (!hasTrustedMutationOrigin(request)) {
+          return sendError(response, 403, "Cross-origin request rejected");
+        }
+        return sendJson(response, 200, {
+          ok: true,
+          config: await publishRuntimeConfig(await bodyJson(request), session.viewer),
+        });
+      }
+      return sendError(response, 405, "Method not allowed");
     }
     if (url.pathname !== "/api/admin") return sendError(response, 404, "Not found");
 
