@@ -57,6 +57,29 @@ function safeError(expectedCode, expectedStatus) {
   };
 }
 
+function assertSafeErrorDoesNotRetain(error, expectedCode, forbiddenValues) {
+  assert.ok(error instanceof SoftwareUpdateProviderError);
+  assert.equal(error.code, expectedCode);
+  assert.equal(error.message, expectedCode);
+  assert.equal(error.isSafe, true);
+
+  const retainedRepresentations = [
+    error.message,
+    error.code,
+    String(error.status),
+    String(error),
+    JSON.stringify(error),
+  ];
+
+  for (const forbiddenValue of forbiddenValues) {
+    for (const representation of retainedRepresentations) {
+      assert.doesNotMatch(representation, new RegExp(forbiddenValue));
+    }
+  }
+
+  return true;
+}
+
 for (const [description, noReleaseEnv] of [
   ["absent", {}],
   ["empty", { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: "" }],
@@ -147,5 +170,64 @@ test("provider rejects invalid channel, id, and oversized configuration", async 
   assert.throws(
     () => getSoftwareUpdateManifest("beta", { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: "x".repeat(131_073) }),
     code("SOFTWARE_UPDATE_RECORD_INVALID"),
+  );
+});
+
+test("invalid top-level extras are not retained by safe errors", async () => {
+  await loadSoftwareUpdateProvider();
+  const credential = "SENTINEL_PROXY_CREDENTIAL_42";
+  const permit = "eyJaaaaaa.bbbbbbb.ccccccc";
+  const forbiddenValues = [credential, permit];
+
+  for (const record of [
+    { ...validRecord(), credential },
+    { ...validRecord(), permit },
+  ]) {
+    assert.throws(
+      () => getSoftwareUpdateManifest("beta", env(record)),
+      (error) =>
+        assertSafeErrorDoesNotRetain(
+          error,
+          "SOFTWARE_UPDATE_RECORD_INVALID",
+          forbiddenValues,
+        ),
+    );
+  }
+});
+
+test("invalid artifact URLs are not retained by safe errors", async () => {
+  await loadSoftwareUpdateProvider();
+  const token = "SENTINEL_SIGNED_URL_TOKEN_42";
+  const rawUrl = `https://objects.example.invalid/artifact?token=${token}`;
+  const record = {
+    ...validRecord(),
+    artifacts: {
+      artifact: rawUrl,
+    },
+  };
+
+  assert.throws(
+    () => getSoftwareUpdateManifest("beta", env(record)),
+    (error) =>
+      assertSafeErrorDoesNotRetain(
+        error,
+        "SOFTWARE_UPDATE_RECORD_INVALID",
+        [token, rawUrl],
+      ),
+  );
+});
+
+test("unknown artifact ids are not retained by safe errors", async () => {
+  await loadSoftwareUpdateProvider();
+  const artifactId = "eyJaaaaaa.bbbbbbb.ccccccc";
+
+  assert.throws(
+    () => getArtifactGrant(artifactId, env()),
+    (error) =>
+      assertSafeErrorDoesNotRetain(
+        error,
+        "SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND",
+        [artifactId],
+      ),
   );
 });
