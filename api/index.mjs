@@ -14,6 +14,10 @@ import {
   getRuntimeConfigMetadata,
   publishRuntimeConfig,
 } from "../server/runtime-config.mjs";
+import {
+  getSoftwareUpdateManifest,
+  getArtifactGrant,
+} from "../server/software-update.mjs";
 
 const configuredSessionTtlMs = Number(
   process.env.ADMIN_SESSION_TTL_MS || 8 * 60 * 60 * 1000,
@@ -189,6 +193,46 @@ function requesterIdentity(request) {
 export default async function handler(request, response) {
   try {
     const url = new URL(request.url, "https://neko-control.invalid");
+    if (url.pathname === "/api/software-update/manifest") {
+      if (request.method !== "GET") {
+        return sendError(response, 405, "Method not allowed");
+      }
+      const query = [...url.searchParams.entries()];
+      if (
+        query.length !== 1
+        || query[0][0] !== "channel"
+        || query[0][1] !== "beta"
+      ) {
+        return sendError(response, 400, "Invalid software update channel");
+      }
+      const envelope = await getSoftwareUpdateManifest("beta");
+      if (envelope === null) {
+        return sendError(response, 404, "No active software release");
+      }
+      return sendJson(response, 200, envelope);
+    }
+    if (url.pathname === "/api/software-update/artifact-grant") {
+      if (request.method !== "POST") {
+        return sendError(response, 405, "Method not allowed");
+      }
+      const body = await bodyJson(request);
+      const isPlainObject =
+        body !== null
+        && typeof body === "object"
+        && !Array.isArray(body)
+        && Object.getPrototypeOf(body) === Object.prototype;
+      const keys = isPlainObject ? Object.keys(body) : [];
+      if (
+        !isPlainObject
+        || keys.length !== 1
+        || keys[0] !== "artifact_id"
+        || typeof body.artifact_id !== "string"
+      ) {
+        return sendError(response, 400, "Invalid artifact grant request");
+      }
+      const grant = await getArtifactGrant(body.artifact_id);
+      return sendJson(response, 200, grant);
+    }
     if (request.method === "GET" && url.pathname === "/api/health") {
       return sendJson(response, 200, { ok: true });
     }
