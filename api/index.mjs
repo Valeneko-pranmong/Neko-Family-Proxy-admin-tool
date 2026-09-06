@@ -230,7 +230,12 @@ export default async function handler(request, response) {
       ) {
         return sendError(response, 400, "Invalid artifact grant request");
       }
-      const grant = await getArtifactGrant(body.artifact_id);
+      const grant = await getArtifactGrant(
+        body.artifact_id,
+        process.env,
+        new Date(),
+        request.headers["authorization"] ?? request.headers["Authorization"],
+      );
       return sendJson(response, 200, grant);
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
