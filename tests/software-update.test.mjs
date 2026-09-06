@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 
 let SoftwareUpdateProviderError;
@@ -195,27 +196,65 @@ test("invalid top-level extras are not retained by safe errors", async () => {
   }
 });
 
-test("invalid artifact URLs are not retained by safe errors", async () => {
+test("artifact grant requires NekoDistribution capability for controlled core artifact", async () => {
   await loadSoftwareUpdateProvider();
-  const token = "SENTINEL_SIGNED_URL_TOKEN_42";
-  const rawUrl = `https://objects.example.invalid/artifact?token=${token}`;
+  const rawToken = "my-secret-distribution-cap";
+  const tokenSha = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const coreArtifactId = "core-win-x64-beta-0002";
+  const launcherArtifactId = "launcher-win-x64-beta-0002";
+
+  const payloadDoc = {
+    schema_version: 2,
+    channel: "beta",
+    release_sequence: 2,
+    release_id: "r2",
+    components: {
+      launcher: { artifact_id: launcherArtifactId },
+      core: { artifact_id: coreArtifactId },
+    },
+  };
   const record = {
     ...validRecord(),
-    artifacts: {
-      artifact: rawUrl,
+    envelope: {
+      ...envelope,
+      payload_b64: Buffer.from(JSON.stringify(payloadDoc)).toString("base64"),
     },
   };
 
+  const envWithCap = {
+    ...env(record),
+    DISTRIBUTION_CAPABILITIES_JSON: JSON.stringify([
+      {
+        credential_sha256: tokenSha,
+        enabled: true,
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        channel: "beta",
+        artifact_ids: [coreArtifactId],
+      },
+    ]),
+  };
+
+  // 1. Core artifact request without Authorization header must fail with 401
   assert.throws(
-    () => getSoftwareUpdateManifest("beta", env(record)),
-    (error) =>
-      assertSafeErrorDoesNotRetain(
-        error,
-        "SOFTWARE_UPDATE_RECORD_INVALID",
-        [token, rawUrl],
-      ),
+    () => getArtifactGrant(coreArtifactId, envWithCap, new Date(), null),
+    (err) => err.code === "DISTRIBUTION_CAPABILITY_REQUIRED" && err.status === 401,
   );
+
+  // 2. Core artifact request with invalid token must fail with 403
+  assert.throws(
+    () => getArtifactGrant(coreArtifactId, envWithCap, new Date(), "NekoDistribution wrong-token"),
+    (err) => err.code === "DISTRIBUTION_CAPABILITY_INVALID" && err.status === 403,
+  );
+
+  // 3. Core artifact request with valid token succeeds
+  const grant = getArtifactGrant(coreArtifactId, envWithCap, new Date(), `NekoDistribution ${rawToken}`);
+  assert.ok(grant.url);
+
+  // 4. Launcher artifact request can be anonymous
+  const launcherGrant = getArtifactGrant(launcherArtifactId, envWithCap, new Date(), null);
+  assert.ok(launcherGrant.url);
 });
+
 
 test("unknown artifact ids are not retained by safe errors", async () => {
   await loadSoftwareUpdateProvider();
