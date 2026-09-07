@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const ROOT = new URL("../", import.meta.url);
 const HARNESS = new URL("scripts/verify-software-update-provider.mjs", ROOT);
@@ -28,8 +29,9 @@ async function harnessPath() {
 
 async function runHarness(env, timeoutMs = 6_000) {
   const script = await harnessPath();
+  const scriptPath = script instanceof URL ? fileURLToPath(script) : script;
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [script], {
+    const child = spawn(process.execPath, [scriptPath], {
       cwd: new URL(".", ROOT),
       env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
