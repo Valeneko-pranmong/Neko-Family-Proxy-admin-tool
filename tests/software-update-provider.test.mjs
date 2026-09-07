@@ -14,6 +14,7 @@ const HARNESS = new URL("scripts/verify-software-update-provider.mjs", ROOT);
 const RUNTIME_DOC = new URL("docs/current/software-update-production-runtime.md", ROOT);
 const FIXTURE_TOKEN = "fixture-token-never-print-7YpQ";
 const FIXTURE_SECRET_PATH = "/private/synthetic-core-object-never-print.zip";
+const TEST_ALLOW_LOOPBACK_HTTP = "NEKO_SOFTWARE_UPDATE_PROVIDER_TEST_ALLOW_LOOPBACK_HTTP";
 const PLACEHOLDER = `console.log("NOT_IMPLEMENTED"); process.exit(0);\n`;
 
 let temporaryDirectory;
@@ -52,6 +53,7 @@ async function runHarness(env, timeoutMs = 6_000) {
 function proofEnv(baseUrl, expiresAt, signedPath = FIXTURE_SECRET_PATH) {
   return {
     NEKO_SOFTWARE_UPDATE_PROVIDER_PROOF: "1",
+    [TEST_ALLOW_LOOPBACK_HTTP]: "1",
     NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL: `${baseUrl}/anonymous?token=${FIXTURE_TOKEN}`,
     NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL: `${baseUrl}${signedPath}?token=${FIXTURE_TOKEN}`,
     NEKO_SOFTWARE_UPDATE_PROOF_EXPIRES_AT: expiresAt,
@@ -97,6 +99,7 @@ test("provider proof is an explicit no-network skip without opt-in", async () =>
   }, async ({ baseUrl, requests }) => {
     const env = {
       NEKO_SOFTWARE_UPDATE_PROVIDER_PROOF: "0",
+      [TEST_ALLOW_LOOPBACK_HTTP]: "1",
       NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL: `${baseUrl}/must-not-connect`,
       NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL: "http://192.0.2.1/must-not-connect?secret=malicious",
       NEKO_SOFTWARE_UPDATE_PROOF_EXPIRES_AT: new Date(Date.now() + 1_000).toISOString(),
@@ -109,6 +112,74 @@ test("provider proof is an explicit no-network skip without opt-in", async () =>
     assertNoSensitiveOutput(result.output, env);
   });
 });
+
+test("opt-in proof rejects loopback HTTP without the explicit test seam before network access", async () => {
+  await withFixture((_request, response) => {
+    response.writeHead(500).end("must not be requested");
+  }, async ({ baseUrl, requests }) => {
+    const env = proofEnv(baseUrl, new Date(Date.now() + 1_000).toISOString());
+    delete env[TEST_ALLOW_LOOPBACK_HTTP];
+    const result = await runHarness(env, 2_000);
+    assert.notEqual(result.code, 0, "production proof must reject HTTP URLs");
+    assert.equal(result.signal, null, "HTTP-policy rejection must terminate normally");
+    assert.equal(requests.length, 0, "HTTP URLs must be rejected before any request");
+    assert.match(result.output, /SOFTWARE_UPDATE_PROVIDER_PROOF FAIL/);
+    assertNoSensitiveOutput(result.output, env);
+  });
+});
+
+test("test HTTP seam rejects non-loopback hosts before fetch", async () => {
+  const env = proofEnv("http://192.0.2.1", new Date(Date.now() + 1_000).toISOString());
+  const result = await runHarness(env, 1_000);
+  assert.notEqual(result.code, 0, "test HTTP seam must not allow non-loopback targets");
+  assert.equal(result.signal, null, "non-loopback HTTP must be rejected immediately, not by timeout");
+  assert.match(result.output, /SOFTWARE_UPDATE_PROVIDER_PROOF FAIL/);
+  assertNoSensitiveOutput(result.output, env);
+});
+
+for (const { label, mutate } of [
+  {
+    label: "userinfo in the anonymous URL",
+    mutate(env, baseUrl) {
+      const port = new URL(baseUrl).port;
+      env.NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL = `http://fixture-user:fixture-password@127.0.0.1:${port}/anonymous?token=${FIXTURE_TOKEN}`;
+    },
+  },
+  {
+    label: "userinfo in the signed URL",
+    mutate(env, baseUrl) {
+      const port = new URL(baseUrl).port;
+      env.NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL = `http://fixture-user:fixture-password@127.0.0.1:${port}${FIXTURE_SECRET_PATH}?token=${FIXTURE_TOKEN}`;
+    },
+  },
+  {
+    label: "a fragment in the anonymous URL",
+    mutate(env) {
+      env.NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL += "#fixture-fragment-never-print";
+    },
+  },
+  {
+    label: "a fragment in the signed URL",
+    mutate(env) {
+      env.NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL += "#fixture-fragment-never-print";
+    },
+  },
+]) {
+  test(`opt-in proof rejects ${label} before network access`, async () => {
+    await withFixture((_request, response) => {
+      response.writeHead(500).end("must not be requested");
+    }, async ({ baseUrl, requests }) => {
+      const env = proofEnv(baseUrl, new Date(Date.now() + 1_000).toISOString());
+      mutate(env, baseUrl);
+      const result = await runHarness(env, 2_000);
+      assert.notEqual(result.code, 0, `${label} must fail proof`);
+      assert.equal(result.signal, null, `${label} must terminate normally`);
+      assert.equal(requests.length, 0, `${label} must be rejected before any request`);
+      assert.match(result.output, /SOFTWARE_UPDATE_PROVIDER_PROOF FAIL/);
+      assertNoSensitiveOutput(result.output, env);
+    });
+  });
+}
 
 test("opt-in proof rejects an initial signed-URL lifetime over 120 seconds before network access", async () => {
   await withFixture((_request, response) => {
