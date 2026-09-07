@@ -1,5 +1,11 @@
 import crypto from "node:crypto";
 
+const CORE_SIGNED_URL_TTL_SECONDS = 120;
+
+function createPrivateStorageSignedGetUrl(...args) {
+  return import("./supabase.mjs")
+    .then((provider) => provider.createPrivateStorageSignedGetUrl(...args));
+}
 const MAX_RECORD_CHARACTERS = 131_072;
 const MAX_PAYLOAD_BYTES = 65_536;
 const MAX_CAPABILITY_REGISTRY_CHARACTERS = 1_048_576;
@@ -279,19 +285,50 @@ function authorizeCore(artifactId, env, now, authHeader) {
   if (!authorized) fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
 }
 
-export function getArtifactGrant(artifactId, env = process.env, now = new Date(), authHeader = null) {
-  if (typeof artifactId !== "string" || !ARTIFACT_ID.test(artifactId)) fail("SOFTWARE_UPDATE_ARTIFACT_ID_INVALID", 400);
+function validateGrantUrl(value) {
+  if (typeof value !== "string" || !/^https:\/\/[^/]/.test(value)) {
+    fail("SOFTWARE_UPDATE_PROVIDER_FAILED");
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("SOFTWARE_UPDATE_PROVIDER_FAILED");
+  }
+  if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) {
+    fail("SOFTWARE_UPDATE_PROVIDER_FAILED");
+  }
+  return value;
+}
+
+export async function getArtifactGrant(
+  artifactId,
+  env = process.env,
+  now = new Date(),
+  authHeader = null,
+  signCoreUrl = createPrivateStorageSignedGetUrl,
+) {
   const record = activeRecord(env);
+  if (typeof artifactId !== "string" || !ARTIFACT_ID.test(artifactId)) fail("SOFTWARE_UPDATE_ARTIFACT_ID_INVALID", 400);
   const entry = record && Object.values(record.components).find((component) => component.artifact_id === artifactId);
   if (!entry) fail("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404);
-  const isCore = entry === record.components.core;
-
-  if (isCore) authorizeCore(artifactId, env, now, authHeader);
 
   const timestamp = now instanceof Date ? now.getTime() : Number.NaN;
   if (!Number.isFinite(timestamp)) fail("SOFTWARE_UPDATE_CLOCK_INVALID");
-  return {
-    url: isCore ? `supabase-private://${entry.storage.bucket}/${entry.storage.object}` : entry.public_url,
-    expires_at: new Date(timestamp + 10 * 60 * 1000).toISOString(),
-  };
+  const expiresAt = new Date(timestamp + CORE_SIGNED_URL_TTL_SECONDS * 1000).toISOString();
+  const isCore = entry === record.components.core;
+  if (!isCore) return { url: entry.public_url, expires_at: expiresAt };
+
+  authorizeCore(artifactId, env, now, authHeader);
+  return Promise.resolve()
+    .then(() => signCoreUrl(
+      entry.storage.bucket,
+      entry.storage.object,
+      CORE_SIGNED_URL_TTL_SECONDS,
+    ))
+    .then((signedUrl) => ({
+      url: validateGrantUrl(signedUrl),
+      expires_at: expiresAt,
+    }))
+    .catch(() => fail("SOFTWARE_UPDATE_PROVIDER_FAILED"));
 }

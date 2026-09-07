@@ -124,3 +124,36 @@ export async function updateAuthUserPassword(userId, password) {
     throw new Error("Supabase Auth ปฏิเสธการเปลี่ยนรหัสผ่าน");
   }
 }
+
+function validSignedGetUrl(value) {
+  if (typeof value !== "string" || !/^https:\/\/[^/]/.test(value)) return false;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === "https:"
+    && Boolean(url.hostname)
+    && !url.username
+    && !url.password
+    && !url.hash;
+}
+
+export async function createPrivateStorageSignedGetUrl(bucket, object, ttlSeconds) {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 120) {
+    throw new Error("PRIVATE_STORAGE_SIGNING_FAILED");
+  }
+  let result;
+  try {
+    result = await supabaseAdmin.storage.from(bucket).createSignedUrl(object, ttlSeconds);
+  } catch {
+    throw new Error("PRIVATE_STORAGE_SIGNING_FAILED");
+  }
+  if (result?.error !== null
+    || !result?.data
+    || !validSignedGetUrl(result.data.signedUrl)) {
+    throw new Error("PRIVATE_STORAGE_SIGNING_FAILED");
+  }
+  return result.data.signedUrl;
+}
