@@ -5,7 +5,23 @@ import test from "node:test";
 let SoftwareUpdateProviderError;
 let getArtifactGrant;
 let getSoftwareUpdateManifest;
+let createPrivateStorageSignedGetUrl;
 let providerPromise;
+let supabasePromise;
+
+async function loadSupabaseSigner() {
+  process.env.SUPABASE_URL ||= "http://127.0.0.1:1";
+  process.env.SUPABASE_SECRET_KEY ||= "synthetic-test-service-key";
+  process.env.ACCOUNT_RECOVERY_HMAC_SECRET ||=
+    "synthetic-test-recovery-secret-at-least-32-bytes";
+  const module = await (supabasePromise ??= import("../server/supabase.mjs"));
+  createPrivateStorageSignedGetUrl = module.createPrivateStorageSignedGetUrl;
+  assert.equal(
+    typeof createPrivateStorageSignedGetUrl,
+    "function",
+    "server/supabase.mjs must export createPrivateStorageSignedGetUrl",
+  );
+}
 
 async function loadProvider() {
   try {
@@ -494,5 +510,152 @@ test("invalid injected clock fails closed before capability expiry comparison", 
       () => coreGrant(capabilityEnvironment(), `NekoDistribution ${CAPABILITY_TOKEN}`, now),
       assertSafeCapabilityError("SOFTWARE_UPDATE_CLOCK_INVALID", 500),
     );
+  }
+});
+
+const SIGNED_URL = "https://storage.example.invalid/object/sign/private-updates/beta/0002/core.zip?token=synthetic";
+const SIGNER_SECRET_SENTINELS = [
+  "private-updates", "beta/0002/core.zip", "synthetic-service-key", CAPABILITY_TOKEN,
+  CAPABILITY_DIGEST, "provider-detail-sentinel", SIGNED_URL,
+];
+
+function assertSafeGrantFailure(error) {
+  assert.ok(error instanceof SoftwareUpdateProviderError);
+  assert.equal(error.isSafe, true);
+  assert.match(error.code, /(?:PROVIDER|GRANT)/);
+  for (const representation of [...errorRepresentations(error), JSON.stringify(Object.fromEntries(Object.entries(error)))]) {
+    for (const secret of SIGNER_SECRET_SENTINELS) assert.equal(representation.includes(secret), false);
+  }
+  return true;
+}
+
+function signerSpy(result = SIGNED_URL) {
+  const calls = [];
+  const signer = async (...args) => {
+    calls.push(args);
+    if (result instanceof Error) throw result;
+    return result;
+  };
+  return { calls, signer };
+}
+
+test("Core grant awaits signer once with only trusted storage identity and TTL 120", async () => {
+  await loadProvider();
+  const spy = signerSpy();
+  const grant = await getArtifactGrant(
+    IDS.core,
+    capabilityEnvironment(),
+    CAPABILITY_NOW,
+    `NekoDistribution ${CAPABILITY_TOKEN}`,
+    spy.signer,
+  );
+  assert.deepEqual(spy.calls, [["private-updates", "beta/0002/core.zip", 120]]);
+  assert.deepEqual(grant, {
+    url: SIGNED_URL,
+    expires_at: "2026-09-07T04:07:06.000Z",
+  });
+});
+
+test("caller artifact id selects only a known trusted component and never storage identity", async () => {
+  await loadProvider();
+  const spy = signerSpy();
+  await assert.rejects(
+    Promise.resolve().then(() => getArtifactGrant(
+      "attacker-selected-object",
+      capabilityEnvironment(),
+      CAPABILITY_NOW,
+      `NekoDistribution ${CAPABILITY_TOKEN}`,
+      spy.signer,
+    )),
+    assertCode("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404),
+  );
+  assert.equal(spy.calls.length, 0);
+});
+
+test("Launcher is anonymous, signer-free, capability-parser-free, exact, and 120 seconds", async () => {
+  await loadProvider();
+  const spy = signerSpy(new Error("must not run"));
+  const env = { ...environment(), DISTRIBUTION_CAPABILITIES_JSON: REGISTRY_SENTINEL };
+  const grant = await getArtifactGrant(IDS.launcher, env, CAPABILITY_NOW,
+    `NekoDistribution ${REGISTRY_SENTINEL}`, spy.signer);
+  assert.equal(spy.calls.length, 0);
+  assert.deepEqual(grant, {
+    url: validRecord().components.launcher.public_url,
+    expires_at: "2026-09-07T04:07:06.000Z",
+  });
+});
+
+test("invalid record and Core authorization failures never call signer", async () => {
+  await loadProvider();
+  const cases = [
+    [environment({ ...validRecord(), channel: "stable" }), `NekoDistribution ${CAPABILITY_TOKEN}`, IDS.core],
+    [capabilityEnvironment(), null, IDS.core],
+    [capabilityEnvironment(), "bad", IDS.core],
+    [capabilityEnvironment(), `NekoDistribution ${UNKNOWN_CAPABILITY_TOKEN}`, IDS.core],
+    [capabilityEnvironment([capability({ revoked: true })]), `NekoDistribution ${CAPABILITY_TOKEN}`, IDS.core],
+  ];
+  for (const [env, header, id] of cases) {
+    const spy = signerSpy();
+    await assert.rejects(Promise.resolve().then(() => getArtifactGrant(id, env, CAPABILITY_NOW, header, spy.signer)));
+    assert.equal(spy.calls.length, 0);
+  }
+});
+
+for (const [name, output] of [
+  ["throw", new Error("provider-detail-sentinel synthetic-service-key")],
+  ["non-string URL", { url: SIGNED_URL }],
+  ["HTTP URL", "http://storage.example.invalid/signed"],
+  ["userinfo URL", "https://user:pass@storage.example.invalid/signed"],
+  ["missing-host URL", "https:///signed"],
+  ["fragment URL", "https://storage.example.invalid/signed#provider-detail-sentinel"],
+]) {
+  test(`Core signer ${name} becomes a generic safe grant failure`, async () => {
+    await loadProvider();
+    const spy = signerSpy(output);
+    await assert.rejects(
+      Promise.resolve().then(() => getArtifactGrant(
+        IDS.core,
+        capabilityEnvironment(),
+        CAPABILITY_NOW,
+        `NekoDistribution ${CAPABILITY_TOKEN}`,
+        spy.signer,
+      )),
+      assertSafeGrantFailure,
+    );
+    assert.equal(spy.calls.length, 1);
+  });
+}
+
+test("Supabase private signer wrapper calls Storage API exactly and accepts signedUrl", async () => {
+  await loadSupabaseSigner();
+  const calls = [];
+  const client = { storage: { from(bucket) {
+    calls.push(["from", bucket]);
+    return { async createSignedUrl(object, ttl) {
+      calls.push(["createSignedUrl", object, ttl]);
+      return { data: { signedUrl: SIGNED_URL }, error: null };
+    } };
+  } } };
+  assert.equal(await createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120, client), SIGNED_URL);
+  assert.deepEqual(calls, [["from", "bucket-a"], ["createSignedUrl", "path/core.zip", 120]]);
+});
+
+test("Supabase private signer wrapper validates TTL, provider result, and signed URL safely", async () => {
+  await loadSupabaseSigner();
+  for (const ttl of [0, 121, 1.5, "120", null]) {
+    await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", ttl, {}));
+  }
+  for (const result of [
+    { data: null, error: { message: "provider-detail-sentinel" } },
+    { data: { signedUrl: "http://storage.example.invalid/x" }, error: null },
+    { data: { signedUrl: "https://u:p@storage.example.invalid/x" }, error: null },
+    { data: { signedUrl: "https:///x" }, error: null },
+    { data: { signedUrl: "https://storage.example.invalid/x#secret" }, error: null },
+  ]) {
+    const client = { storage: { from: () => ({ createSignedUrl: async () => result }) } };
+    await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120, client), (error) => {
+      assert.doesNotMatch(String(error), /provider-detail-sentinel|bucket-a|path\/core\.zip|storage\.example\.invalid/);
+      return true;
+    });
   }
 });

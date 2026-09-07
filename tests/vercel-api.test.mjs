@@ -37,6 +37,13 @@ const softwareUpdateArtifactId = "launcher-win-x64-beta-0002";
 const softwareUpdateCoreArtifactId = "core-win-x64-beta-0002";
 const softwareUpdateArtifactUrl =
   "https://objects.example.invalid/releases/launcher-0002.exe";
+const softwareUpdateSignedCoreUrl =
+  "https://storage.example.invalid/object/sign/private-updates/beta/0002/core.zip?token=synthetic";
+const softwareUpdateCapabilityToken = Buffer.from(
+  Array.from({ length: 32 }, (_, index) => index),
+).toString("base64url");
+const softwareUpdateCapabilityDigest =
+  "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd";
 const softwareUpdateLauncherSha256 = "1".repeat(64);
 const softwareUpdateCoreSha256 = "2".repeat(64);
 const softwareUpdateLauncherSize = 12_345_678;
@@ -125,9 +132,21 @@ function createFakeSupabase() {
     serverMetrics: null,
     runtimeConfigFailure: false,
     events: [],
+    storageRequests: [],
   };
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, `http://127.0.0.1:${supabasePort}`);
+    if (request.method === "POST" && url.pathname.startsWith("/storage/v1/object/sign/")) {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      control.storageRequests.push({
+        path: url.pathname,
+        body: JSON.parse(text),
+      });
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ signedURL: softwareUpdateSignedCoreUrl }));
+      return;
+    }
     if (request.method === "POST" && url.pathname === "/auth/v1/token") {
       let text = "";
       for await (const chunk of request) text += chunk;
@@ -730,6 +749,14 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     "test-server-metrics-ingest-secret-32-bytes";
   process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON =
     JSON.stringify(softwareUpdateReleaseRecord);
+  process.env.DISTRIBUTION_CAPABILITIES_JSON = JSON.stringify([{
+    credential_sha256: softwareUpdateCapabilityDigest,
+    channel: "beta",
+    artifact_ids: [softwareUpdateCoreArtifactId],
+    expires_at: "2099-09-07T04:05:07Z",
+    enabled: true,
+    revoked: false,
+  }]);
   process.env.VERCEL = "1";
   const { default: handler } = await import(
     `../api/index.mjs?test=${Date.now()}`
@@ -807,6 +834,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     );
 
     const grantStartedAt = Date.now();
+    const storageBeforeLauncher = fakeSupabase.control.storageRequests.length;
     const artifactGrant = await fetch(
       `${base}/api/software-update/artifact-grant`,
       {
@@ -819,19 +847,59 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.equal(artifactGrant.status, 200);
     const artifactGrantText = await artifactGrant.text();
     const artifactGrantBody = JSON.parse(artifactGrantText);
-    assert.deepEqual(Object.keys(artifactGrantBody).sort(), [
-      "expires_at",
-      "url",
-    ]);
+    assert.deepEqual(Object.keys(artifactGrantBody).sort(), ["expires_at", "url"]);
     assert.equal(artifactGrantBody.url, softwareUpdateArtifactUrl);
-    assert.match(
-      artifactGrantBody.expires_at,
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-    );
     const expiresAt = Date.parse(artifactGrantBody.expires_at);
-    assert.ok(expiresAt >= grantStartedAt + 10 * 60 * 1000);
-    assert.ok(expiresAt <= grantFinishedAt + 10 * 60 * 1000);
+    assert.ok(expiresAt >= grantStartedAt + 120_000);
+    assert.ok(expiresAt <= grantFinishedAt + 120_000);
+    assert.equal(fakeSupabase.control.storageRequests.length, storageBeforeLauncher);
     assertPublicSoftwareUpdateResponse(artifactGrant, artifactGrantText);
+
+    const coreRequest = (authorization) => fetch(`${base}/api/software-update/artifact-grant`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authorization === undefined ? {} : { Authorization: authorization }),
+      },
+      body: JSON.stringify({ artifact_id: softwareUpdateCoreArtifactId }),
+    });
+    for (const [authorization, status] of [
+      [undefined, 401],
+      ["malformed", 403],
+      [`NekoDistribution ${"_".repeat(43)}`, 403],
+    ]) {
+      const before = fakeSupabase.control.storageRequests.length;
+      const response = await coreRequest(authorization);
+      assert.equal(response.status, status);
+      assert.equal(fakeSupabase.control.storageRequests.length, before);
+      assert.doesNotMatch(await response.text(), /NekoDistribution|private-updates|core\.zip|test-secret/);
+    }
+    const savedRegistry = process.env.DISTRIBUTION_CAPABILITIES_JSON;
+    process.env.DISTRIBUTION_CAPABILITIES_JSON = JSON.stringify([{
+      ...JSON.parse(savedRegistry)[0], revoked: true,
+    }]);
+    const beforeRevoked = fakeSupabase.control.storageRequests.length;
+    const revokedCore = await coreRequest(`NekoDistribution ${softwareUpdateCapabilityToken}`);
+    assert.equal(revokedCore.status, 403);
+    assert.equal(fakeSupabase.control.storageRequests.length, beforeRevoked);
+    process.env.DISTRIBUTION_CAPABILITIES_JSON = savedRegistry;
+
+    const coreStartedAt = Date.now();
+    const coreGrant = await coreRequest(`NekoDistribution ${softwareUpdateCapabilityToken}`);
+    const coreFinishedAt = Date.now();
+    assert.equal(coreGrant.status, 200);
+    const coreGrantText = await coreGrant.text();
+    const coreGrantBody = JSON.parse(coreGrantText);
+    assert.deepEqual(Object.keys(coreGrantBody).sort(), ["expires_at", "url"]);
+    assert.equal(coreGrantBody.url, softwareUpdateSignedCoreUrl);
+    assert.ok(Date.parse(coreGrantBody.expires_at) >= coreStartedAt + 120_000);
+    assert.ok(Date.parse(coreGrantBody.expires_at) <= coreFinishedAt + 120_000);
+    assert.deepEqual(fakeSupabase.control.storageRequests.map(({ path, body }) => ({ path, body })), [{
+      path: "/storage/v1/object/sign/private-updates/beta/0002/core.zip",
+      body: { expiresIn: 120 },
+    }]);
+    assert.doesNotMatch(coreGrantText, /NekoDistribution|test-secret|private-updates|core\.zip/);
+    assertPublicSoftwareUpdateResponse(coreGrant, coreGrantText);
 
     const wrongGrantMethod = await fetch(
       `${base}/api/software-update/artifact-grant`,
