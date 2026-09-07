@@ -25,6 +25,11 @@ import { escapeHtml } from "../standalone/src/ui/escape.js";
 const port = 8799;
 const supabasePort = 8800;
 const base = `http://127.0.0.1:${port}`;
+const syntheticSupabaseOrigin = "https://supabase.test.invalid";
+process.env.SUPABASE_URL = syntheticSupabaseOrigin;
+process.env.SUPABASE_SECRET_KEY = "test-secret";
+process.env.ACCOUNT_RECOVERY_HMAC_SECRET =
+  "test-recovery-hmac-secret-that-is-long-enough";
 const adminId = "11111111-1111-4111-8111-111111111111";
 const customerId = "22222222-2222-4222-8222-222222222222";
 const suspendedId = "33333333-3333-4333-8333-333333333333";
@@ -37,8 +42,10 @@ const softwareUpdateArtifactId = "launcher-win-x64-beta-0002";
 const softwareUpdateCoreArtifactId = "core-win-x64-beta-0002";
 const softwareUpdateArtifactUrl =
   "https://objects.example.invalid/releases/launcher-0002.exe";
+const softwareUpdateSignedCorePath =
+  "/object/sign/private-updates/beta/0002/core.zip?token=synthetic";
 const softwareUpdateSignedCoreUrl =
-  "https://storage.example.invalid/object/sign/private-updates/beta/0002/core.zip?token=synthetic";
+  `${syntheticSupabaseOrigin}/storage/v1${softwareUpdateSignedCorePath}`;
 const softwareUpdateCapabilityToken = Buffer.from(
   Array.from({ length: 32 }, (_, index) => index),
 ).toString("base64url");
@@ -144,7 +151,7 @@ function createFakeSupabase() {
         body: JSON.parse(text),
       });
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ signedURL: softwareUpdateSignedCoreUrl }));
+      response.end(JSON.stringify({ signedURL: softwareUpdateSignedCorePath }));
       return;
     }
     if (request.method === "POST" && url.pathname === "/auth/v1/token") {
@@ -739,7 +746,19 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   const fakeSupabase = createFakeSupabase();
   fakeSupabase.listen(supabasePort, "127.0.0.1");
   await once(fakeSupabase, "listening");
-  process.env.SUPABASE_URL = `http://127.0.0.1:${supabasePort}`;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const requestUrl = new URL(input instanceof Request ? input.url : input);
+    if (requestUrl.origin !== syntheticSupabaseOrigin) return realFetch(input, init);
+    requestUrl.protocol = "http:";
+    requestUrl.hostname = "127.0.0.1";
+    requestUrl.port = String(supabasePort);
+    const rewrittenInput = input instanceof Request
+      ? new Request(requestUrl, input)
+      : requestUrl;
+    return realFetch(rewrittenInput, init);
+  };
+  process.env.SUPABASE_URL = syntheticSupabaseOrigin;
   process.env.SUPABASE_SECRET_KEY = "test-secret";
   process.env.ADMIN_SESSION_SECRET =
     "test-session-secret-that-is-long-enough-for-hmac-signing";
@@ -898,7 +917,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
       path: "/storage/v1/object/sign/private-updates/beta/0002/core.zip",
       body: { expiresIn: 120 },
     }]);
-    assert.doesNotMatch(coreGrantText, /NekoDistribution|test-secret|private-updates|core\.zip/);
+    assert.doesNotMatch(coreGrantText, /NekoDistribution|test-secret/);
     assertPublicSoftwareUpdateResponse(coreGrant, coreGrantText);
 
     const wrongGrantMethod = await fetch(
@@ -1873,6 +1892,7 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.match(logoutCookie, /SameSite=Strict/i);
     assert.match(logoutCookie, /Secure/i);
   } finally {
+    globalThis.fetch = realFetch;
     apiServer.close();
     await once(apiServer, "close").catch(() => {});
     fakeSupabase.close();

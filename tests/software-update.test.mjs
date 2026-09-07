@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
 
+process.env.SUPABASE_URL ||= "https://supabase.test.invalid";
+process.env.SUPABASE_SECRET_KEY ||= "synthetic-test-service-key";
+process.env.ACCOUNT_RECOVERY_HMAC_SECRET ||=
+  "synthetic-test-recovery-secret-at-least-32-bytes";
+
 let SoftwareUpdateProviderError;
 let getArtifactGrant;
 let getSoftwareUpdateManifest;
@@ -10,10 +15,6 @@ let providerPromise;
 let supabasePromise;
 
 async function loadSupabaseSigner() {
-  process.env.SUPABASE_URL ||= "http://127.0.0.1:1";
-  process.env.SUPABASE_SECRET_KEY ||= "synthetic-test-service-key";
-  process.env.ACCOUNT_RECOVERY_HMAC_SECRET ||=
-    "synthetic-test-recovery-secret-at-least-32-bytes";
   const module = await (supabasePromise ??= import("../server/supabase.mjs"));
   createPrivateStorageSignedGetUrl = module.createPrivateStorageSignedGetUrl;
   assert.equal(
@@ -142,9 +143,12 @@ function assertCode(expectedCode, expectedStatus) {
   };
 }
 
-function assertRecordRejected(envValue) {
+async function assertRecordRejected(envValue) {
   assert.throws(() => getSoftwareUpdateManifest("beta", envValue), assertSafeInvalid);
-  assert.throws(() => getArtifactGrant(IDS.launcher, envValue), assertSafeInvalid);
+  await assert.rejects(
+    Promise.resolve().then(() => getArtifactGrant(IDS.launcher, envValue)),
+    assertSafeInvalid,
+  );
 }
 
 function withPayload(record, payload) {
@@ -167,8 +171,8 @@ for (const [description, noReleaseEnv] of [
   test(`${description} active record is an explicit no-release state`, async () => {
     await loadProvider();
     assert.equal(getSoftwareUpdateManifest("beta", noReleaseEnv), null);
-    assert.throws(
-      () => getArtifactGrant(IDS.launcher, noReleaseEnv),
+    await assert.rejects(
+      Promise.resolve().then(() => getArtifactGrant(IDS.launcher, noReleaseEnv)),
       assertCode("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404),
     );
   });
@@ -217,8 +221,13 @@ test("legacy-regression witness: malformed payload cannot fail open an anonymous
     artifacts: { [artifactId]: sentinelUrl },
   };
 
-  assert.throws(
-    () => getArtifactGrant(artifactId, environment(record), new Date("2026-09-05T08:00:00.000Z"), null),
+  await assert.rejects(
+    Promise.resolve().then(() => getArtifactGrant(
+      artifactId,
+      environment(record),
+      new Date("2026-09-05T08:00:00.000Z"),
+      null,
+    )),
     (error) => {
       assertSafeInvalid(error);
       for (const representation of errorRepresentations(error)) {
@@ -280,7 +289,7 @@ for (const [name, mutate] of recordCases) {
     await loadProvider();
     const record = validRecord();
     mutate(record);
-    assertRecordRejected(environment(record));
+    await assertRecordRejected(environment(record));
   });
 }
 
@@ -340,9 +349,12 @@ function assertForbidden(secrets = []) {
   return assertSafeCapabilityError("DISTRIBUTION_CAPABILITY_INVALID", 403, secrets);
 }
 
-function assertRegistryInvalid(raw) {
+async function assertRegistryInvalid(raw) {
   const env = capabilityEnvironment(raw);
-  assert.throws(() => coreGrant(env), assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500, [String(raw)]));
+  await assert.rejects(
+    Promise.resolve().then(() => coreGrant(env)),
+    assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500, [String(raw)]),
+  );
 }
 
 test("capability token fixtures are deterministic canonical 32-byte base64url values", () => {
@@ -362,7 +374,7 @@ test("Launcher grant never parses or requires capability configuration", async (
     for (const registry of hostileRegistries) {
       const env = environment();
       if (registry !== undefined) env.DISTRIBUTION_CAPABILITIES_JSON = registry;
-      const grant = getArtifactGrant(IDS.launcher, env, CAPABILITY_NOW, authHeader);
+      const grant = await getArtifactGrant(IDS.launcher, env, CAPABILITY_NOW, authHeader);
       assert.equal(grant.url, validRecord().components.launcher.public_url);
     }
   }
@@ -371,8 +383,11 @@ test("Launcher grant never parses or requires capability configuration", async (
 test("missing Core Authorization header is 401 without parsing the registry", async () => {
   await loadProvider();
   for (const header of [null, undefined]) {
-    assert.throws(
-      () => coreGrant({ ...environment(), DISTRIBUTION_CAPABILITIES_JSON: REGISTRY_SENTINEL }, header),
+    await assert.rejects(
+      Promise.resolve().then(() => coreGrant(
+        { ...environment(), DISTRIBUTION_CAPABILITIES_JSON: REGISTRY_SENTINEL },
+        header,
+      )),
       assertSafeCapabilityError("DISTRIBUTION_CAPABILITY_REQUIRED", 401),
     );
   }
@@ -401,15 +416,24 @@ const malformedAuthorizationHeaders = [
 for (const [name, header] of malformedAuthorizationHeaders) {
   test(`Core rejects ${name} authorization syntax as 403`, async () => {
     await loadProvider();
-    assert.throws(() => coreGrant(capabilityEnvironment(), header), assertForbidden([header]));
+    await assert.rejects(
+      Promise.resolve().then(() => coreGrant(capabilityEnvironment(), header)),
+      assertForbidden([header]),
+    );
   });
 }
 
 test("exact canonical token authorizes by SHA-256 of decoded bytes, channel, scope, state, and future expiry", async () => {
   await loadProvider();
-  const grant = coreGrant();
+  const grant = await getArtifactGrant(
+    IDS.core,
+    capabilityEnvironment(),
+    CAPABILITY_NOW,
+    `NekoDistribution ${CAPABILITY_TOKEN}`,
+    async () => SIGNED_URL,
+  );
   assert.deepEqual(Object.keys(grant).sort(), ["expires_at", "url"]);
-  assert.match(grant.url, /^supabase-private:\/\//);
+  assert.equal(grant.url, SIGNED_URL);
 });
 
 test("valid Core authorization compares fixed 32-byte Buffer digests with timingSafeEqual", async (t) => {
@@ -421,8 +445,14 @@ test("valid Core authorization compares fixed 32-byte Buffer digests with timing
     return realTimingSafeEqual(left, right);
   });
 
-  const grant = coreGrant();
-  assert.match(grant.url, /^supabase-private:\/\//);
+  const grant = await getArtifactGrant(
+    IDS.core,
+    capabilityEnvironment(),
+    CAPABILITY_NOW,
+    `NekoDistribution ${CAPABILITY_TOKEN}`,
+    async () => SIGNED_URL,
+  );
+  assert.equal(grant.url, SIGNED_URL);
   assert.ok(calls.length >= 1);
   for (const comparedDigests of calls) {
     assert.equal(comparedDigests.length, 2);
@@ -447,7 +477,10 @@ for (const [name, arrange] of authorizationDenials) {
   test(`Core authorization rejects ${name}`, async () => {
     await loadProvider();
     const [env, header, now] = arrange();
-    assert.throws(() => coreGrant(env, header, now), assertForbidden([UNKNOWN_CAPABILITY_TOKEN]));
+    await assert.rejects(
+      Promise.resolve().then(() => coreGrant(env, header, now)),
+      assertForbidden([UNKNOWN_CAPABILITY_TOKEN]),
+    );
   });
 }
 
@@ -456,7 +489,10 @@ test("registry requires a bounded nonempty array", async () => {
   for (const raw of [undefined, "", " ", "null", "{}", "[]", JSON.stringify(Array.from({ length: 1025 }, capability))]) {
     const env = environment();
     if (raw !== undefined) env.DISTRIBUTION_CAPABILITIES_JSON = raw;
-    assert.throws(() => coreGrant(env), assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500));
+    await assert.rejects(
+      Promise.resolve().then(() => coreGrant(env)),
+      assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500),
+    );
   }
 });
 
@@ -488,26 +524,30 @@ const malformedRegistryEntries = [
 for (const [name, registry] of malformedRegistryEntries) {
   test(`registry rejects ${name} as a whole-registry configuration failure`, async () => {
     await loadProvider();
-    assertRegistryInvalid(registry);
+    await assertRegistryInvalid(registry);
   });
 }
 
 test("registry rejects duplicate JSON entry keys before object construction", async () => {
   await loadProvider();
   const raw = `[{"credential_sha256":"${CAPABILITY_DIGEST}","credential_sha256":"${"f".repeat(64)}","channel":"beta","artifact_ids":["${IDS.core}"],"expires_at":"2026-09-07T04:05:07Z","enabled":true,"revoked":false}]`;
-  assertRegistryInvalid(raw);
+  await assertRegistryInvalid(raw);
 });
 
 test("one malformed registry entry beside a valid entry fails closed instead of skipping", async () => {
   await loadProvider();
-  assertRegistryInvalid([capability(), { ...capability(), extra: REGISTRY_SENTINEL }]);
+  await assertRegistryInvalid([capability(), { ...capability(), extra: REGISTRY_SENTINEL }]);
 });
 
 test("invalid injected clock fails closed before capability expiry comparison", async () => {
   await loadProvider();
   for (const now of [new Date(Number.NaN), "2026-09-07T04:05:06Z", null]) {
-    assert.throws(
-      () => coreGrant(capabilityEnvironment(), `NekoDistribution ${CAPABILITY_TOKEN}`, now),
+    await assert.rejects(
+      Promise.resolve().then(() => coreGrant(
+        capabilityEnvironment(),
+        `NekoDistribution ${CAPABILITY_TOKEN}`,
+        now,
+      )),
       assertSafeCapabilityError("SOFTWARE_UPDATE_CLOCK_INVALID", 500),
     );
   }
