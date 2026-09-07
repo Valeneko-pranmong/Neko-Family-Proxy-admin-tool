@@ -266,3 +266,209 @@ for (const [name, mutate] of recordCases) {
     assertRecordRejected(environment(record));
   });
 }
+
+const CAPABILITY_NOW = new Date("2026-09-07T04:05:06.000Z");
+const CAPABILITY_BYTES = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
+const UNKNOWN_CAPABILITY_BYTES = Buffer.from(Array.from({ length: 32 }, (_, index) => 255 - index));
+const CAPABILITY_TOKEN = CAPABILITY_BYTES.toString("base64url");
+const UNKNOWN_CAPABILITY_TOKEN = UNKNOWN_CAPABILITY_BYTES.toString("base64url");
+const CAPABILITY_DIGEST = "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abC1b8581bd710dd".toLowerCase();
+const REGISTRY_SENTINEL = "REGISTRY_SENTINEL_MUST_NOT_ESCAPE";
+
+function capability(overrides = {}) {
+  return {
+    credential_sha256: CAPABILITY_DIGEST,
+    channel: "beta",
+    artifact_ids: [IDS.core],
+    expires_at: "2026-09-07T04:05:07Z",
+    enabled: true,
+    revoked: false,
+    ...overrides,
+  };
+}
+
+function capabilityEnvironment(registry = [capability()]) {
+  return {
+    ...environment(),
+    DISTRIBUTION_CAPABILITIES_JSON: typeof registry === "string" ? registry : JSON.stringify(registry),
+  };
+}
+
+function coreGrant(env = capabilityEnvironment(), header, now = CAPABILITY_NOW) {
+  const resolvedHeader = arguments.length < 2 ? `NekoDistribution ${CAPABILITY_TOKEN}` : header;
+  return getArtifactGrant(IDS.core, env, now, resolvedHeader);
+}
+
+function assertSafeCapabilityError(expectedCode, expectedStatus, secrets = []) {
+  return (error) => {
+    assert.ok(error instanceof SoftwareUpdateProviderError);
+    assert.equal(error.code, expectedCode);
+    assert.equal(error.message, expectedCode);
+    assert.equal(error.status, expectedStatus);
+    assert.equal(error.isSafe, true);
+    const ownEnumerable = Object.fromEntries(Object.entries(error));
+    for (const representation of [...errorRepresentations(error), JSON.stringify(ownEnumerable)]) {
+      for (const secret of [CAPABILITY_TOKEN, CAPABILITY_DIGEST, REGISTRY_SENTINEL, ...secrets]) {
+        assert.equal(representation.includes(secret), false);
+      }
+    }
+    return true;
+  };
+}
+
+function assertForbidden(secrets = []) {
+  return assertSafeCapabilityError("DISTRIBUTION_CAPABILITY_INVALID", 403, secrets);
+}
+
+function assertRegistryInvalid(raw) {
+  const env = capabilityEnvironment(raw);
+  assert.throws(() => coreGrant(env), assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500, [String(raw)]));
+}
+
+test("capability token fixtures are deterministic canonical 32-byte base64url values", () => {
+  assert.equal(CAPABILITY_BYTES.length, 32);
+  assert.equal(CAPABILITY_TOKEN.length, 43);
+  assert.match(CAPABILITY_TOKEN, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(Buffer.from(CAPABILITY_TOKEN, "base64url").toString("base64url"), CAPABILITY_TOKEN);
+  assert.equal(UNKNOWN_CAPABILITY_BYTES.length, 32);
+  assert.equal(UNKNOWN_CAPABILITY_TOKEN.length, 43);
+});
+
+test("Launcher grant never parses or requires capability configuration", async () => {
+  await loadProvider();
+  const hostileHeaders = [null, "", `Wrong ${REGISTRY_SENTINEL}`, `NekoDistribution ${REGISTRY_SENTINEL}`];
+  const hostileRegistries = [undefined, "", REGISTRY_SENTINEL, "[]", "[{}]"];
+  for (const authHeader of hostileHeaders) {
+    for (const registry of hostileRegistries) {
+      const env = environment();
+      if (registry !== undefined) env.DISTRIBUTION_CAPABILITIES_JSON = registry;
+      const grant = getArtifactGrant(IDS.launcher, env, CAPABILITY_NOW, authHeader);
+      assert.equal(grant.url, validRecord().components.launcher.public_url);
+    }
+  }
+});
+
+test("missing Core Authorization header is 401 without parsing the registry", async () => {
+  await loadProvider();
+  for (const header of [null, undefined, ""]) {
+    assert.throws(
+      () => coreGrant({ ...environment(), DISTRIBUTION_CAPABILITIES_JSON: REGISTRY_SENTINEL }, header),
+      assertSafeCapabilityError("DISTRIBUTION_CAPABILITY_REQUIRED", 401),
+    );
+  }
+});
+
+const malformedAuthorizationHeaders = [
+  ["wrong scheme", `Bearer ${CAPABILITY_TOKEN}`],
+  ["case-changed scheme", `nekodistribution ${CAPABILITY_TOKEN}`],
+  ["scheme only", "NekoDistribution"],
+  ["leading whitespace", ` NekoDistribution ${CAPABILITY_TOKEN}`],
+  ["trailing whitespace", `NekoDistribution ${CAPABILITY_TOKEN} `],
+  ["two spaces", `NekoDistribution  ${CAPABILITY_TOKEN}`],
+  ["tab separator", `NekoDistribution\t${CAPABILITY_TOKEN}`],
+  ["multiple tokens", `NekoDistribution ${CAPABILITY_TOKEN} ${UNKNOWN_CAPABILITY_TOKEN}`],
+  ["comma-joined second header", `NekoDistribution ${CAPABILITY_TOKEN}, NekoDistribution ${UNKNOWN_CAPABILITY_TOKEN}`],
+  ["padded token", `NekoDistribution ${CAPABILITY_TOKEN}=`],
+  ["42-character token", `NekoDistribution ${CAPABILITY_TOKEN.slice(0, 42)}`],
+  ["44-character token", `NekoDistribution ${CAPABILITY_TOKEN}A`],
+  ["invalid alphabet", `NekoDistribution ${CAPABILITY_TOKEN.slice(0, 42)}+`],
+  ["noncanonical base64url", `NekoDistribution ${CAPABILITY_TOKEN.slice(0, 42)}B`],
+  ["decoded length 31", `NekoDistribution ${Buffer.alloc(31, 4).toString("base64url")}`],
+  ["decoded length 33", `NekoDistribution ${Buffer.alloc(33, 4).toString("base64url")}`],
+];
+
+for (const [name, header] of malformedAuthorizationHeaders) {
+  test(`Core rejects ${name} authorization syntax as 403`, async () => {
+    await loadProvider();
+    assert.throws(() => coreGrant(capabilityEnvironment(), header), assertForbidden([header]));
+  });
+}
+
+test("exact canonical token authorizes by SHA-256 of decoded bytes, channel, scope, state, and future expiry", async () => {
+  await loadProvider();
+  const grant = coreGrant();
+  assert.deepEqual(Object.keys(grant).sort(), ["expires_at", "url"]);
+  assert.match(grant.url, /^supabase-private:\/\//);
+});
+
+const authorizationDenials = [
+  ["unknown digest", () => [capabilityEnvironment(), `NekoDistribution ${UNKNOWN_CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["expired", () => [capabilityEnvironment([capability({ expires_at: "2026-09-07T04:05:05Z" })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["disabled", () => [capabilityEnvironment([capability({ enabled: false })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["revoked", () => [capabilityEnvironment([capability({ revoked: true })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["channel mismatch", () => [capabilityEnvironment([capability({ channel: "stable" })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["out of scope", () => [capabilityEnvironment([capability({ artifact_ids: [IDS.launcher] })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+];
+
+for (const [name, arrange] of authorizationDenials) {
+  test(`Core authorization rejects ${name}`, async () => {
+    await loadProvider();
+    const [env, header, now] = arrange();
+    assert.throws(() => coreGrant(env, header, now), assertForbidden([UNKNOWN_CAPABILITY_TOKEN]));
+  });
+}
+
+test("registry requires a bounded nonempty array", async () => {
+  await loadProvider();
+  for (const raw of [undefined, "", " ", "null", "{}", "[]", JSON.stringify(Array.from({ length: 1025 }, capability))]) {
+    const env = environment();
+    if (raw !== undefined) env.DISTRIBUTION_CAPABILITIES_JSON = raw;
+    assert.throws(() => coreGrant(env), assertSafeCapabilityError("SOFTWARE_UPDATE_RECORD_INVALID", 500));
+  }
+});
+
+const malformedRegistryEntries = [
+  ["non-object entry", [null]],
+  ...["credential_sha256", "channel", "artifact_ids", "expires_at", "enabled", "revoked"].map((field) => [
+    `missing ${field}`,
+    [(() => { const item = capability(); delete item[field]; return item; })()],
+  ]),
+  ["extra field", [capability({ extra: REGISTRY_SENTINEL })]],
+  ["array entry", [[capability()]]],
+  ["uppercase digest", [capability({ credential_sha256: CAPABILITY_DIGEST.toUpperCase() })]],
+  ["short digest", [capability({ credential_sha256: "a".repeat(63) })]],
+  ["nonhex digest", [capability({ credential_sha256: "g".repeat(64) })]],
+  ["wrong channel", [capability({ channel: "stable" })]],
+  ["empty scope", [capability({ artifact_ids: [] })]],
+  ["duplicate scope", [capability({ artifact_ids: [IDS.core, IDS.core] })]],
+  ["invalid scope id", [capability({ artifact_ids: ["bad id"] })]],
+  ["too many scope ids", [capability({ artifact_ids: Array.from({ length: 65 }, (_, i) => `core-scope-${i}`) })]],
+  ["scope is not array", [capability({ artifact_ids: IDS.core })]],
+  ["malformed expiry", [capability({ expires_at: "tomorrow" })]],
+  ["non-UTC expiry", [capability({ expires_at: "2026-09-07T11:05:07+07:00" })]],
+  ["fractional expiry", [capability({ expires_at: "2026-09-07T04:05:07.000Z" })]],
+  ["past expiry", [capability({ expires_at: "2026-09-07T04:05:05Z" })]],
+  ["equal expiry", [capability({ expires_at: "2026-09-07T04:05:06Z" })]],
+  ["enabled nonboolean", [capability({ enabled: 1 })]],
+  ["enabled wrong", [capability({ enabled: false })]],
+  ["revoked nonboolean", [capability({ revoked: 0 })]],
+  ["revoked wrong", [capability({ revoked: true })]],
+];
+
+for (const [name, registry] of malformedRegistryEntries) {
+  test(`registry rejects ${name} as a whole-registry configuration failure`, async () => {
+    await loadProvider();
+    assertRegistryInvalid(registry);
+  });
+}
+
+test("registry rejects duplicate JSON entry keys before object construction", async () => {
+  await loadProvider();
+  const raw = `[{"credential_sha256":"${CAPABILITY_DIGEST}","credential_sha256":"${"f".repeat(64)}","channel":"beta","artifact_ids":["${IDS.core}"],"expires_at":"2026-09-07T04:05:07Z","enabled":true,"revoked":false}]`;
+  assertRegistryInvalid(raw);
+});
+
+test("one malformed registry entry beside a valid entry fails closed instead of skipping", async () => {
+  await loadProvider();
+  assertRegistryInvalid([capability(), { ...capability(), extra: REGISTRY_SENTINEL }]);
+});
+
+test("invalid injected clock fails closed before capability expiry comparison", async () => {
+  await loadProvider();
+  for (const now of [new Date(Number.NaN), "2026-09-07T04:05:06Z", null]) {
+    assert.throws(
+      () => coreGrant(capabilityEnvironment(), `NekoDistribution ${CAPABILITY_TOKEN}`, now),
+      assertSafeCapabilityError("SOFTWARE_UPDATE_CLOCK_INVALID", 500),
+    );
+  }
+});
