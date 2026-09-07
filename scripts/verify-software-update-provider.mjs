@@ -17,11 +17,19 @@ function fail() {
   process.exitCode = 1;
 }
 
-function parseProofUrl(name) {
+function parseProofUrl(name, allowLoopbackHttp) {
   const raw = process.env[name];
   if (typeof raw !== "string" || raw.length === 0) throw new Error("invalid input");
   const parsed = new URL(raw);
-  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) {
+  if (!parsed.hostname || parsed.username || parsed.password || parsed.hash) {
+    throw new Error("invalid input");
+  }
+
+  if (parsed.protocol === "https:") return parsed.href;
+
+  const hostname = parsed.hostname === "[::1]" ? "::1" : parsed.hostname;
+  const isLiteralLoopback = hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
+  if (parsed.protocol !== "http:" || !allowLoopbackHttp || !isLiteralLoopback) {
     throw new Error("invalid input");
   }
   return parsed.href;
@@ -59,8 +67,9 @@ function sleep(ms) {
 }
 
 try {
-  const anonymousUrl = parseProofUrl("NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL");
-  const signedUrl = parseProofUrl("NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL");
+  const allowLoopbackHttp = process.env.NEKO_SOFTWARE_UPDATE_PROVIDER_TEST_ALLOW_LOOPBACK_HTTP === "1";
+  const anonymousUrl = parseProofUrl("NEKO_SOFTWARE_UPDATE_PROOF_ANONYMOUS_URL", allowLoopbackHttp);
+  const signedUrl = parseProofUrl("NEKO_SOFTWARE_UPDATE_PROOF_SIGNED_URL", allowLoopbackHttp);
   const expiresAt = Date.parse(process.env.NEKO_SOFTWARE_UPDATE_PROOF_EXPIRES_AT ?? "");
   const startedAt = Date.now();
   const initialLifetime = expiresAt - startedAt;
