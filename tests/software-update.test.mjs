@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import test from "node:test";
 
 process.env.SUPABASE_URL ||= "https://supabase.test.invalid";
@@ -127,6 +129,7 @@ function assertSafeInvalid(error) {
   assert.ok(error instanceof SoftwareUpdateProviderError);
   assert.equal(error.code, "SOFTWARE_UPDATE_RECORD_INVALID");
   assert.equal(error.message, "SOFTWARE_UPDATE_RECORD_INVALID");
+  assert.equal(error.status, 500);
   assert.equal(error.isSafe, true);
   for (const representation of errorRepresentations(error)) {
     assert.doesNotMatch(representation, /SENTINEL|RAW_SENSITIVE|private-updates|core\.zip|objects\.example\.invalid/);
@@ -177,6 +180,14 @@ for (const [description, noReleaseEnv] of [
     );
   });
 }
+
+test("grant validates the complete active record before a malformed artifact id", async () => {
+  await loadProvider();
+  await assert.rejects(
+    getArtifactGrant("bad id", rawEnvironment(`{"${SENTINEL}":true}`)),
+    assertSafeInvalid,
+  );
+});
 
 test("valid active record has exact frozen key sets and manifest remains opaque", async () => {
   await loadProvider();
@@ -666,36 +677,96 @@ for (const [name, output] of [
   });
 }
 
-test("Supabase private signer wrapper calls Storage API exactly and accepts signedUrl", async () => {
+async function withSyntheticSupabaseStorage(run) {
+  const requests = [];
+  const control = { mode: "success" };
+  const server = createServer(async (request, response) => {
+    let text = "";
+    for await (const chunk of request) text += chunk;
+    requests.push({
+      method: request.method,
+      path: request.url,
+      headers: request.headers,
+      body: text ? JSON.parse(text) : null,
+    });
+    if (control.mode === "provider-error") {
+      response.writeHead(502, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ message: "provider-detail-sentinel" }));
+      return;
+    }
+    const signedURLs = {
+      success: "/object/sign/bucket-a/path/core.zip?token=synthetic",
+      nonString: { url: "https://storage.example.invalid/signed" },
+      http: "http://storage.example.invalid/signed",
+      userinfo: "https://user:pass@storage.example.invalid/signed",
+      missingHost: "https:///signed",
+      fragment: "https://storage.example.invalid/signed#provider-detail-sentinel",
+    };
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ signedURL: signedURLs[control.mode] ?? null }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const logicalUrl = new URL(input instanceof Request ? input.url : input);
+    if (logicalUrl.origin !== process.env.SUPABASE_URL) return realFetch(input, init);
+    logicalUrl.protocol = "http:";
+    logicalUrl.hostname = "127.0.0.1";
+    logicalUrl.port = String(address.port);
+    const rewritten = input instanceof Request ? new Request(logicalUrl, input) : logicalUrl;
+    return realFetch(rewritten, init);
+  };
+  try {
+    return await run({ control, requests });
+  } finally {
+    globalThis.fetch = realFetch;
+    server.close();
+    await once(server, "close").catch(() => {});
+  }
+}
+
+test("Supabase private signer uses only the closed-over service-role client and ignores extra arguments", async () => {
   await loadSupabaseSigner();
-  const calls = [];
-  const client = { storage: { from(bucket) {
-    calls.push(["from", bucket]);
-    return { async createSignedUrl(object, ttl) {
-      calls.push(["createSignedUrl", object, ttl]);
-      return { data: { signedUrl: SIGNED_URL }, error: null };
-    } };
-  } } };
-  assert.equal(await createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120, client), SIGNED_URL);
-  assert.deepEqual(calls, [["from", "bucket-a"], ["createSignedUrl", "path/core.zip", 120]]);
+  await withSyntheticSupabaseStorage(async ({ requests }) => {
+    let attackerTouched = false;
+    const attackerClient = { storage: { from() {
+      attackerTouched = true;
+      throw new Error("attacker client must be ignored");
+    } } };
+    const expected = `${process.env.SUPABASE_URL}/storage/v1/object/sign/bucket-a/path/core.zip?token=synthetic`;
+    assert.equal(
+      await createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120, attackerClient),
+      expected,
+    );
+    assert.equal(attackerTouched, false);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(
+      { method: requests[0].method, path: requests[0].path, body: requests[0].body },
+      {
+        method: "POST",
+        path: "/storage/v1/object/sign/bucket-a/path/core.zip",
+        body: { expiresIn: 120 },
+      },
+    );
+    assert.equal(requests[0].headers.apikey, process.env.SUPABASE_SECRET_KEY);
+    assert.equal(requests[0].headers.authorization, `Bearer ${process.env.SUPABASE_SECRET_KEY}`);
+  });
 });
 
-test("Supabase private signer wrapper validates TTL, provider result, and signed URL safely", async () => {
+test("Supabase private signer validates TTL, provider result, and signed URL safely", async () => {
   await loadSupabaseSigner();
   for (const ttl of [0, 121, 1.5, "120", null]) {
-    await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", ttl, {}));
+    await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", ttl));
   }
-  for (const result of [
-    { data: null, error: { message: "provider-detail-sentinel" } },
-    { data: { signedUrl: "http://storage.example.invalid/x" }, error: null },
-    { data: { signedUrl: "https://u:p@storage.example.invalid/x" }, error: null },
-    { data: { signedUrl: "https:///x" }, error: null },
-    { data: { signedUrl: "https://storage.example.invalid/x#secret" }, error: null },
-  ]) {
-    const client = { storage: { from: () => ({ createSignedUrl: async () => result }) } };
-    await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120, client), (error) => {
-      assert.doesNotMatch(String(error), /provider-detail-sentinel|bucket-a|path\/core\.zip|storage\.example\.invalid/);
-      return true;
-    });
-  }
+  await withSyntheticSupabaseStorage(async ({ control }) => {
+    for (const mode of ["provider-error", "fragment"]) {
+      control.mode = mode;
+      await assert.rejects(createPrivateStorageSignedGetUrl("bucket-a", "path/core.zip", 120), (error) => {
+        assert.doesNotMatch(String(error), /provider-detail-sentinel|bucket-a|path\/core\.zip|storage\.example\.invalid/);
+        return true;
+      });
+    }
+  });
 });
