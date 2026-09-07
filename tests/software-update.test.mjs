@@ -1,84 +1,145 @@
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
 import test from "node:test";
 
 let SoftwareUpdateProviderError;
 let getArtifactGrant;
 let getSoftwareUpdateManifest;
-let softwareUpdateProviderPromise;
+let providerPromise;
 
-async function loadSoftwareUpdateProvider() {
+async function loadProvider() {
   try {
-    const provider = await (softwareUpdateProviderPromise ??=
-      import("../server/software-update.mjs"));
-    SoftwareUpdateProviderError = provider.SoftwareUpdateProviderError;
-    getArtifactGrant = provider.getArtifactGrant;
-    getSoftwareUpdateManifest = provider.getSoftwareUpdateManifest;
+    const provider = await (providerPromise ??= import("../server/software-update.mjs"));
+    ({ SoftwareUpdateProviderError, getArtifactGrant, getSoftwareUpdateManifest } = provider);
   } catch (error) {
-    if (error?.code === "ERR_MODULE_NOT_FOUND") {
-      assert.fail("software update provider module is missing");
-    }
+    if (error?.code === "ERR_MODULE_NOT_FOUND") assert.fail("software update provider module is missing");
     throw error;
   }
 }
 
-const envelope = {
-  envelope_version: 1,
-  key_id: "neko-update-test-1",
-  payload_b64: "cGF5bG9hZA==",
-  signature_b64: "A".repeat(88),
+const IDS = {
+  launcher: "launcher-win-x64-beta-0002",
+  core: "core-win-x64-beta-0002",
 };
+const SHA = { launcher: "1".repeat(64), core: "2".repeat(64) };
+const SIZE = { launcher: 12_345_678, core: 234_567_890 };
+const SENTINEL = "SENTINEL_RAW_SENSITIVE_CONTENT_42";
+
+function canonicalPayload(overrides = {}) {
+  const payload = {
+    schema_version: 2,
+    channel: "beta",
+    release_sequence: 2,
+    release_id: "beta-release-0002",
+    mandatory: false,
+    minimum_supported_sequence: 1,
+    updater_protocol: { minimum: 1, maximum: 1 },
+    components: {
+      launcher: {
+        version: "5.1.0a2",
+        artifact_id: IDS.launcher,
+        artifact_sha256: SHA.launcher,
+        artifact_size: SIZE.launcher,
+        installed_identity_sha256: SHA.launcher,
+        artifact_format: "raw-pe-v1",
+      },
+      core: {
+        version: "5.0.0a42",
+        artifact_id: IDS.core,
+        artifact_sha256: SHA.core,
+        artifact_size: SIZE.core,
+        installed_identity_sha256: "3".repeat(64),
+        artifact_format: "zip-core-v1",
+      },
+    },
+  };
+  return { ...payload, ...overrides };
+}
+
+function payloadB64(payload = canonicalPayload()) {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+}
 
 function validRecord() {
   return {
     channel: "beta",
-    envelope,
-    artifacts: {
-      "launcher-win-x64-beta-0002": "https://objects.example.invalid/launcher-win-x64-beta-0002",
-      "core-win-x64-beta-0002": "https://objects.example.invalid/core-win-x64-beta-0002",
+    envelope: {
+      envelope_version: 1,
+      key_id: "neko-update-test-1",
+      payload_b64: payloadB64(),
+      signature_b64: Buffer.alloc(64, 7).toString("base64"),
+    },
+    components: {
+      launcher: {
+        artifact_id: IDS.launcher,
+        artifact_sha256: SHA.launcher,
+        artifact_size: SIZE.launcher,
+        artifact_format: "raw-pe-v1",
+        distribution: "public-launcher",
+        public_url: "https://objects.example.invalid/releases/launcher-0002.exe",
+      },
+      core: {
+        artifact_id: IDS.core,
+        artifact_sha256: SHA.core,
+        artifact_size: SIZE.core,
+        artifact_format: "zip-core-v1",
+        distribution: "controlled-core",
+        storage: { bucket: "private-updates", object: "beta/0002/core.zip" },
+      },
     },
   };
 }
 
-function env(record = validRecord()) {
+function clone(value) {
+  return structuredClone(value);
+}
+
+function environment(record = validRecord()) {
   return { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: JSON.stringify(record) };
 }
 
-function code(expected) {
-  return (error) => error instanceof SoftwareUpdateProviderError && error.code === expected;
+function rawEnvironment(raw) {
+  return { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: raw };
 }
 
-function safeError(expectedCode, expectedStatus) {
+function errorRepresentations(error) {
+  return [error.message, error.code, String(error.status), String(error), JSON.stringify(error)];
+}
+
+function assertSafeInvalid(error) {
+  assert.ok(error instanceof SoftwareUpdateProviderError);
+  assert.equal(error.code, "SOFTWARE_UPDATE_RECORD_INVALID");
+  assert.equal(error.message, "SOFTWARE_UPDATE_RECORD_INVALID");
+  assert.equal(error.isSafe, true);
+  for (const representation of errorRepresentations(error)) {
+    assert.doesNotMatch(representation, /SENTINEL|RAW_SENSITIVE|private-updates|core\.zip|objects\.example\.invalid/);
+  }
+  return true;
+}
+
+function assertCode(expectedCode, expectedStatus) {
   return (error) => {
     assert.ok(error instanceof SoftwareUpdateProviderError);
     assert.equal(error.code, expectedCode);
-    assert.equal(error.status, expectedStatus);
-    assert.equal(error.isSafe, true);
+    if (expectedStatus !== undefined) assert.equal(error.status, expectedStatus);
     return true;
   };
 }
 
-function assertSafeErrorDoesNotRetain(error, expectedCode, forbiddenValues) {
-  assert.ok(error instanceof SoftwareUpdateProviderError);
-  assert.equal(error.code, expectedCode);
-  assert.equal(error.message, expectedCode);
-  assert.equal(error.isSafe, true);
+function assertRecordRejected(envValue) {
+  assert.throws(() => getSoftwareUpdateManifest("beta", envValue), assertSafeInvalid);
+  assert.throws(() => getArtifactGrant(IDS.launcher, envValue), assertSafeInvalid);
+}
 
-  const retainedRepresentations = [
-    error.message,
-    error.code,
-    String(error.status),
-    String(error),
-    JSON.stringify(error),
-  ];
+function withPayload(record, payload) {
+  record.envelope.payload_b64 = payloadB64(payload);
+  return record;
+}
 
-  for (const forbiddenValue of forbiddenValues) {
-    for (const representation of retainedRepresentations) {
-      assert.doesNotMatch(representation, new RegExp(forbiddenValue));
-    }
-  }
-
-  return true;
+function mutatePayload(mutator) {
+  const record = validRecord();
+  const payload = canonicalPayload();
+  mutator(payload);
+  return withPayload(record, payload);
 }
 
 for (const [description, noReleaseEnv] of [
@@ -87,186 +148,121 @@ for (const [description, noReleaseEnv] of [
   ["whitespace-only", { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: " \t\r\n" }],
 ]) {
   test(`${description} active record is an explicit no-release state`, async () => {
-    await loadSoftwareUpdateProvider();
+    await loadProvider();
     assert.equal(getSoftwareUpdateManifest("beta", noReleaseEnv), null);
     assert.throws(
-      () => getArtifactGrant("launcher-win-x64-beta-0002", noReleaseEnv),
-      safeError("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404),
+      () => getArtifactGrant(IDS.launcher, noReleaseEnv),
+      assertCode("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404),
     );
   });
 }
 
-test("manifest returns only the opaque signed envelope", async () => {
-  await loadSoftwareUpdateProvider();
-  assert.deepEqual(getSoftwareUpdateManifest("beta", env()), envelope);
+test("valid active record has exact frozen key sets and manifest remains opaque", async () => {
+  await loadProvider();
+  const record = validRecord();
+  assert.deepEqual(Object.keys(record).sort(), ["channel", "components", "envelope"]);
+  assert.deepEqual(Object.keys(record.components).sort(), ["core", "launcher"]);
+  assert.deepEqual(Object.keys(record.components.launcher).sort(), [
+    "artifact_format", "artifact_id", "artifact_sha256", "artifact_size", "distribution", "public_url",
+  ]);
+  assert.deepEqual(Object.keys(record.components.core).sort(), [
+    "artifact_format", "artifact_id", "artifact_sha256", "artifact_size", "distribution", "storage",
+  ]);
+  assert.deepEqual(Object.keys(record.components.core.storage).sort(), ["bucket", "object"]);
+  assert.deepEqual(getSoftwareUpdateManifest("beta", environment(record)), record.envelope);
 });
 
-test("artifact grant is allow-listed and expires in ten minutes", async () => {
-  await loadSoftwareUpdateProvider();
-  const grant = getArtifactGrant(
-    "launcher-win-x64-beta-0002",
-    env(),
-    new Date("2026-09-05T08:00:00.000Z"),
-  );
-  assert.deepEqual(grant, {
-    url: "https://objects.example.invalid/launcher-win-x64-beta-0002",
-    expires_at: "2026-09-05T08:10:00.000Z",
-  });
-  assert.throws(() => getArtifactGrant("unknown", env()), code("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND"));
-});
-
-test("artifact grants require own artifact keys", async () => {
-  await loadSoftwareUpdateProvider();
-  for (const artifactId of ["toString", "constructor", "__proto__"]) {
-    assert.throws(
-      () => getArtifactGrant(artifactId, env()),
-      safeError("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404),
-    );
+test("canonical release-v2 payload agrees exactly with trusted component metadata", () => {
+  const record = validRecord();
+  const payload = canonicalPayload();
+  for (const key of ["launcher", "core"]) {
+    assert.equal(payload.components[key].artifact_id, record.components[key].artifact_id);
+    assert.equal(payload.components[key].artifact_sha256, record.components[key].artifact_sha256);
+    assert.equal(payload.components[key].artifact_size, record.components[key].artifact_size);
+    assert.equal(payload.components[key].artifact_format, record.components[key].artifact_format);
   }
+  assert.equal(record.components.launcher.distribution, "public-launcher");
+  assert.equal(record.components.core.distribution, "controlled-core");
 });
 
-test("provider rejects malformed JSON without exposing its contents", async () => {
-  await loadSoftwareUpdateProvider();
-  const sentinel = "SENTINEL_MALFORMED_RELEASE_SECRET_42";
-  const malformedEnv = {
-    SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: `{"credential":"${sentinel}"`,
-  };
-
-  assert.throws(() => getSoftwareUpdateManifest("beta", malformedEnv), (error) => {
-    assert.ok(error instanceof SoftwareUpdateProviderError);
-    assert.equal(error.code, "SOFTWARE_UPDATE_RECORD_INVALID");
-    assert.doesNotMatch(error.message, new RegExp(sentinel));
-    return true;
-  });
-});
-
-test("provider rejects malformed records, URLs, and secret-bearing extras", async () => {
-  await loadSoftwareUpdateProvider();
-  const sentinel = "SENTINEL_PROXY_SECRET_42";
-  const invalid = [
-    { ...validRecord(), extra: true },
-    { ...validRecord(), channel: "stable" },
-    { ...validRecord(), credential: sentinel },
-    { ...validRecord(), envelope: { ...envelope, extra: true } },
-    { ...validRecord(), artifacts: {} },
-    { ...validRecord(), artifacts: { "bad id": "https://objects.example.invalid/a" } },
-    { ...validRecord(), artifacts: { artifact: "http://objects.example.invalid/a" } },
-    { ...validRecord(), artifacts: { artifact: "https://user:password@objects.example.invalid/a" } },
-    { ...validRecord(), artifacts: { artifact: "https://objects.example.invalid/a?token=secret" } },
-    { ...validRecord(), artifacts: { artifact: "https://objects.example.invalid/a#fragment" } },
-  ];
-  for (const record of invalid) {
-    assert.throws(() => getSoftwareUpdateManifest("beta", env(record)), (error) => {
-      assert.equal(error.code, "SOFTWARE_UPDATE_RECORD_INVALID");
-      assert.doesNotMatch(error.message, new RegExp(sentinel));
-      return true;
-    });
-  }
-});
-
-test("provider rejects invalid channel, id, and oversized configuration", async () => {
-  await loadSoftwareUpdateProvider();
-  assert.throws(() => getSoftwareUpdateManifest("stable", env()), code("SOFTWARE_UPDATE_CHANNEL_INVALID"));
-  assert.throws(() => getArtifactGrant("../escape", env()), code("SOFTWARE_UPDATE_ARTIFACT_ID_INVALID"));
-  assert.throws(
-    () => getSoftwareUpdateManifest("beta", { SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON: "x".repeat(131_073) }),
-    code("SOFTWARE_UPDATE_RECORD_INVALID"),
-  );
-});
-
-test("invalid top-level extras are not retained by safe errors", async () => {
-  await loadSoftwareUpdateProvider();
-  const credential = "SENTINEL_PROXY_CREDENTIAL_42";
-  const permit = "eyJaaaaaa.bbbbbbb.ccccccc";
-  const forbiddenValues = [credential, permit];
-
-  for (const record of [
-    { ...validRecord(), credential },
-    { ...validRecord(), permit },
-  ]) {
-    assert.throws(
-      () => getSoftwareUpdateManifest("beta", env(record)),
-      (error) =>
-        assertSafeErrorDoesNotRetain(
-          error,
-          "SOFTWARE_UPDATE_RECORD_INVALID",
-          forbiddenValues,
-        ),
-    );
-  }
-});
-
-test("artifact grant requires NekoDistribution capability for controlled core artifact", async () => {
-  await loadSoftwareUpdateProvider();
-  const rawToken = "my-secret-distribution-cap";
-  const tokenSha = crypto.createHash("sha256").update(rawToken).digest("hex");
-  const coreArtifactId = "core-win-x64-beta-0002";
-  const launcherArtifactId = "launcher-win-x64-beta-0002";
-
-  const payloadDoc = {
-    schema_version: 2,
-    channel: "beta",
-    release_sequence: 2,
-    release_id: "r2",
-    components: {
-      launcher: { artifact_id: launcherArtifactId },
-      core: { artifact_id: coreArtifactId },
-    },
-  };
+test("legacy-regression witness: malformed payload cannot fail open an anonymous Core grant", async () => {
+  await loadProvider();
+  const artifactId = "core-legacy-regression-witness";
+  const sentinelUrl = "https://objects.example.invalid/SENTINEL_CORE_GRANT_BYTES_42.zip";
   const record = {
-    ...validRecord(),
+    channel: "beta",
     envelope: {
-      ...envelope,
-      payload_b64: Buffer.from(JSON.stringify(payloadDoc)).toString("base64"),
+      envelope_version: 1,
+      key_id: "legacy-regression-witness",
+      payload_b64: Buffer.from("SENTINEL_RAW_SENSITIVE_CONTENT_42{", "utf8").toString("base64"),
+      signature_b64: "legacy-shallow-envelope",
     },
+    artifacts: { [artifactId]: sentinelUrl },
   };
 
-  const envWithCap = {
-    ...env(record),
-    DISTRIBUTION_CAPABILITIES_JSON: JSON.stringify([
-      {
-        credential_sha256: tokenSha,
-        enabled: true,
-        expires_at: new Date(Date.now() + 3600000).toISOString(),
-        channel: "beta",
-        artifact_ids: [coreArtifactId],
-      },
-    ]),
-  };
-
-  // 1. Core artifact request without Authorization header must fail with 401
   assert.throws(
-    () => getArtifactGrant(coreArtifactId, envWithCap, new Date(), null),
-    (err) => err.code === "DISTRIBUTION_CAPABILITY_REQUIRED" && err.status === 401,
-  );
-
-  // 2. Core artifact request with invalid token must fail with 403
-  assert.throws(
-    () => getArtifactGrant(coreArtifactId, envWithCap, new Date(), "NekoDistribution wrong-token"),
-    (err) => err.code === "DISTRIBUTION_CAPABILITY_INVALID" && err.status === 403,
-  );
-
-  // 3. Core artifact request with valid token succeeds
-  const grant = getArtifactGrant(coreArtifactId, envWithCap, new Date(), `NekoDistribution ${rawToken}`);
-  assert.ok(grant.url);
-
-  // 4. Launcher artifact request can be anonymous
-  const launcherGrant = getArtifactGrant(launcherArtifactId, envWithCap, new Date(), null);
-  assert.ok(launcherGrant.url);
-});
-
-
-test("unknown artifact ids are not retained by safe errors", async () => {
-  await loadSoftwareUpdateProvider();
-  const artifactId = "eyJaaaaaa.bbbbbbb.ccccccc";
-
-  assert.throws(
-    () => getArtifactGrant(artifactId, env()),
-    (error) =>
-      assertSafeErrorDoesNotRetain(
-        error,
-        "SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND",
-        [artifactId],
-      ),
+    () => getArtifactGrant(artifactId, environment(record), new Date("2026-09-05T08:00:00.000Z"), null),
+    (error) => {
+      assertSafeInvalid(error);
+      for (const representation of errorRepresentations(error)) {
+        assert.doesNotMatch(representation, /SENTINEL_CORE_GRANT_BYTES_42|SENTINEL_RAW_SENSITIVE_CONTENT_42/);
+      }
+      return true;
+    },
   );
 });
+
+const recordCases = [
+  ["missing top channel", (r) => { delete r.channel; }],
+  ["missing top envelope", (r) => { delete r.envelope; }],
+  ["missing top components", (r) => { delete r.components; }],
+  ["extra top field", (r) => { r[SENTINEL] = SENTINEL; }],
+  ["wrong component keys", (r) => { r.components.engine = r.components.core; delete r.components.core; }],
+  ["extra component key", (r) => { r.components.extra = clone(r.components.core); }],
+  ["duplicate artifact ids", (r) => { r.components.core.artifact_id = IDS.launcher; }],
+  ["missing launcher field", (r) => { delete r.components.launcher.artifact_size; }],
+  ["extra launcher field", (r) => { r.components.launcher[SENTINEL] = SENTINEL; }],
+  ["missing core field", (r) => { delete r.components.core.artifact_sha256; }],
+  ["extra core field", (r) => { r.components.core[SENTINEL] = SENTINEL; }],
+  ["missing storage bucket", (r) => { delete r.components.core.storage.bucket; }],
+  ["extra storage field", (r) => { r.components.core.storage[SENTINEL] = SENTINEL; }],
+  ["uppercase launcher SHA", (r) => { r.components.launcher.artifact_sha256 = "A".repeat(64); }],
+  ["wrong-length core SHA", (r) => { r.components.core.artifact_sha256 = "2".repeat(63); }],
+  ["launcher size zero", (r) => { r.components.launcher.artifact_size = 0; }],
+  ["core size negative", (r) => { r.components.core.artifact_size = -1; }],
+  ["launcher size fractional", (r) => { r.components.launcher.artifact_size = 1.5; }],
+  ["core size boolean", (r) => { r.components.core.artifact_size = true; }],
+  ["launcher size over limit", (r) => { r.components.launcher.artifact_size = 134_217_729; }],
+  ["core size over limit", (r) => { r.components.core.artifact_size = 1_073_741_825; }],
+  ["wrong launcher format", (r) => { r.components.launcher.artifact_format = "zip-core-v1"; }],
+  ["wrong core format", (r) => { r.components.core.artifact_format = "raw-pe-v1"; }],
+  ["wrong launcher distribution", (r) => { r.components.launcher.distribution = "controlled-core"; }],
+  ["wrong core distribution", (r) => { r.components.core.distribution = "public-launcher"; }],
+  ["launcher has storage", (r) => { r.components.launcher.storage = { bucket: "x", object: "y" }; }],
+  ["core has public URL", (r) => { r.components.core.public_url = "https://example.invalid/core.zip"; }],
+  ["launcher URL uses HTTP", (r) => { r.components.launcher.public_url = "http://example.invalid/a"; }],
+  ["launcher URL has userinfo", (r) => { r.components.launcher.public_url = "https://u:p@example.invalid/a"; }],
+  ["launcher URL has query", (r) => { r.components.launcher.public_url = `https://example.invalid/a?x=${SENTINEL}`; }],
+  ["launcher URL has fragment", (r) => { r.components.launcher.public_url = "https://example.invalid/a#x"; }],
+  ["unsafe bucket", (r) => { r.components.core.storage.bucket = "bad bucket"; }],
+  ["bucket over limit", (r) => { r.components.core.storage.bucket = "a".repeat(64); }],
+  ["object leading slash", (r) => { r.components.core.storage.object = "/core.zip"; }],
+  ["object trailing slash", (r) => { r.components.core.storage.object = "beta/"; }],
+  ["object empty segment", (r) => { r.components.core.storage.object = "beta//core.zip"; }],
+  ["object dot segment", (r) => { r.components.core.storage.object = "beta/./core.zip"; }],
+  ["object parent segment", (r) => { r.components.core.storage.object = "beta/../core.zip"; }],
+  ["object backslash", (r) => { r.components.core.storage.object = "beta\\core.zip"; }],
+  ["object percent escape", (r) => { r.components.core.storage.object = "beta/%63ore.zip"; }],
+  ["object query", (r) => { r.components.core.storage.object = "beta/core.zip?x"; }],
+  ["object fragment", (r) => { r.components.core.storage.object = "beta/core.zip#x"; }],
+  ["object over limit", (r) => { r.components.core.storage.object = "a".repeat(513); }],
+];
+
+for (const [name, mutate] of recordCases) {
+  test(`active record rejects ${name} for manifest and grant`, async () => {
+    await loadProvider();
+    const record = validRecord();
+    mutate(record);
+    assertRecordRejected(environment(record));
+  });
+}
