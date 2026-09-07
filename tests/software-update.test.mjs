@@ -307,8 +307,11 @@ function assertSafeCapabilityError(expectedCode, expectedStatus, secrets = []) {
     assert.equal(error.status, expectedStatus);
     assert.equal(error.isSafe, true);
     const ownEnumerable = Object.fromEntries(Object.entries(error));
+    const secretSentinels = [CAPABILITY_TOKEN, CAPABILITY_DIGEST, REGISTRY_SENTINEL, ...secrets]
+      .map(String)
+      .filter((secret) => secret.length > 0);
     for (const representation of [...errorRepresentations(error), JSON.stringify(ownEnumerable)]) {
-      for (const secret of [CAPABILITY_TOKEN, CAPABILITY_DIGEST, REGISTRY_SENTINEL, ...secrets]) {
+      for (const secret of secretSentinels) {
         assert.equal(representation.includes(secret), false);
       }
     }
@@ -394,6 +397,7 @@ test("exact canonical token authorizes by SHA-256 of decoded bytes, channel, sco
 const authorizationDenials = [
   ["unknown digest", () => [capabilityEnvironment(), `NekoDistribution ${UNKNOWN_CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
   ["expired", () => [capabilityEnvironment([capability({ expires_at: "2026-09-07T04:05:05Z" })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
+  ["expiry equal to now", () => [capabilityEnvironment([capability({ expires_at: "2026-09-07T04:05:06Z" })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
   ["disabled", () => [capabilityEnvironment([capability({ enabled: false })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
   ["revoked", () => [capabilityEnvironment([capability({ revoked: true })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
   ["channel mismatch", () => [capabilityEnvironment([capability({ channel: "stable" })]), `NekoDistribution ${CAPABILITY_TOKEN}`, CAPABILITY_NOW]],
@@ -428,7 +432,8 @@ const malformedRegistryEntries = [
   ["uppercase digest", [capability({ credential_sha256: CAPABILITY_DIGEST.toUpperCase() })]],
   ["short digest", [capability({ credential_sha256: "a".repeat(63) })]],
   ["nonhex digest", [capability({ credential_sha256: "g".repeat(64) })]],
-  ["wrong channel", [capability({ channel: "stable" })]],
+  ["channel non-string", [capability({ channel: 1 })]],
+  ["unsafe channel identifier", [capability({ channel: "bad channel" })]],
   ["empty scope", [capability({ artifact_ids: [] })]],
   ["duplicate scope", [capability({ artifact_ids: [IDS.core, IDS.core] })]],
   ["invalid scope id", [capability({ artifact_ids: ["bad id"] })]],
@@ -437,12 +442,8 @@ const malformedRegistryEntries = [
   ["malformed expiry", [capability({ expires_at: "tomorrow" })]],
   ["non-UTC expiry", [capability({ expires_at: "2026-09-07T11:05:07+07:00" })]],
   ["fractional expiry", [capability({ expires_at: "2026-09-07T04:05:07.000Z" })]],
-  ["past expiry", [capability({ expires_at: "2026-09-07T04:05:05Z" })]],
-  ["equal expiry", [capability({ expires_at: "2026-09-07T04:05:06Z" })]],
   ["enabled nonboolean", [capability({ enabled: 1 })]],
-  ["enabled wrong", [capability({ enabled: false })]],
   ["revoked nonboolean", [capability({ revoked: 0 })]],
-  ["revoked wrong", [capability({ revoked: true })]],
 ];
 
 for (const [name, registry] of malformedRegistryEntries) {
