@@ -110,6 +110,19 @@ test("provider proof is an explicit no-network skip without opt-in", async () =>
   });
 });
 
+test("opt-in proof rejects an initial signed-URL lifetime over 120 seconds before network access", async () => {
+  await withFixture((_request, response) => {
+    response.writeHead(200).end("must not be requested");
+  }, async ({ baseUrl, requests }) => {
+    const env = proofEnv(baseUrl, new Date(Date.now() + 121_000).toISOString());
+    const result = await runHarness(env, 2_000);
+    assert.notEqual(result.code, 0, "an initial signed-URL lifetime over 120 seconds must fail proof");
+    assert.equal(result.signal, null, "TTL rejection must terminate normally rather than reach the child timeout");
+    assert.equal(requests.length, 0, "invalid initial TTL must be rejected before any network request");
+    assertNoSensitiveOutput(result.output, env);
+  });
+});
+
 test("opt-in proof uses GET and proves anonymous denial, signed access, and expiry", { timeout: 7_000 }, async () => {
   const expiresAtMs = Date.now() + 1_200;
   const expiresAt = new Date(expiresAtMs).toISOString();
