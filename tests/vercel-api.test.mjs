@@ -34,20 +34,73 @@ const licenseId = "66666666-6666-4666-8666-666666666666";
 const sessionId = "77777777-7777-4777-8777-777777777777";
 const batchId = "88888888-8888-4888-8888-888888888888";
 const softwareUpdateArtifactId = "launcher-win-x64-beta-0002";
+const softwareUpdateCoreArtifactId = "core-win-x64-beta-0002";
 const softwareUpdateArtifactUrl =
-  "https://objects.example.invalid/launcher-win-x64-beta-0002";
+  "https://objects.example.invalid/releases/launcher-0002.exe";
+const softwareUpdateLauncherSha256 = "1".repeat(64);
+const softwareUpdateCoreSha256 = "2".repeat(64);
+const softwareUpdateLauncherSize = 12_345_678;
+const softwareUpdateCoreSize = 234_567_890;
+const softwareUpdatePayload = {
+  schema_version: 2,
+  channel: "beta",
+  release_sequence: 2,
+  release_id: "beta-release-0002",
+  mandatory: false,
+  minimum_supported_sequence: 1,
+  updater_protocol: { minimum: 1, maximum: 1 },
+  components: {
+    launcher: {
+      version: "5.1.0a2",
+      artifact_id: softwareUpdateArtifactId,
+      artifact_sha256: softwareUpdateLauncherSha256,
+      artifact_size: softwareUpdateLauncherSize,
+      installed_identity_sha256: softwareUpdateLauncherSha256,
+      artifact_format: "raw-pe-v1",
+    },
+    core: {
+      version: "5.0.0a42",
+      artifact_id: softwareUpdateCoreArtifactId,
+      artifact_sha256: softwareUpdateCoreSha256,
+      artifact_size: softwareUpdateCoreSize,
+      installed_identity_sha256: "3".repeat(64),
+      artifact_format: "zip-core-v1",
+    },
+  },
+};
 const softwareUpdateEnvelope = {
   envelope_version: 1,
   key_id: "neko-update-test-1",
-  payload_b64: "cGF5bG9hZA==",
+  payload_b64: Buffer.from(
+    JSON.stringify(softwareUpdatePayload),
+    "utf8",
+  ).toString("base64"),
   signature_b64:
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
 };
 const softwareUpdateReleaseRecord = {
   channel: "beta",
   envelope: softwareUpdateEnvelope,
-  artifacts: {
-    [softwareUpdateArtifactId]: softwareUpdateArtifactUrl,
+  components: {
+    launcher: {
+      artifact_id: softwareUpdateArtifactId,
+      artifact_sha256: softwareUpdateLauncherSha256,
+      artifact_size: softwareUpdateLauncherSize,
+      artifact_format: "raw-pe-v1",
+      distribution: "public-launcher",
+      public_url: softwareUpdateArtifactUrl,
+    },
+    core: {
+      artifact_id: softwareUpdateCoreArtifactId,
+      artifact_sha256: softwareUpdateCoreSha256,
+      artifact_size: softwareUpdateCoreSize,
+      artifact_format: "zip-core-v1",
+      distribution: "controlled-core",
+      storage: {
+        bucket: "private-updates",
+        object: "beta/0002/core.zip",
+      },
+    },
   },
 };
 
