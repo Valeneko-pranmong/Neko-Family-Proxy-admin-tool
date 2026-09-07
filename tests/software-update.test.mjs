@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 
 let SoftwareUpdateProviderError;
@@ -353,7 +354,7 @@ test("Launcher grant never parses or requires capability configuration", async (
 
 test("missing Core Authorization header is 401 without parsing the registry", async () => {
   await loadProvider();
-  for (const header of [null, undefined, ""]) {
+  for (const header of [null, undefined]) {
     assert.throws(
       () => coreGrant({ ...environment(), DISTRIBUTION_CAPABILITIES_JSON: REGISTRY_SENTINEL }, header),
       assertSafeCapabilityError("DISTRIBUTION_CAPABILITY_REQUIRED", 401),
@@ -362,6 +363,7 @@ test("missing Core Authorization header is 401 without parsing the registry", as
 });
 
 const malformedAuthorizationHeaders = [
+  ["empty header", ""],
   ["wrong scheme", `Bearer ${CAPABILITY_TOKEN}`],
   ["case-changed scheme", `nekodistribution ${CAPABILITY_TOKEN}`],
   ["scheme only", "NekoDistribution"],
@@ -392,6 +394,27 @@ test("exact canonical token authorizes by SHA-256 of decoded bytes, channel, sco
   const grant = coreGrant();
   assert.deepEqual(Object.keys(grant).sort(), ["expires_at", "url"]);
   assert.match(grant.url, /^supabase-private:\/\//);
+});
+
+test("valid Core authorization compares fixed 32-byte Buffer digests with timingSafeEqual", async (t) => {
+  await loadProvider();
+  const calls = [];
+  const realTimingSafeEqual = crypto.timingSafeEqual;
+  t.mock.method(crypto, "timingSafeEqual", (left, right) => {
+    calls.push([left, right]);
+    return realTimingSafeEqual(left, right);
+  });
+
+  const grant = coreGrant();
+  assert.match(grant.url, /^supabase-private:\/\//);
+  assert.ok(calls.length >= 1);
+  for (const comparedDigests of calls) {
+    assert.equal(comparedDigests.length, 2);
+    for (const digest of comparedDigests) {
+      assert.ok(Buffer.isBuffer(digest));
+      assert.equal(digest.length, 32);
+    }
+  }
 });
 
 const authorizationDenials = [
