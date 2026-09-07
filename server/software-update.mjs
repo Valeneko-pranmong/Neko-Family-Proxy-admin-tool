@@ -2,7 +2,16 @@ import crypto from "node:crypto";
 
 const MAX_RECORD_CHARACTERS = 131_072;
 const MAX_PAYLOAD_BYTES = 65_536;
+const MAX_CAPABILITY_REGISTRY_CHARACTERS = 1_048_576;
+const MAX_CAPABILITY_ENTRIES = 1_024;
+const MAX_CAPABILITY_ARTIFACTS = 64;
 const ARTIFACT_ID = /^[A-Za-z0-9._-]{1,96}$/;
+const CAPABILITY_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const CAPABILITY_CHANNEL = /^[A-Za-z0-9._-]{1,64}$/;
+const RFC3339_UTC_SECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const CAPABILITY_FIELDS = [
+  "credential_sha256", "channel", "artifact_ids", "expires_at", "enabled", "revoked",
+];
 const HEX64 = /^[0-9a-f]{64}$/;
 const CHANNEL = "beta";
 const RECORD_FIELDS = ["channel", "components", "envelope"];
@@ -201,6 +210,75 @@ export function getSoftwareUpdateManifest(channel, env = process.env) {
   return record === null ? null : structuredClone(record.envelope);
 }
 
+function decodeCapabilityHeader(authHeader) {
+  if (authHeader === null || authHeader === undefined) {
+    fail("DISTRIBUTION_CAPABILITY_REQUIRED", 401);
+  }
+  if (typeof authHeader !== "string") fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
+  const prefix = "NekoDistribution ";
+  if (!authHeader.startsWith(prefix) || authHeader.length !== prefix.length + 43) {
+    fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
+  }
+  const token = authHeader.slice(prefix.length);
+  if (!CAPABILITY_TOKEN.test(token)) fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
+  const bytes = Buffer.from(token, "base64url");
+  if (bytes.length !== 32 || bytes.toString("base64url") !== token) {
+    fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
+  }
+  return bytes;
+}
+
+function capabilityRegistry(env) {
+  const text = env.DISTRIBUTION_CAPABILITIES_JSON;
+  if (typeof text !== "string" || text.length === 0 || text.length > MAX_CAPABILITY_REGISTRY_CHARACTERS) {
+    fail("SOFTWARE_UPDATE_RECORD_INVALID");
+  }
+  let registry;
+  try { registry = parseJsonWithoutDuplicateKeys(text); } catch { fail("SOFTWARE_UPDATE_RECORD_INVALID"); }
+  if (!Array.isArray(registry) || registry.length < 1 || registry.length > MAX_CAPABILITY_ENTRIES) {
+    fail("SOFTWARE_UPDATE_RECORD_INVALID");
+  }
+  for (const cap of registry) {
+    if (!exactKeys(cap, CAPABILITY_FIELDS)
+      || !HEX64.test(cap.credential_sha256)
+      || typeof cap.channel !== "string"
+      || !CAPABILITY_CHANNEL.test(cap.channel)
+      || !Array.isArray(cap.artifact_ids)
+      || cap.artifact_ids.length < 1
+      || cap.artifact_ids.length > MAX_CAPABILITY_ARTIFACTS
+      || cap.artifact_ids.some((id) => typeof id !== "string" || !ARTIFACT_ID.test(id))
+      || new Set(cap.artifact_ids).size !== cap.artifact_ids.length
+      || typeof cap.expires_at !== "string"
+      || !RFC3339_UTC_SECONDS.test(cap.expires_at)
+      || typeof cap.enabled !== "boolean"
+      || typeof cap.revoked !== "boolean") fail("SOFTWARE_UPDATE_RECORD_INVALID");
+    const expiresMs = Date.parse(cap.expires_at);
+    if (!Number.isFinite(expiresMs)
+      || new Date(expiresMs).toISOString() !== cap.expires_at.replace("Z", ".000Z")) {
+      fail("SOFTWARE_UPDATE_RECORD_INVALID");
+    }
+  }
+  return registry;
+}
+
+function authorizeCore(artifactId, env, now, authHeader) {
+  const nowMs = now instanceof Date ? now.getTime() : Number.NaN;
+  if (!Number.isFinite(nowMs)) fail("SOFTWARE_UPDATE_CLOCK_INVALID");
+  const tokenBytes = decodeCapabilityHeader(authHeader);
+  const registry = capabilityRegistry(env);
+  const tokenDigest = crypto.createHash("sha256").update(tokenBytes).digest();
+  const authorized = registry.some((cap) => {
+    const configuredDigest = Buffer.from(cap.credential_sha256, "hex");
+    return crypto.timingSafeEqual(configuredDigest, tokenDigest)
+      && cap.channel === CHANNEL
+      && Date.parse(cap.expires_at) > nowMs
+      && cap.enabled === true
+      && cap.revoked === false
+      && cap.artifact_ids.includes(artifactId);
+  });
+  if (!authorized) fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
+}
+
 export function getArtifactGrant(artifactId, env = process.env, now = new Date(), authHeader = null) {
   if (typeof artifactId !== "string" || !ARTIFACT_ID.test(artifactId)) fail("SOFTWARE_UPDATE_ARTIFACT_ID_INVALID", 400);
   const record = activeRecord(env);
@@ -208,34 +286,7 @@ export function getArtifactGrant(artifactId, env = process.env, now = new Date()
   if (!entry) fail("SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND", 404);
   const isCore = entry === record.components.core;
 
-  if (isCore) {
-    if (!authHeader || typeof authHeader !== "string" || !authHeader.startsWith("NekoDistribution ")) fail("DISTRIBUTION_CAPABILITY_REQUIRED", 401);
-    const token = authHeader.slice("NekoDistribution ".length).trim();
-    if (!token) fail("DISTRIBUTION_CAPABILITY_REQUIRED", 401);
-    const tokenSha = crypto.createHash("sha256").update(token).digest("hex");
-    let capabilities = [];
-    if (env.DISTRIBUTION_CAPABILITIES_JSON) {
-      try { capabilities = JSON.parse(env.DISTRIBUTION_CAPABILITIES_JSON); } catch { fail("SOFTWARE_UPDATE_RECORD_INVALID"); }
-    }
-    const nowMs = now instanceof Date ? now.getTime() : Number.NaN;
-    let authorized = false;
-    if (Array.isArray(capabilities)) {
-      for (const cap of capabilities) {
-        if (!cap || typeof cap !== "object" || !cap.enabled) continue;
-        if (typeof cap.expires_at === "string") {
-          const expMs = new Date(cap.expires_at).getTime();
-          if (Number.isFinite(expMs) && nowMs > expMs) continue;
-        }
-        if (Array.isArray(cap.artifact_ids) && !cap.artifact_ids.includes(artifactId)) continue;
-        if (typeof cap.credential_sha256 === "string" && cap.credential_sha256.length === 64) {
-          const a = Buffer.from(cap.credential_sha256, "hex");
-          const b = Buffer.from(tokenSha, "hex");
-          if (a.length === b.length && crypto.timingSafeEqual(a, b)) { authorized = true; break; }
-        }
-      }
-    }
-    if (!authorized) fail("DISTRIBUTION_CAPABILITY_INVALID", 403);
-  }
+  if (isCore) authorizeCore(artifactId, env, now, authHeader);
 
   const timestamp = now instanceof Date ? now.getTime() : Number.NaN;
   if (!Number.isFinite(timestamp)) fail("SOFTWARE_UPDATE_CLOCK_INVALID");
