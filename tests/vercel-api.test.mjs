@@ -25,6 +25,11 @@ import { escapeHtml } from "../standalone/src/ui/escape.js";
 const port = 8799;
 const supabasePort = 8800;
 const base = `http://127.0.0.1:${port}`;
+const syntheticSupabaseOrigin = "https://supabase.test.invalid";
+process.env.SUPABASE_URL = syntheticSupabaseOrigin;
+process.env.SUPABASE_SECRET_KEY = "test-secret";
+process.env.ACCOUNT_RECOVERY_HMAC_SECRET =
+  "test-recovery-hmac-secret-that-is-long-enough";
 const adminId = "11111111-1111-4111-8111-111111111111";
 const customerId = "22222222-2222-4222-8222-222222222222";
 const suspendedId = "33333333-3333-4333-8333-333333333333";
@@ -33,6 +38,93 @@ const installationId = "55555555-5555-4555-8555-555555555555";
 const licenseId = "66666666-6666-4666-8666-666666666666";
 const sessionId = "77777777-7777-4777-8777-777777777777";
 const batchId = "88888888-8888-4888-8888-888888888888";
+const softwareUpdateArtifactId = "launcher-win-x64-beta-0002";
+const softwareUpdateCoreArtifactId = "core-win-x64-beta-0002";
+const softwareUpdateArtifactUrl =
+  "https://objects.example.invalid/releases/launcher-0002.exe";
+const softwareUpdateSignedCorePath =
+  "/object/sign/private-updates/beta/0002/core.zip?token=synthetic";
+const softwareUpdateSignedCoreUrl =
+  `${syntheticSupabaseOrigin}/storage/v1${softwareUpdateSignedCorePath}`;
+const softwareUpdateCapabilityToken = Buffer.from(
+  Array.from({ length: 32 }, (_, index) => index),
+).toString("base64url");
+const softwareUpdateCapabilityDigest =
+  "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd";
+const softwareUpdateLauncherSha256 = "1".repeat(64);
+const softwareUpdateCoreSha256 = "2".repeat(64);
+const softwareUpdateLauncherSize = 12_345_678;
+const softwareUpdateCoreSize = 234_567_890;
+const softwareUpdatePayload = {
+  schema_version: 2,
+  channel: "beta",
+  release_sequence: 2,
+  release_id: "beta-release-0002",
+  mandatory: false,
+  minimum_supported_sequence: 1,
+  updater_protocol: { minimum: 1, maximum: 1 },
+  components: {
+    launcher: {
+      version: "5.1.0a2",
+      artifact_id: softwareUpdateArtifactId,
+      artifact_sha256: softwareUpdateLauncherSha256,
+      artifact_size: softwareUpdateLauncherSize,
+      installed_identity_sha256: softwareUpdateLauncherSha256,
+      artifact_format: "raw-pe-v1",
+    },
+    core: {
+      version: "5.0.0a42",
+      artifact_id: softwareUpdateCoreArtifactId,
+      artifact_sha256: softwareUpdateCoreSha256,
+      artifact_size: softwareUpdateCoreSize,
+      installed_identity_sha256: "3".repeat(64),
+      artifact_format: "zip-core-v1",
+    },
+  },
+};
+const softwareUpdateEnvelope = {
+  envelope_version: 1,
+  key_id: "neko-update-test-1",
+  payload_b64: Buffer.from(
+    JSON.stringify(softwareUpdatePayload),
+    "utf8",
+  ).toString("base64"),
+  signature_b64:
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+};
+const softwareUpdateReleaseRecord = {
+  channel: "beta",
+  envelope: softwareUpdateEnvelope,
+  components: {
+    launcher: {
+      artifact_id: softwareUpdateArtifactId,
+      format: "raw-pe-v1",
+      distribution: "public-launcher",
+      sha256: softwareUpdateLauncherSha256,
+      size: softwareUpdateLauncherSize,
+      public_url: softwareUpdateArtifactUrl,
+    },
+    core: {
+      artifact_id: softwareUpdateCoreArtifactId,
+      format: "zip-core-v1",
+      distribution: "controlled-core",
+      sha256: softwareUpdateCoreSha256,
+      size: softwareUpdateCoreSize,
+      storage: {
+        bucket: "private-updates",
+        object: "beta/0002/core.zip",
+      },
+    },
+  },
+};
+
+function assertPublicSoftwareUpdateResponse(response, bodyText) {
+  assert.equal(response.headers.get("set-cookie"), null);
+  assert.doesNotMatch(
+    bodyText,
+    /"(?:config_version|host|cipher|credential)"|test-secret|SUPABASE_SECRET_KEY|SENTINEL_PROXY_SECRET_42/i,
+  );
+}
 
 function createFakeSupabase() {
   const control = {
@@ -47,9 +139,21 @@ function createFakeSupabase() {
     serverMetrics: null,
     runtimeConfigFailure: false,
     events: [],
+    storageRequests: [],
   };
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, `http://127.0.0.1:${supabasePort}`);
+    if (request.method === "POST" && url.pathname.startsWith("/storage/v1/object/sign/")) {
+      let text = "";
+      for await (const chunk of request) text += chunk;
+      control.storageRequests.push({
+        path: url.pathname,
+        body: JSON.parse(text),
+      });
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ signedURL: softwareUpdateSignedCorePath }));
+      return;
+    }
     if (request.method === "POST" && url.pathname === "/auth/v1/token") {
       let text = "";
       for await (const chunk of request) text += chunk;
@@ -642,7 +746,19 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   const fakeSupabase = createFakeSupabase();
   fakeSupabase.listen(supabasePort, "127.0.0.1");
   await once(fakeSupabase, "listening");
-  process.env.SUPABASE_URL = `http://127.0.0.1:${supabasePort}`;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const requestUrl = new URL(input instanceof Request ? input.url : input);
+    if (requestUrl.origin !== syntheticSupabaseOrigin) return realFetch(input, init);
+    requestUrl.protocol = "http:";
+    requestUrl.hostname = "127.0.0.1";
+    requestUrl.port = String(supabasePort);
+    const rewrittenInput = input instanceof Request
+      ? new Request(requestUrl, input)
+      : requestUrl;
+    return realFetch(rewrittenInput, init);
+  };
+  process.env.SUPABASE_URL = syntheticSupabaseOrigin;
   process.env.SUPABASE_SECRET_KEY = "test-secret";
   process.env.ADMIN_SESSION_SECRET =
     "test-session-secret-that-is-long-enough-for-hmac-signing";
@@ -650,6 +766,16 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     "test-recovery-hmac-secret-that-is-long-enough";
   process.env.SERVER_METRICS_INGEST_SECRET =
     "test-server-metrics-ingest-secret-32-bytes";
+  process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON =
+    JSON.stringify(softwareUpdateReleaseRecord);
+  process.env.DISTRIBUTION_CAPABILITIES_JSON = JSON.stringify([{
+    credential_sha256: softwareUpdateCapabilityDigest,
+    channel: "beta",
+    artifact_ids: [softwareUpdateCoreArtifactId],
+    expires_at: "2099-09-07T04:05:07Z",
+    enabled: true,
+    revoked: false,
+  }]);
   process.env.VERCEL = "1";
   const { default: handler } = await import(
     `../api/index.mjs?test=${Date.now()}`
@@ -661,6 +787,214 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
   try {
     const health = await fetch(`${base}/api/health`);
     assert.equal(health.status, 200);
+
+    const manifest = await fetch(
+      `${base}/api/software-update/manifest?channel=beta`,
+    );
+    assert.equal(manifest.status, 200);
+    const manifestText = await manifest.text();
+    assert.deepEqual(JSON.parse(manifestText), softwareUpdateEnvelope);
+    assertPublicSoftwareUpdateResponse(manifest, manifestText);
+
+    const savedSoftwareUpdateRelease =
+      process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
+    delete process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
+    try {
+      const noReleaseManifest = await fetch(
+        `${base}/api/software-update/manifest?channel=beta`,
+      );
+      assert.equal(noReleaseManifest.status, 404);
+      const noReleaseManifestText = await noReleaseManifest.text();
+      assert.deepEqual(JSON.parse(noReleaseManifestText), {
+        ok: false,
+        error: "No active software release",
+      });
+      assertPublicSoftwareUpdateResponse(
+        noReleaseManifest,
+        noReleaseManifestText,
+      );
+    } finally {
+      process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON =
+        savedSoftwareUpdateRelease;
+    }
+
+    for (const path of [
+      "/api/software-update/manifest",
+      "/api/software-update/manifest?channel=stable",
+      "/api/software-update/manifest?channel=beta&channel=beta",
+      "/api/software-update/manifest?channel=beta&extra=1",
+    ]) {
+      const invalidManifest = await fetch(`${base}${path}`);
+      assert.equal(invalidManifest.status, 400);
+      const invalidManifestText = await invalidManifest.text();
+      assert.deepEqual(JSON.parse(invalidManifestText), {
+        ok: false,
+        error: "Invalid software update channel",
+      });
+      assertPublicSoftwareUpdateResponse(
+        invalidManifest,
+        invalidManifestText,
+      );
+    }
+
+    const wrongManifestMethod = await fetch(
+      `${base}/api/software-update/manifest?channel=beta`,
+      { method: "POST" },
+    );
+    assert.equal(wrongManifestMethod.status, 405);
+    const wrongManifestMethodText = await wrongManifestMethod.text();
+    assert.deepEqual(JSON.parse(wrongManifestMethodText), {
+      ok: false,
+      error: "Method not allowed",
+    });
+    assertPublicSoftwareUpdateResponse(
+      wrongManifestMethod,
+      wrongManifestMethodText,
+    );
+
+    const grantStartedAt = Date.now();
+    const storageBeforeLauncher = fakeSupabase.control.storageRequests.length;
+    const artifactGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artifact_id: softwareUpdateArtifactId }),
+      },
+    );
+    const grantFinishedAt = Date.now();
+    assert.equal(artifactGrant.status, 200);
+    const artifactGrantText = await artifactGrant.text();
+    const artifactGrantBody = JSON.parse(artifactGrantText);
+    assert.deepEqual(Object.keys(artifactGrantBody).sort(), ["expires_at", "url"]);
+    assert.equal(artifactGrantBody.url, softwareUpdateArtifactUrl);
+    const expiresAt = Date.parse(artifactGrantBody.expires_at);
+    assert.ok(expiresAt >= grantStartedAt + 120_000);
+    assert.ok(expiresAt <= grantFinishedAt + 120_000);
+    assert.equal(fakeSupabase.control.storageRequests.length, storageBeforeLauncher);
+    assertPublicSoftwareUpdateResponse(artifactGrant, artifactGrantText);
+
+    const coreRequest = (authorization) => fetch(`${base}/api/software-update/artifact-grant`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authorization === undefined ? {} : { Authorization: authorization }),
+      },
+      body: JSON.stringify({ artifact_id: softwareUpdateCoreArtifactId }),
+    });
+    for (const [authorization, status] of [
+      [undefined, 401],
+      ["malformed", 403],
+      [`NekoDistribution ${"_".repeat(43)}`, 403],
+    ]) {
+      const before = fakeSupabase.control.storageRequests.length;
+      const response = await coreRequest(authorization);
+      assert.equal(response.status, status);
+      assert.equal(fakeSupabase.control.storageRequests.length, before);
+      assert.doesNotMatch(await response.text(), /NekoDistribution|private-updates|core\.zip|test-secret/);
+    }
+    const savedRegistry = process.env.DISTRIBUTION_CAPABILITIES_JSON;
+    process.env.DISTRIBUTION_CAPABILITIES_JSON = JSON.stringify([{
+      ...JSON.parse(savedRegistry)[0], revoked: true,
+    }]);
+    const beforeRevoked = fakeSupabase.control.storageRequests.length;
+    const revokedCore = await coreRequest(`NekoDistribution ${softwareUpdateCapabilityToken}`);
+    assert.equal(revokedCore.status, 403);
+    assert.equal(fakeSupabase.control.storageRequests.length, beforeRevoked);
+    process.env.DISTRIBUTION_CAPABILITIES_JSON = savedRegistry;
+
+    const coreStartedAt = Date.now();
+    const coreGrant = await coreRequest(`NekoDistribution ${softwareUpdateCapabilityToken}`);
+    const coreFinishedAt = Date.now();
+    assert.equal(coreGrant.status, 200);
+    const coreGrantText = await coreGrant.text();
+    const coreGrantBody = JSON.parse(coreGrantText);
+    assert.deepEqual(Object.keys(coreGrantBody).sort(), ["expires_at", "url"]);
+    assert.equal(coreGrantBody.url, softwareUpdateSignedCoreUrl);
+    assert.ok(Date.parse(coreGrantBody.expires_at) >= coreStartedAt + 120_000);
+    assert.ok(Date.parse(coreGrantBody.expires_at) <= coreFinishedAt + 120_000);
+    assert.deepEqual(fakeSupabase.control.storageRequests.map(({ path, body }) => ({ path, body })), [{
+      path: "/storage/v1/object/sign/private-updates/beta/0002/core.zip",
+      body: { expiresIn: 120 },
+    }]);
+    assert.doesNotMatch(coreGrantText, /NekoDistribution|test-secret/);
+    assertPublicSoftwareUpdateResponse(coreGrant, coreGrantText);
+
+    const wrongGrantMethod = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+    );
+    assert.equal(wrongGrantMethod.status, 405);
+    const wrongGrantMethodText = await wrongGrantMethod.text();
+    assert.deepEqual(JSON.parse(wrongGrantMethodText), {
+      ok: false,
+      error: "Method not allowed",
+    });
+    assertPublicSoftwareUpdateResponse(
+      wrongGrantMethod,
+      wrongGrantMethodText,
+    );
+
+    for (const body of [
+      {},
+      { artifact_id: 2 },
+      { artifact_id: softwareUpdateArtifactId, extra: true },
+    ]) {
+      const invalidGrant = await fetch(
+        `${base}/api/software-update/artifact-grant`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      assert.equal(invalidGrant.status, 400);
+      const invalidGrantText = await invalidGrant.text();
+      assert.deepEqual(JSON.parse(invalidGrantText), {
+        ok: false,
+        error: "Invalid artifact grant request",
+      });
+      assertPublicSoftwareUpdateResponse(invalidGrant, invalidGrantText);
+    }
+
+    const unknownArtifactGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifact_id: "launcher-win-x64-beta-9999",
+        }),
+      },
+    );
+    assert.equal(unknownArtifactGrant.status, 404);
+    const unknownArtifactGrantText = await unknownArtifactGrant.text();
+    assert.deepEqual(JSON.parse(unknownArtifactGrantText), {
+      ok: false,
+      error: "SOFTWARE_UPDATE_ARTIFACT_NOT_FOUND",
+    });
+    assertPublicSoftwareUpdateResponse(
+      unknownArtifactGrant,
+      unknownArtifactGrantText,
+    );
+
+    const oversizedGrant = await fetch(
+      `${base}/api/software-update/artifact-grant`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifact_id: softwareUpdateArtifactId,
+          padding: "x".repeat(1024 * 1024),
+        }),
+      },
+    );
+    assert.equal(oversizedGrant.status, 413);
+    const oversizedGrantText = await oversizedGrant.text();
+    assert.deepEqual(JSON.parse(oversizedGrantText), {
+      ok: false,
+      error: "Request too large",
+    });
+    assertPublicSoftwareUpdateResponse(oversizedGrant, oversizedGrantText);
 
     const wrongLogin = await fetch(`${base}/api/login`, {
       method: "POST",
@@ -1558,10 +1892,12 @@ test("Vercel API accepts Supabase credentials only for role admin", async () => 
     assert.match(logoutCookie, /SameSite=Strict/i);
     assert.match(logoutCookie, /Secure/i);
   } finally {
+    globalThis.fetch = realFetch;
     apiServer.close();
     await once(apiServer, "close").catch(() => {});
     fakeSupabase.close();
     await once(fakeSupabase, "close").catch(() => {});
+    delete process.env.SOFTWARE_UPDATE_ACTIVE_RELEASE_JSON;
   }
 });
 
