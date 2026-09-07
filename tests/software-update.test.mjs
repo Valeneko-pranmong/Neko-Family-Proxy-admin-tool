@@ -71,18 +71,18 @@ function validRecord() {
     components: {
       launcher: {
         artifact_id: IDS.launcher,
-        artifact_sha256: SHA.launcher,
-        artifact_size: SIZE.launcher,
-        artifact_format: "raw-pe-v1",
+        format: "raw-pe-v1",
         distribution: "public-launcher",
+        sha256: SHA.launcher,
+        size: SIZE.launcher,
         public_url: "https://objects.example.invalid/releases/launcher-0002.exe",
       },
       core: {
         artifact_id: IDS.core,
-        artifact_sha256: SHA.core,
-        artifact_size: SIZE.core,
-        artifact_format: "zip-core-v1",
+        format: "zip-core-v1",
         distribution: "controlled-core",
+        sha256: SHA.core,
+        size: SIZE.core,
         storage: { bucket: "private-updates", object: "beta/0002/core.zip" },
       },
     },
@@ -163,10 +163,10 @@ test("valid active record has exact frozen key sets and manifest remains opaque"
   assert.deepEqual(Object.keys(record).sort(), ["channel", "components", "envelope"]);
   assert.deepEqual(Object.keys(record.components).sort(), ["core", "launcher"]);
   assert.deepEqual(Object.keys(record.components.launcher).sort(), [
-    "artifact_format", "artifact_id", "artifact_sha256", "artifact_size", "distribution", "public_url",
+    "artifact_id", "distribution", "format", "public_url", "sha256", "size",
   ]);
   assert.deepEqual(Object.keys(record.components.core).sort(), [
-    "artifact_format", "artifact_id", "artifact_sha256", "artifact_size", "distribution", "storage",
+    "artifact_id", "distribution", "format", "sha256", "size", "storage",
   ]);
   assert.deepEqual(Object.keys(record.components.core.storage).sort(), ["bucket", "object"]);
   assert.deepEqual(getSoftwareUpdateManifest("beta", environment(record)), record.envelope);
@@ -177,9 +177,9 @@ test("canonical release-v2 payload agrees exactly with trusted component metadat
   const payload = canonicalPayload();
   for (const key of ["launcher", "core"]) {
     assert.equal(payload.components[key].artifact_id, record.components[key].artifact_id);
-    assert.equal(payload.components[key].artifact_sha256, record.components[key].artifact_sha256);
-    assert.equal(payload.components[key].artifact_size, record.components[key].artifact_size);
-    assert.equal(payload.components[key].artifact_format, record.components[key].artifact_format);
+    assert.equal(payload.components[key].artifact_sha256, record.components[key].sha256);
+    assert.equal(payload.components[key].artifact_size, record.components[key].size);
+    assert.equal(payload.components[key].artifact_format, record.components[key].format);
   }
   assert.equal(record.components.launcher.distribution, "public-launcher");
   assert.equal(record.components.core.distribution, "controlled-core");
@@ -220,22 +220,22 @@ const recordCases = [
   ["wrong component keys", (r) => { r.components.engine = r.components.core; delete r.components.core; }],
   ["extra component key", (r) => { r.components.extra = clone(r.components.core); }],
   ["duplicate artifact ids", (r) => { r.components.core.artifact_id = IDS.launcher; }],
-  ["missing launcher field", (r) => { delete r.components.launcher.artifact_size; }],
+  ["missing launcher field", (r) => { delete r.components.launcher.size; }],
   ["extra launcher field", (r) => { r.components.launcher[SENTINEL] = SENTINEL; }],
-  ["missing core field", (r) => { delete r.components.core.artifact_sha256; }],
+  ["missing core field", (r) => { delete r.components.core.sha256; }],
   ["extra core field", (r) => { r.components.core[SENTINEL] = SENTINEL; }],
   ["missing storage bucket", (r) => { delete r.components.core.storage.bucket; }],
   ["extra storage field", (r) => { r.components.core.storage[SENTINEL] = SENTINEL; }],
-  ["uppercase launcher SHA", (r) => { r.components.launcher.artifact_sha256 = "A".repeat(64); }],
-  ["wrong-length core SHA", (r) => { r.components.core.artifact_sha256 = "2".repeat(63); }],
-  ["launcher size zero", (r) => { r.components.launcher.artifact_size = 0; }],
-  ["core size negative", (r) => { r.components.core.artifact_size = -1; }],
-  ["launcher size fractional", (r) => { r.components.launcher.artifact_size = 1.5; }],
-  ["core size boolean", (r) => { r.components.core.artifact_size = true; }],
-  ["launcher size over limit", (r) => { r.components.launcher.artifact_size = 134_217_729; }],
-  ["core size over limit", (r) => { r.components.core.artifact_size = 1_073_741_825; }],
-  ["wrong launcher format", (r) => { r.components.launcher.artifact_format = "zip-core-v1"; }],
-  ["wrong core format", (r) => { r.components.core.artifact_format = "raw-pe-v1"; }],
+  ["uppercase launcher SHA", (r) => { r.components.launcher.sha256 = "A".repeat(64); }],
+  ["wrong-length core SHA", (r) => { r.components.core.sha256 = "2".repeat(63); }],
+  ["launcher size zero", (r) => { r.components.launcher.size = 0; }],
+  ["core size negative", (r) => { r.components.core.size = -1; }],
+  ["launcher size fractional", (r) => { r.components.launcher.size = 1.5; }],
+  ["core size boolean", (r) => { r.components.core.size = true; }],
+  ["launcher size over limit", (r) => { r.components.launcher.size = 134_217_729; }],
+  ["core size over limit", (r) => { r.components.core.size = 1_073_741_825; }],
+  ["wrong launcher format", (r) => { r.components.launcher.format = "zip-core-v1"; }],
+  ["wrong core format", (r) => { r.components.core.format = "raw-pe-v1"; }],
   ["wrong launcher distribution", (r) => { r.components.launcher.distribution = "controlled-core"; }],
   ["wrong core distribution", (r) => { r.components.core.distribution = "public-launcher"; }],
   ["launcher has storage", (r) => { r.components.launcher.storage = { bucket: "x", object: "y" }; }],

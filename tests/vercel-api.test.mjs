@@ -84,18 +84,18 @@ const softwareUpdateReleaseRecord = {
   components: {
     launcher: {
       artifact_id: softwareUpdateArtifactId,
-      artifact_sha256: softwareUpdateLauncherSha256,
-      artifact_size: softwareUpdateLauncherSize,
-      artifact_format: "raw-pe-v1",
+      format: "raw-pe-v1",
       distribution: "public-launcher",
+      sha256: softwareUpdateLauncherSha256,
+      size: softwareUpdateLauncherSize,
       public_url: softwareUpdateArtifactUrl,
     },
     core: {
       artifact_id: softwareUpdateCoreArtifactId,
-      artifact_sha256: softwareUpdateCoreSha256,
-      artifact_size: softwareUpdateCoreSize,
-      artifact_format: "zip-core-v1",
+      format: "zip-core-v1",
       distribution: "controlled-core",
+      sha256: softwareUpdateCoreSha256,
+      size: softwareUpdateCoreSize,
       storage: {
         bucket: "private-updates",
         object: "beta/0002/core.zip",
