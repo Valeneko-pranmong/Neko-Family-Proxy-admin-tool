@@ -8,7 +8,7 @@ This repository is the Web Admin / Control Room tier for Neko Family Proxy. It h
 ## Canonical repository state
 - Repository: `Valeneko-pranmong/Neko-Family-Proxy-admin-tool`
 - Canonical branch: `main`
-- Current canonical SHA at cleanup: `ac2d713e05b46cf14915cf2c51140441bf797cf8`
+- Canonical `main` should be verified against live `origin/main` before work; documentation/maintenance commits may advance it without changing production behavior.
 
 ## Responsibilities
 - Admin authentication/session handling.

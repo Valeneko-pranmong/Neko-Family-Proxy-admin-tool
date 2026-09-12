@@ -4,7 +4,7 @@ Updated: 2026-09-12
 
 ## Current state
 - Canonical branch: `main`
-- Canonical SHA: `ac2d713e05b46cf14915cf2c51140441bf797cf8`
+- Canonical `main` must be verified against live `origin/main` before work.
 - Repository root is maintained as the canonical work surface; old feature worktrees were removed during workspace cleanup while branch refs were preserved.
 
 ## Production role
