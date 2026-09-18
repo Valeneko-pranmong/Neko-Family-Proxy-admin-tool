@@ -660,7 +660,21 @@ html[data-theme="dark"] .deployment-chip { border-color: #064e3b; color: #34d399
 .ops-summary dl div:last-child { border: 0; }
 .ops-summary dt { color: var(--muted); font-size: 12px; }
 .ops-summary dd { margin: 0; font-weight: 700; font-family: "Inter", sans-serif; }
-.table-wrap { max-height: 70vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); scrollbar-width: thin; }
+.table-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-wrap {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.table-card:not(.has-pagination) .table-wrap {
+  max-height: 70vh;
+  overflow-y: auto;
+}
 table { width: 100%; border-collapse: collapse; min-width: 700px; }
 th, td { padding: 11px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; font-size: 12.5px; }
 th {
@@ -712,40 +726,529 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
 .inline-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 12px; }
 .form-actions { display: flex; gap: 8px; }
 
+/* ---------- Table Pagination ---------- */
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table-pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table-pagination-info .pagination-range,
+.table-pagination-info .pagination-total {
+  color: var(--ink-strong);
+  font-weight: 650;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.table-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.table-pagination-pages .button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-xs);
+}
+
+.pagination-btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-active {
+  pointer-events: none;
+  cursor: default;
+}
+
+.pagination-ellipsis {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+@media print {
+  aside.sidebar,
+  .topbar,
+  .table-pagination,
+  .button,
+  .modal-backdrop,
+  #toast {
+    display: none !important;
+  }
+  .app-shell {
+    display: block !important;
+  }
+  .main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .table-wrap {
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+  }
+  table {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  tbody tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  tbody tr:nth-child(10n) {
+    page-break-after: always;
+    break-after: page;
+  }
+}
+
 /* ---------- Toast / modal ---------- */
+
+/* ---------- Toast / notification ---------- */
 
 .toast {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  max-width: min(400px, calc(100vw - 48px));
-  padding: 12px 16px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 12px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #0f172a;
-  color: white;
+  background: var(--panel);
+  color: var(--ink-strong);
   box-shadow: var(--shadow-pop);
   font-size: 13px;
-  z-index: 50;
-  animation: toast-in 240ms var(--ease-out);
+  font-weight: 500;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: toast-in 220ms var(--ease-out);
 }
-@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.toast-error { background: #991b1b; border-color: #b91c1c; }
-.toast-success { background: #065f46; border-color: #047857; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
-.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); }
+.toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.toast-message {
+  flex: 1;
+  line-height: 1.45;
+}
+
+.toast-success {
+  border-color: rgba(5, 150, 105, 0.35);
+  background: var(--panel);
+}
+.toast-success .toast-icon { color: var(--success); }
+
+.toast-error {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: var(--panel);
+}
+.toast-error .toast-icon { color: var(--danger); }
+
+.toast-info {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--panel);
+}
+.toast-info .toast-icon { color: var(--brand-500); }
+
+/* ---------- Modal & Dialog System ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: modal-fade-in 180ms var(--ease-out);
+  transition: opacity 140ms ease-out;
+}
+html[data-theme="dark"] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.75);
+}
+.modal-backdrop-exit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .modal-card {
-  width: min(100%, 500px);
-  padding: 26px;
+  width: min(100%, 540px);
+  padding: 26px 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow-pop);
-  animation: card-in 260ms var(--ease-out);
+  animation: modal-pop-in 220ms var(--ease-out);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.modal-card h2 { margin: 0 0 8px; font-size: 18px; }
-.modal-card p { line-height: 1.6; font-size: 13px; }
-.modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.modal-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.modal-icon-brand {
+  background: var(--pink-soft);
+  color: var(--pink);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+.modal-icon-success {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: rgba(5, 150, 105, 0.25);
+}
+.modal-icon-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+.modal-icon-warning {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.modal-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-strong);
+  letter-spacing: -0.01em;
+}
+
+.modal-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t-fast);
+  margin: -4px -4px 0 0;
+}
+.modal-close-btn:hover {
+  background: var(--line-soft);
+  color: var(--ink);
+}
+
+/* Modal Notice Banner */
+.modal-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.modal-notice-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.modal-notice-content strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.modal-notice-content p {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.modal-notice-success {
+  background: var(--success-soft);
+  border-color: rgba(5, 150, 105, 0.25);
+  color: var(--ink-strong);
+}
+.modal-notice-success .modal-notice-icon { color: var(--success); }
+
+.modal-notice-warn {
+  background: var(--warn-soft);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: var(--ink-strong);
+}
+.modal-notice-warn .modal-notice-icon { color: var(--warn-ink); }
+
+/* Target Badge */
+.modal-target-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--canvas-accent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.target-label {
+  color: var(--muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.target-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink-strong);
+  word-break: break-all;
+}
+
+/* Coupon Code Presentation */
+.coupon-code-single {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  overflow: hidden;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.coupon-code-single:focus-within,
+.coupon-code-single:hover {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: var(--canvas-accent);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.code-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.code-pill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.code-text {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--ink-strong);
+  user-select: all;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  outline: none;
+}
+.code-text::-webkit-scrollbar {
+  display: none;
+}
+.copy-single-btn {
+  flex-shrink: 0;
+  padding: 6px 8px;
+}
+
+.coupon-code-multi {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  overflow: hidden;
+}
+.code-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  border: none;
+  background: transparent;
+  color: var(--ink-strong);
+  resize: vertical;
+  min-height: 100px;
+  max-height: 240px;
+  box-sizing: border-box;
+}
+.code-textarea:focus { outline: none; }
+
+/* Preset Chips */
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chip-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--canvas-accent);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.chip-button:hover {
+  background: var(--panel);
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+.chip-button.is-active {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: #ffffff;
+}
+
+.field-with-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.field-with-unit input {
+  padding-right: 48px;
+  width: 100%;
+}
+.input-unit {
+  position: absolute;
+  right: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Modal Actions */
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+.modal-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Solid Button Variants */
+.button-danger-solid {
+  background: #dc2626;
+  color: #ffffff !important;
+  border: 1px solid #dc2626;
+  font-weight: 600;
+}
+.button-danger-solid:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+.button-success-solid {
+  background: #059669;
+  color: #ffffff !important;
+  border: 1px solid #059669;
+  font-weight: 600;
+}
+.button-success-solid:hover:not(:disabled) {
+  background: #047857;
+  border-color: #047857;
+}
+
+/* Legacy recovery password modal compatibility */
 .temporary-password {
   display: block;
   margin: 16px 0;
@@ -810,19 +1313,55 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
 </style></head>
   <body>
     <div id="app"></div>
-    <script>(()=>{var Ce=[{id:"overview",label:"\u0E20\u0E32\u0E1E\u0E23\u0E27\u0E21",icon:"\u2302"},{id:"users",label:"\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01",icon:"\u2659"},{id:"products",label:"\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32",icon:"\u25C7"},{id:"licenses",label:"\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",icon:"\u2713"},{id:"coupons",label:"\u0E04\u0E39\u0E1B\u0E2D\u0E07",icon:"%"},{id:"redemptions",label:"\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07",icon:"\u2197"},{id:"installations",label:"\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C",icon:"\u25A3"},{id:"sessions",label:"Launcher sessions",icon:"\u25C9"},{id:"audit",label:"\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",icon:"\u2261"}];async function ee(e,t={}){let s=await fetch(`${""}${e}`,{cache:"no-store",credentials:"same-origin",...t,headers:{"Content-Type":"application/json",...t.headers||{}}}),a=await s.text(),r={};try{r=a?JSON.parse(a):{}}catch{r={}}if(!s.ok){let o=new Error(r.error||`Request failed (${s.status})`);throw o.status=s.status,o}return r}var Le=(e,t)=>ee("/api/login",{method:"POST",body:JSON.stringify({username:e,password:t})}),He=()=>ee("/api/logout",{method:"POST"}),te=(e,t={})=>{let s=new URLSearchParams({resource:e});return e==="overview"&&t.range&&s.set("range",t.range),ee(`/api/admin?${s}`)},oe=e=>ee("/api/admin",{method:"POST",body:JSON.stringify(e)}),Ie=(e="1h",t)=>{let s=new URLSearchParams({range:e});return t&&s.set("serverId",t),ee(`/api/server/metrics/history?${s}`)};var ge="neko-control:coupon-codes:";function be(){try{return window.localStorage}catch{return null}}function Re(e,t){if(!e||!Array.isArray(t)||t.length===0)return!1;try{return be()?.setItem(`${ge}${e}`,JSON.stringify({codes:t.map(String),savedAt:new Date().toISOString()})),!0}catch{return!1}}function $e(e){try{let t=be()?.getItem(`${ge}${e}`),s=t?JSON.parse(t):null;return Array.isArray(s?.codes)?s.codes.map(String):[]}catch{return[]}}function Me(e){return $e(e).length>0}function Be(e){try{be()?.removeItem(`${ge}${e}`)}catch{}}function Fe(e){let t=!1,s=null;return{get authenticated(){return t},get viewer(){return s},async login(a,r){let o=await Le(a,r);t=!0,s=o.viewer||null,e()},async logout({forceLocal:a=!1}={}){try{await He()}catch(r){if(!a)throw r}t=!1,s=null,e()},async restore(){try{let a=await te("overview");if(!a.viewer?.userId||a.viewer.role!=="admin")throw new Error("Invalid admin session response");return t=!0,s=a.viewer,e(),!0}catch{return t=!1,s=null,e(),!1}}}}function ye(e=[],t={},s=60){if(!t||!t.observed_at||t.is_stale||t.host_status==="STALE"||t.host_status==="UNKNOWN")return e;let a=String(t.observed_at),r=Date.parse(a);if(!Number.isFinite(r))return e;if(e.length>0){let d=e[e.length-1],h=Date.parse(d.observedAt);if(r<=h||a===d.observedAt)return e}let o={observedAt:a,rxBps:Number.isFinite(Number(t.rx_bps))?Math.max(0,Number(t.rx_bps)):0,txBps:Number.isFinite(Number(t.tx_bps))?Math.max(0,Number(t.tx_bps)):0,pingMs:t.ping_ms!==null&&t.ping_ms!==void 0&&Number.isFinite(Number(t.ping_ms))?Number(t.ping_ms):null},p=[...e,o];return p.length>s?p.slice(p.length-s):p}function De(e=[],t=60,s=1.5){if(!Array.isArray(e)||e.length===0)return[];let a=(Number(t)||60)*s*1e3,r=[],o=[],p=null;for(let d of e){if(!d||!d.bucket_start)continue;let h=Date.parse(d.bucket_start);Number.isFinite(h)&&(p!==null&&h-p>a&&o.length>0&&(r.push(o),o=[]),o.push(d),p=h)}return o.length>0&&r.push(o),r}function Pe(){let e={active:"overview",data:{},loading:!1,refreshing:!1,error:"",overviewRange:"14d",serverChartRange:"live",serverHistory:{range:"1h",bucket_seconds:60,available_since:null,points:[],points_count:0,loading:!1,error:"",lastSuccessAt:null},toast:"",couponFormOpen:!1,liveServerHistory:[],actionBusyId:null},t=new Set;return{state:e,subscribe(s){return t.add(s),()=>t.delete(s)},patch(s){Object.assign(e,s),t.forEach(a=>a(e))}}}function n(e){return String(e??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}function J(e,t="\u2014"){return e==null||e===""?t:String(e)}function le(e){if(!e)return"\u2014";let t=new Date(e);return Number.isNaN(t.getTime())?J(e):new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"}).format(t)}function Z(e){if(!e)return"\u2014";let t=new Date(e);return Number.isNaN(t.getTime())?J(e):new Intl.DateTimeFormat("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Bangkok"}).format(t)}function Ee(e,t="14d"){let s=new Date(e);return Number.isNaN(s.getTime())?J(e):new Intl.DateTimeFormat("th-TH",t==="24h"?{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"}:{day:"numeric",month:"short",timeZone:"Asia/Bangkok"}).format(s)}function xe(e,t="1h"){let s=new Date(e);return Number.isNaN(s.getTime())?J(e):t==="1h"||t==="24h"?new Intl.DateTimeFormat("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"}).format(s):new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",timeZone:"Asia/Bangkok"}).format(s)}function _e(e){let t=Number(e);if(!Number.isFinite(t)||t<=0)return"0 B";let s=["B","KB","MB","GB","TB","PB"],a=Math.min(s.length-1,Math.floor(Math.log(t)/Math.log(1024)));return`${(t/Math.pow(1024,a)).toFixed(a===0?0:2)} ${s[a]}`}function k(e){let t=Number(e);return!Number.isFinite(t)||t<=0?"0 bps":t>=1e9?`${(t/1e9).toFixed(2)} Gbps`:t>=1e6?`${(t/1e6).toFixed(2)} Mbps`:t>=1e3?`${(t/1e3).toFixed(1)} Kbps`:`${t.toFixed(0)} bps`}function Oe(e){let t=Number(e);if(!Number.isFinite(t)||t<=0)return"\u2014";let s=Math.floor(t/86400),a=Math.floor(t%86400/3600),r=Math.floor(t%3600/60),o=Math.floor(t%60);return s>0?`${s}d ${a}h`:a>0?`${a}h ${r}m`:r>0?`${r}m ${o}s`:`${o}s`}function Ue(e){if(e==null)return"\u2014";let t=Number(e);if(!Number.isFinite(t)||t<0)return"\u2014";if(t===0)return"\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48";if(t<60)return`${t}s \u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`;let s=Math.floor(t/60),a=t%60;return`${s}m ${a}s \u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`}function se(e){let t=String(e||"unknown").toLowerCase();return["online","available","active","listening","success"].includes(t)?"\u25CF":["degraded","expiring","suspended","scheduled"].includes(t)?"\u25B2":["stale"].includes(t)?"\u25F7":["offline","revoked","rejected","banned","expired","closed","failed","timeout"].includes(t)?"\u25A0":"\u25CB"}function O(e,t,s="\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25"){return t.length?`
-    <div class="table-wrap">
-      <table>
-        <thead><tr>${e.map(a=>`<th>${n(a)}</th>`).join("")}</tr></thead>
-        <tbody>${t.join("")}</tbody>
-      </table>
+    <script>(()=>{var Pe=[{id:"overview",label:"\u0E20\u0E32\u0E1E\u0E23\u0E27\u0E21",icon:"\u2302"},{id:"users",label:"\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01",icon:"\u2659"},{id:"products",label:"\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32",icon:"\u25C7"},{id:"licenses",label:"\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",icon:"\u2713"},{id:"coupons",label:"\u0E04\u0E39\u0E1B\u0E2D\u0E07",icon:"%"},{id:"redemptions",label:"\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07",icon:"\u2197"},{id:"installations",label:"\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C",icon:"\u25A3"},{id:"sessions",label:"Launcher sessions",icon:"\u25C9"},{id:"audit",label:"\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",icon:"\u2261"}];async function ae(e,t={}){let s=await fetch(`${""}${e}`,{cache:"no-store",credentials:"same-origin",...t,headers:{"Content-Type":"application/json",...t.headers||{}}}),a=await s.text(),n={};try{n=a?JSON.parse(a):{}}catch{n={}}if(!s.ok){let r=new Error(n.error||`Request failed (${s.status})`);throw r.status=s.status,r}return n}var Fe=(e,t)=>ae("/api/login",{method:"POST",body:JSON.stringify({username:e,password:t})}),De=()=>ae("/api/logout",{method:"POST"}),se=(e,t={})=>{let s=new URLSearchParams({resource:e});return e==="overview"&&t.range&&s.set("range",t.range),ae(`/api/admin?${s}`)},de=e=>ae("/api/admin",{method:"POST",body:JSON.stringify(e)}),Oe=(e="1h",t)=>{let s=new URLSearchParams({range:e});return t&&s.set("serverId",t),ae(`/api/server/metrics/history?${s}`)};var we="neko-control:coupon-codes:";function Se(){try{return window.localStorage}catch{return null}}function je(e,t){if(!e||!Array.isArray(t)||t.length===0)return!1;try{return Se()?.setItem(`${we}${e}`,JSON.stringify({codes:t.map(String),savedAt:new Date().toISOString()})),!0}catch{return!1}}function Ce(e){try{let t=Se()?.getItem(`${we}${e}`),s=t?JSON.parse(t):null;return Array.isArray(s?.codes)?s.codes.map(String):[]}catch{return[]}}function Ue(e){return Ce(e).length>0}function Ve(e){try{Se()?.removeItem(`${we}${e}`)}catch{}}function Ge(e){let t=!1,s=null;return{get authenticated(){return t},get viewer(){return s},async login(a,n){let r=await Fe(a,n);t=!0,s=r.viewer||null,e()},async logout({forceLocal:a=!1}={}){try{await De()}catch(n){if(!a)throw n}t=!1,s=null,e()},async restore(){try{let a=await se("overview");if(!a.viewer?.userId||a.viewer.role!=="admin")throw new Error("Invalid admin session response");return t=!0,s=a.viewer,e(),!0}catch{return t=!1,s=null,e(),!1}}}}function Ne(e=[],t={},s=60){if(!t||!t.observed_at||t.is_stale||t.host_status==="STALE"||t.host_status==="UNKNOWN")return e;let a=String(t.observed_at),n=Date.parse(a);if(!Number.isFinite(n))return e;if(e.length>0){let c=e[e.length-1],p=Date.parse(c.observedAt);if(n<=p||a===c.observedAt)return e}let r={observedAt:a,rxBps:Number.isFinite(Number(t.rx_bps))?Math.max(0,Number(t.rx_bps)):0,txBps:Number.isFinite(Number(t.tx_bps))?Math.max(0,Number(t.tx_bps)):0,pingMs:t.ping_ms!==null&&t.ping_ms!==void 0&&Number.isFinite(Number(t.ping_ms))?Number(t.ping_ms):null},l=[...e,r];return l.length>s?l.slice(l.length-s):l}function ze(e=[],t=60,s=1.5){if(!Array.isArray(e)||e.length===0)return[];let a=(Number(t)||60)*s*1e3,n=[],r=[],l=null;for(let c of e){if(!c||!c.bucket_start)continue;let p=Date.parse(c.bucket_start);Number.isFinite(p)&&(l!==null&&p-l>a&&r.length>0&&(n.push(r),r=[]),r.push(c),l=p)}return r.length>0&&n.push(r),n}function Ke(){let e={active:"overview",data:{},loading:!1,refreshing:!1,error:"",overviewRange:"14d",serverChartRange:"live",serverHistory:{range:"1h",bucket_seconds:60,available_since:null,points:[],points_count:0,loading:!1,error:"",lastSuccessAt:null},toast:"",couponFormOpen:!1,liveServerHistory:[],actionBusyId:null,tablePages:{}},t=new Set;return{state:e,subscribe(s){return t.add(s),()=>t.delete(s)},patch(s){Object.assign(e,s),t.forEach(a=>a(e))}}}function o(e){return String(e??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}function J(e,t="\u2014"){return e==null||e===""?t:String(e)}function ue(e){if(!e)return"\u2014";let t=new Date(e);return Number.isNaN(t.getTime())?J(e):new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"}).format(t)}function X(e){if(!e)return"\u2014";let t=new Date(e);return Number.isNaN(t.getTime())?J(e):new Intl.DateTimeFormat("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Bangkok"}).format(t)}function Ze(e,t="14d"){let s=new Date(e);return Number.isNaN(s.getTime())?J(e):new Intl.DateTimeFormat("th-TH",t==="24h"?{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"}:{day:"numeric",month:"short",timeZone:"Asia/Bangkok"}).format(s)}function Le(e,t="1h"){let s=new Date(e);return Number.isNaN(s.getTime())?J(e):t==="1h"||t==="24h"?new Intl.DateTimeFormat("th-TH",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"}).format(s):new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",timeZone:"Asia/Bangkok"}).format(s)}function Ae(e){let t=Number(e);if(!Number.isFinite(t)||t<=0)return"0 B";let s=["B","KB","MB","GB","TB","PB"],a=Math.min(s.length-1,Math.floor(Math.log(t)/Math.log(1024)));return`${(t/Math.pow(1024,a)).toFixed(a===0?0:2)} ${s[a]}`}function T(e){let t=Number(e);return!Number.isFinite(t)||t<=0?"0 bps":t>=1e9?`${(t/1e9).toFixed(2)} Gbps`:t>=1e6?`${(t/1e6).toFixed(2)} Mbps`:t>=1e3?`${(t/1e3).toFixed(1)} Kbps`:`${t.toFixed(0)} bps`}function Xe(e){let t=Number(e);if(!Number.isFinite(t)||t<=0)return"\u2014";let s=Math.floor(t/86400),a=Math.floor(t%86400/3600),n=Math.floor(t%3600/60),r=Math.floor(t%60);return s>0?`${s}d ${a}h`:a>0?`${a}h ${n}m`:n>0?`${n}m ${r}s`:`${r}s`}function Ye(e){if(e==null)return"\u2014";let t=Number(e);if(!Number.isFinite(t)||t<0)return"\u2014";if(t===0)return"\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48";if(t<60)return`${t}s \u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`;let s=Math.floor(t/60),a=t%60;return`${s}m ${a}s \u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27`}function ne(e){let t=String(e||"unknown").toLowerCase();return["online","available","active","listening","success"].includes(t)?"\u25CF":["degraded","expiring","suspended","scheduled"].includes(t)?"\u25B2":["stale"].includes(t)?"\u25F7":["offline","revoked","rejected","banned","expired","closed","failed","timeout"].includes(t)?"\u25A0":"\u25CB"}function mt(e,t){if(t<=7)return Array.from({length:t},(l,c)=>c+1);let s=new Set;s.add(1),s.add(t);for(let l=Math.max(1,e-1);l<=Math.min(t,e+1);l++)s.add(l);e<=3&&(s.add(2),s.add(3)),e>=t-2&&(s.add(t-2),s.add(t-1));let a=Array.from(s).sort((l,c)=>l-c),n=[],r=0;for(let l of a)r&&l-r>1&&n.push("..."),n.push(l),r=l;return n}function j(e,t=[],s="\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",a={}){if(!Array.isArray(t)||!t.length)return`<div class="empty">${o(s)}</div>`;let n=typeof a=="number"?{page:a}:a||{},r=n.paginate!==!1,l=Math.max(1,Number(n.pageSize)||10),c=t.length,p=Math.ceil(c/l),i=Math.max(1,Number(n.page)||1),d=Math.min(i,Math.max(1,p)),v=r?(d-1)*l:0,h=r?Math.min(v+l,c):c,w=r?t.slice(v,h):t,f="";if(r&&c>0)if(p>1){let L=mt(d,p).map($=>{if($==="...")return'<span class="pagination-ellipsis" aria-hidden="true">\u2026</span>';let C=$===d;return`<button type="button" class="button button-small ${C?"button-primary pagination-active":"button-ghost"}" data-action="table_goto_page" data-page="${$}" aria-label="\u0E2B\u0E19\u0E49\u0E32 ${$}" ${C?'aria-current="page"':""}>${$}</button>`}).join("");f=`
+        <nav class="table-pagination" aria-label="\u0E01\u0E32\u0E23\u0E41\u0E1A\u0E48\u0E07\u0E2B\u0E19\u0E49\u0E32\u0E15\u0E32\u0E23\u0E32\u0E07">
+          <div class="table-pagination-info">
+            \u0E41\u0E2A\u0E14\u0E07 <span class="pagination-range">${v+1}\u2013${h}</span> \u0E08\u0E32\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 <span class="pagination-total">${c}</span> \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23
+          </div>
+          <div class="table-pagination-controls">
+            <button
+              type="button"
+              class="button button-small button-ghost pagination-btn pagination-prev"
+              data-action="table_prev_page"
+              ${d<=1?"disabled":""}
+              aria-label="\u0E2B\u0E19\u0E49\u0E32\u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32"
+            >
+              \u2039 \u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32
+            </button>
+            <div class="table-pagination-pages">${L}</div>
+            <button
+              type="button"
+              class="button button-small button-ghost pagination-btn pagination-next"
+              data-action="table_next_page"
+              ${d>=p?"disabled":""}
+              aria-label="\u0E2B\u0E19\u0E49\u0E32\u0E16\u0E31\u0E14\u0E44\u0E1B"
+            >
+              \u0E16\u0E31\u0E14\u0E44\u0E1B \u203A
+            </button>
+          </div>
+        </nav>
+      `}else f=`
+        <div class="table-pagination">
+          <div class="table-pagination-info">
+            \u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 <span class="pagination-total">${c}</span> \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23
+          </div>
+        </div>
+      `;return`
+    <div class="${r?"table-card has-pagination":"table-card"}">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>${e.map(x=>`<th>${o(x)}</th>`).join("")}</tr></thead>
+          <tbody>${w.join("")}</tbody>
+        </table>
+      </div>
+      ${f}
     </div>
-  `:`<div class="empty">${n(s)}</div>`}var b=(e,t="")=>`<td class="${n(t)}">${n(J(e))}</td>`,L=e=>b(le(e),"date-cell"),F=(e,t="")=>{let s=String(e||"unknown").toLowerCase(),a=se(s),r=t||s;return`<span class="status status-${n(s)}"><span class="status-glyph" aria-hidden="true">${a}</span> ${n(r)}</span>`};function G(e,t,s=""){return`
+  `}var S=(e,t="")=>`<td class="${o(t)}">${o(J(e))}</td>`,B=e=>S(ue(e),"date-cell"),P=(e,t="")=>{let s=String(e||"unknown").toLowerCase(),a=ne(s),n=t||s;return`<span class="status status-${o(s)}"><span class="status-glyph" aria-hidden="true">${a}</span> ${o(n)}</span>`};function z(e,t,s=""){return`
     <div class="section-head">
-      <div><h2>${n(e)}</h2><p class="muted">${n(t)}</p></div>
+      <div><h2>${o(e)}</h2><p class="muted">${o(t)}</p></div>
       ${s}
     </div>
-  `}function je(e={}){return e.refreshing?'<div class="inline-refresh" role="status">\u0E01\u0E33\u0E25\u0E31\u0E07\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u2026</div>':e.error?`<div class="inline-alert" role="alert">\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${n(e.error)} \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:""}function D(e,t,s,a="",r=!1){return`<button class="button button-small ${a}" data-action="${e}" data-id="${n(t)}" ${r?"disabled":""}>${r?"\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u2026":n(s)}</button>`}function Qe(e={},t={}){let s=String(e?.host_status||"UNKNOWN").toUpperCase(),a=String(e?.ping_status||"UNKNOWN").toUpperCase(),r=n(e?.ping_target_label||"VPS \u2192 Upstream"),o=e?.ping_ms!==null&&e?.ping_ms!==void 0?`${e.ping_ms} ms`:a==="TIMEOUT"?"Timeout":a==="UNSUPPORTED"?"Unsupported":"\u2014",p=e?.packet_loss_percent!==null&&e?.packet_loss_percent!==void 0?`${e.packet_loss_percent}%`:"\u2014",d=k(e?.rx_bps),h=k(e?.tx_bps),i=_e(e?.rx_bytes_total),c=_e(e?.tx_bytes_total),g=Oe(e?.uptime_seconds),f=Ue(e?.age_seconds),S=String(e?.shadowsocks_service_status||"unknown").toLowerCase(),x=String(e?.shadowsocks_listener_status||"unknown").toLowerCase(),w=e?.online_session_count??t.onlineSessionCount??t.recentlyOnline??0,A=e?.entitled_active_user_count??t.entitledActiveUserCount??t.recentlyOnline??0;return`
+  `}function Je(e={}){return e.refreshing?'<div class="inline-refresh" role="status">\u0E01\u0E33\u0E25\u0E31\u0E07\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u2026</div>':e.error?`<div class="inline-alert" role="alert">\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${o(e.error)} \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:""}function D(e,t,s,a="",n=!1){return`<button class="button button-small ${a}" data-action="${e}" data-id="${o(t)}" ${n?"disabled":""}>${n?"\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u2026":o(s)}</button>`}function vt(e={},t={}){let s=String(e?.host_status||"UNKNOWN").toUpperCase(),a=String(e?.ping_status||"UNKNOWN").toUpperCase(),n=o(e?.ping_target_label||"VPS \u2192 Upstream"),r=e?.ping_ms!==null&&e?.ping_ms!==void 0?`${e.ping_ms} ms`:a==="TIMEOUT"?"Timeout":a==="UNSUPPORTED"?"Unsupported":"\u2014",l=e?.packet_loss_percent!==null&&e?.packet_loss_percent!==void 0?`${e.packet_loss_percent}%`:"\u2014",c=T(e?.rx_bps),p=T(e?.tx_bps),i=Ae(e?.rx_bytes_total),d=Ae(e?.tx_bytes_total),v=Xe(e?.uptime_seconds),h=Ye(e?.age_seconds),w=String(e?.shadowsocks_service_status||"unknown").toLowerCase(),f=String(e?.shadowsocks_listener_status||"unknown").toLowerCase(),y=e?.online_session_count??t.onlineSessionCount??t.recentlyOnline??0,x=e?.entitled_active_user_count??t.entitledActiveUserCount??t.recentlyOnline??0;return`
     <section class="panel server-health-panel" aria-label="\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E40\u0E0B\u0E34\u0E23\u0E4C\u0E1F\u0E40\u0E27\u0E2D\u0E23\u0E4C\u0E2B\u0E25\u0E31\u0E01 Japan VPS">
       <div class="panel-title-row">
         <div>
@@ -832,9 +1371,9 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         </div>
         <div class="server-status-badge">
           ${e?.is_stale?'<span class="server-stale-warn"><span class="status-glyph" aria-hidden="true">\u25F7</span> \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E04\u0E49\u0E32\u0E07 (>30s)</span>':""}
-          <span class="status status-${n(s.toLowerCase())}">
-            <span class="status-glyph" aria-hidden="true">${se(s)}</span>
-            ${n(s)}
+          <span class="status status-${o(s.toLowerCase())}">
+            <span class="status-glyph" aria-hidden="true">${ne(s)}</span>
+            ${o(s)}
           </span>
         </div>
       </div>
@@ -842,70 +1381,70 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         <div class="server-metric-card host-status-card">
           <span class="metric-label">Host Status</span>
           <strong class="metric-value">
-            <span class="status status-${n(s.toLowerCase())}">
-              <span class="status-glyph" aria-hidden="true">${se(s)}</span>
-              ${n(s)}
+            <span class="status status-${o(s.toLowerCase())}">
+              <span class="status-glyph" aria-hidden="true">${ne(s)}</span>
+              ${o(s)}
             </span>
           </strong>
-          <small class="metric-sub">\u0E2A\u0E31\u0E07\u0E40\u0E01\u0E15\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14: ${n(f)}</small>
+          <small class="metric-sub">\u0E2A\u0E31\u0E07\u0E40\u0E01\u0E15\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14: ${o(h)}</small>
         </div>
         <div class="server-metric-card">
-          <span class="metric-label">${r}</span>
-          <strong class="metric-value">${n(o)}</strong>
-          <small class="metric-sub">Loss: ${n(p)} \xB7 Probe: ${n(a)}</small>
+          <span class="metric-label">${n}</span>
+          <strong class="metric-value">${o(r)}</strong>
+          <small class="metric-sub">Loss: ${o(l)} \xB7 Probe: ${o(a)}</small>
         </div>
         <div class="server-metric-card">
           <span class="metric-label">Packet Loss</span>
-          <strong class="metric-value">${n(p)}</strong>
-          <small class="metric-sub">\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E42\u0E1E\u0E23\u0E1A: ${n(a)}</small>
+          <strong class="metric-value">${o(l)}</strong>
+          <small class="metric-sub">\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E42\u0E1E\u0E23\u0E1A: ${o(a)}</small>
         </div>
         <div class="server-metric-card">
           <span class="metric-label">VPS Download (RX)</span>
-          <strong class="metric-value rx-value">${n(d)}</strong>
-          <small class="metric-sub">\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E42\u0E2E\u0E2A\u0E15\u0E4C: ${n(i)}</small>
+          <strong class="metric-value rx-value">${o(c)}</strong>
+          <small class="metric-sub">\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E42\u0E2E\u0E2A\u0E15\u0E4C: ${o(i)}</small>
         </div>
         <div class="server-metric-card">
           <span class="metric-label">VPS Upload (TX)</span>
-          <strong class="metric-value tx-value">${n(h)}</strong>
-          <small class="metric-sub">\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E42\u0E2E\u0E2A\u0E15\u0E4C: ${n(c)}</small>
+          <strong class="metric-value tx-value">${o(p)}</strong>
+          <small class="metric-sub">\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E42\u0E2E\u0E2A\u0E15\u0E4C: ${o(d)}</small>
         </div>
         <div class="server-metric-card active-users-card">
           <span class="metric-label">\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E2D\u0E19\u0E44\u0E25\u0E19\u0E4C (Active Users)</span>
-          <strong class="metric-value">${n(w)}</strong>
-          <small class="metric-sub">${n(A)} \u0E21\u0E35 License \u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E44\u0E14\u0E49</small>
+          <strong class="metric-value">${o(y)}</strong>
+          <small class="metric-sub">${o(x)} \u0E21\u0E35 License \u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E44\u0E14\u0E49</small>
         </div>
       </div>
       <div class="server-details-bar">
         <div class="detail-item">
           <span class="detail-label">Host Uptime</span>
-          <span class="detail-value">${n(g)}</span>
+          <span class="detail-value">${o(v)}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">Shadowsocks Daemon</span>
-          <span class="detail-value">${F(S)}</span>
+          <span class="detail-value">${P(w)}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">Shadowsocks Listener</span>
-          <span class="detail-value">${F(x)}</span>
+          <span class="detail-value">${P(f)}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">Server ID</span>
-          <span class="detail-value server-id-chip">${n(e?.server_id||"japan-vps-1")}</span>
+          <span class="detail-value server-id-chip">${o(e?.server_id||"japan-vps-1")}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">Last Observation</span>
-          <span class="detail-value">${e?.observed_at?n(Z(e.observed_at)):"\u2014"}</span>
+          <span class="detail-value">${e?.observed_at?o(X(e.observed_at)):"\u2014"}</span>
         </div>
       </div>
     </section>
-  `}function ae(e){if(!Array.isArray(e)||e.length===0)return{line:"",area:()=>""};if(e.length===1){let i=e[0],c=Number(i.x)||0,g=Number(i.y)||0;return{line:`M ${c.toFixed(1)},${g.toFixed(1)}`,area:f=>`M ${c.toFixed(1)},${g.toFixed(1)} L ${c.toFixed(1)},${Number(f)||g} Z`}}if(e.length===2){let i=e[0],c=e[1],g=(Number(i.x)||0).toFixed(1),f=(Number(i.y)||0).toFixed(1),S=(Number(c.x)||0).toFixed(1),x=(Number(c.y)||0).toFixed(1),w=`M ${g},${f} L ${S},${x}`;return{line:w,area:A=>`${w} L ${S},${Number(A)||x} L ${g},${Number(A)||f} Z`}}let t=e.length,s=new Array(t-1),a=new Array(t-1),r=new Array(t-1);for(let i=0;i<t-1;i++){let c=(Number(e[i+1].x)||0)-(Number(e[i].x)||0),g=(Number(e[i+1].y)||0)-(Number(e[i].y)||0);s[i]=c,a[i]=g,r[i]=c===0?0:g/c}let o=new Array(t).fill(0);o[0]=r[0];for(let i=1;i<t-1;i++)if(r[i-1]*r[i]<=0)o[i]=0;else{let c=s[i-1]+s[i];o[i]=c===0?0:3*c/((c+s[i])/r[i-1]+(c+s[i-1])/r[i])}o[t-1]=r[t-2];let p=`M ${(Number(e[0].x)||0).toFixed(1)},${(Number(e[0].y)||0).toFixed(1)}`;for(let i=0;i<t-1;i++){let c=s[i],g=(Number(e[i].x)||0)+c/3,f=(Number(e[i].y)||0)+o[i]*c/3,S=(Number(e[i+1].x)||0)-c/3,x=(Number(e[i+1].y)||0)-o[i+1]*c/3,w=(Number(e[i+1].x)||0).toFixed(1),A=(Number(e[i+1].y)||0).toFixed(1);p+=` C ${g.toFixed(1)},${f.toFixed(1)} ${S.toFixed(1)},${x.toFixed(1)} ${w},${A}`}let d=(Number(e[0].x)||0).toFixed(1),h=(Number(e[t-1].x)||0).toFixed(1);return{line:p,area:i=>`${p} L ${h},${Number(i)||0} L ${d},${Number(i)||0} Z`}}function et(e=[],t={},s=""){let a=Array.isArray(e)?e:[],r=a.length>0?a[a.length-1]:null,o=r?k(r.rxBps):k(t?.rx_bps),p=r?k(r.txBps):k(t?.tx_bps),d="";t?.is_stale||t?.host_status==="STALE"?d='<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">\u25F7</span> \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E04\u0E49\u0E32\u0E07 (>30s) \u2014 \u0E2B\u0E22\u0E38\u0E14\u0E23\u0E31\u0E1A\u0E08\u0E38\u0E14\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27</span>':a.length===0?d='<span class="live-status-tag"><span class="status-glyph" aria-hidden="true">\u25CB</span> \u0E23\u0E2D\u0E23\u0E31\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Snapshot \u0E41\u0E23\u0E01\u2026</span>':d=`<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u25CF</span> Live (${a.length}/60 \u0E08\u0E38\u0E14 \xB7 ~5 \u0E19\u0E32\u0E17\u0E35)</span>`;let h=840,i=240,c={left:68,right:20,top:24,bottom:36},g="";if(a.length===0)g=`
+  `}function re(e){if(!Array.isArray(e)||e.length===0)return{line:"",area:()=>""};if(e.length===1){let i=e[0],d=Number(i.x)||0,v=Number(i.y)||0;return{line:`M ${d.toFixed(1)},${v.toFixed(1)}`,area:h=>`M ${d.toFixed(1)},${v.toFixed(1)} L ${d.toFixed(1)},${Number(h)||v} Z`}}if(e.length===2){let i=e[0],d=e[1],v=(Number(i.x)||0).toFixed(1),h=(Number(i.y)||0).toFixed(1),w=(Number(d.x)||0).toFixed(1),f=(Number(d.y)||0).toFixed(1),y=`M ${v},${h} L ${w},${f}`;return{line:y,area:x=>`${y} L ${w},${Number(x)||f} L ${v},${Number(x)||h} Z`}}let t=e.length,s=new Array(t-1),a=new Array(t-1),n=new Array(t-1);for(let i=0;i<t-1;i++){let d=(Number(e[i+1].x)||0)-(Number(e[i].x)||0),v=(Number(e[i+1].y)||0)-(Number(e[i].y)||0);s[i]=d,a[i]=v,n[i]=d===0?0:v/d}let r=new Array(t).fill(0);r[0]=n[0];for(let i=1;i<t-1;i++)if(n[i-1]*n[i]<=0)r[i]=0;else{let d=s[i-1]+s[i];r[i]=d===0?0:3*d/((d+s[i])/n[i-1]+(d+s[i-1])/n[i])}r[t-1]=n[t-2];let l=`M ${(Number(e[0].x)||0).toFixed(1)},${(Number(e[0].y)||0).toFixed(1)}`;for(let i=0;i<t-1;i++){let d=s[i],v=(Number(e[i].x)||0)+d/3,h=(Number(e[i].y)||0)+r[i]*d/3,w=(Number(e[i+1].x)||0)-d/3,f=(Number(e[i+1].y)||0)-r[i+1]*d/3,y=(Number(e[i+1].x)||0).toFixed(1),x=(Number(e[i+1].y)||0).toFixed(1);l+=` C ${v.toFixed(1)},${h.toFixed(1)} ${w.toFixed(1)},${f.toFixed(1)} ${y},${x}`}let c=(Number(e[0].x)||0).toFixed(1),p=(Number(e[t-1].x)||0).toFixed(1);return{line:l,area:i=>`${l} L ${p},${Number(i)||0} L ${c},${Number(i)||0} Z`}}function bt(e=[],t={},s=""){let a=Array.isArray(e)?e:[],n=a.length>0?a[a.length-1]:null,r=n?T(n.rxBps):T(t?.rx_bps),l=n?T(n.txBps):T(t?.tx_bps),c="";t?.is_stale||t?.host_status==="STALE"?c='<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">\u25F7</span> \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E04\u0E49\u0E32\u0E07 (>30s) \u2014 \u0E2B\u0E22\u0E38\u0E14\u0E23\u0E31\u0E1A\u0E08\u0E38\u0E14\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27</span>':a.length===0?c='<span class="live-status-tag"><span class="status-glyph" aria-hidden="true">\u25CB</span> \u0E23\u0E2D\u0E23\u0E31\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Snapshot \u0E41\u0E23\u0E01\u2026</span>':c=`<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u25CF</span> Live (${a.length}/60 \u0E08\u0E38\u0E14 \xB7 ~5 \u0E19\u0E32\u0E17\u0E35)</span>`;let p=840,i=240,d={left:68,right:20,top:24,bottom:36},v="";if(a.length===0)v=`
       <div class="chart-empty">
         <strong>\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Live Network Activity \u0E43\u0E19\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E19\u0E35\u0E49</strong>
         <span>\u0E01\u0E23\u0E32\u0E1F\u0E08\u0E30\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E41\u0E1A\u0E1A Rolling \u0E43\u0E19\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E04\u0E27\u0E32\u0E21\u0E08\u0E33\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E15\u0E31\u0E49\u0E07\u0E41\u0E15\u0E48\u0E40\u0E1B\u0E34\u0E14\u0E2B\u0E19\u0E49\u0E32\u0E19\u0E35\u0E49 (\u0E44\u0E21\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E08\u0E33\u0E25\u0E2D\u0E07)</span>
       </div>
-    `;else{let S=Math.max(1e3,...a.flatMap(m=>[Number(m.rxBps)||0,Number(m.txBps)||0])),x=m=>c.left+m*(h-c.left-c.right)/Math.max(1,a.length-1),w=m=>i-c.bottom-(Number(m)||0)*(i-c.top-c.bottom)/S,A=a.map((m,$)=>({x:x($),y:w(m.rxBps)})),V=a.map((m,$)=>({x:x($),y:w(m.txBps)})),B=ae(A),H=ae(V),u=i-c.bottom,_=a.map((m,$)=>{let I=$===a.length-1,E=`${Z(m.observedAt)} \xB7 VPS Download: ${k(m.rxBps)}`;return`${I?`<circle cx="${x($)}" cy="${w(m.rxBps)}" r="8" fill="#3b82f6" opacity="0.3" class="chart-dot-pulse" />`:""}<circle tabindex="0" cx="${x($)}" cy="${w(m.rxBps)}" r="${I?4.5:3}" fill="#3b82f6" class="chart-dot${I?" chart-dot-latest":""}" aria-label="${n(E)}"><title>${n(E)}</title></circle>`}).join(""),N=a.map((m,$)=>{let I=$===a.length-1,E=`${Z(m.observedAt)} \xB7 VPS Upload: ${k(m.txBps)}`;return`${I?`<circle cx="${x($)}" cy="${w(m.txBps)}" r="8" fill="#10b981" opacity="0.3" class="chart-dot-pulse" />`:""}<circle tabindex="0" cx="${x($)}" cy="${w(m.txBps)}" r="${I?4.5:3}" fill="#10b981" class="chart-dot${I?" chart-dot-latest":""}" aria-label="${n(E)}"><title>${n(E)}</title></circle>`}).join(""),C=a.map((m,$)=>{let I=Math.max(1,Math.floor(a.length/5));return $%I!==0&&$!==a.length-1?"":`<text x="${x($)}" y="${i-12}" text-anchor="middle" class="chart-time-label">${n(Z(m.observedAt))}</text>`}).join("");g=`
+    `;else{let w=Math.max(1e3,...a.flatMap(b=>[Number(b.rxBps)||0,Number(b.txBps)||0])),f=b=>d.left+b*(p-d.left-d.right)/Math.max(1,a.length-1),y=b=>i-d.bottom-(Number(b)||0)*(i-d.top-d.bottom)/w,x=a.map((b,k)=>({x:f(k),y:y(b.rxBps)})),L=a.map((b,k)=>({x:f(k),y:y(b.txBps)})),$=re(x),C=re(L),m=i-d.bottom,_=a.map((b,k)=>{let H=k===a.length-1,q=`${X(b.observedAt)} \xB7 VPS Download: ${T(b.rxBps)}`;return`${H?`<circle cx="${f(k)}" cy="${y(b.rxBps)}" r="8" fill="#3b82f6" opacity="0.3" class="chart-dot-pulse" />`:""}<circle tabindex="0" cx="${f(k)}" cy="${y(b.rxBps)}" r="${H?4.5:3}" fill="#3b82f6" class="chart-dot${H?" chart-dot-latest":""}" aria-label="${o(q)}"><title>${o(q)}</title></circle>`}).join(""),M=a.map((b,k)=>{let H=k===a.length-1,q=`${X(b.observedAt)} \xB7 VPS Upload: ${T(b.txBps)}`;return`${H?`<circle cx="${f(k)}" cy="${y(b.txBps)}" r="8" fill="#10b981" opacity="0.3" class="chart-dot-pulse" />`:""}<circle tabindex="0" cx="${f(k)}" cy="${y(b.txBps)}" r="${H?4.5:3}" fill="#10b981" class="chart-dot${H?" chart-dot-latest":""}" aria-label="${o(q)}"><title>${o(q)}</title></circle>`}).join(""),A=a.map((b,k)=>{let H=Math.max(1,Math.floor(a.length/5));return k%H!==0&&k!==a.length-1?"":`<text x="${f(k)}" y="${i-12}" text-anchor="middle" class="chart-time-label">${o(X(b.observedAt))}</text>`}).join("");v=`
       <div class="chart-wrap" role="img" aria-label="\u0E01\u0E23\u0E32\u0E1F Live Network Activity">
-        <svg class="activity-chart live-network-chart" viewBox="0 0 ${h} ${i}" aria-hidden="false">
+        <svg class="activity-chart live-network-chart" viewBox="0 0 ${p} ${i}" aria-hidden="false">
           <defs>
             <linearGradient id="live-rx-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
@@ -916,19 +1455,19 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
               <stop offset="100%" stop-color="#10b981" stop-opacity="0.0" />
             </linearGradient>
           </defs>
-          <line x1="${c.left}" y1="${c.top}" x2="${h-c.right}" y2="${c.top}" class="chart-grid" />
-          <line x1="${c.left}" y1="${w(S/2)}" x2="${h-c.right}" y2="${w(S/2)}" class="chart-grid" />
-          <line x1="${c.left}" y1="${i-c.bottom}" x2="${h-c.right}" y2="${i-c.bottom}" class="chart-axis" />
-          <text x="8" y="${c.top+5}" class="chart-max">${n(k(S))}</text>
-          <text x="8" y="${w(S/2)+4}" class="chart-max">${n(k(S/2))}</text>
-          <text x="36" y="${i-c.bottom+4}" class="chart-max">0 bps</text>
-          <path class="chart-area chart-area-rx" d="${B.area(u)}" fill="url(#live-rx-grad)" />
-          <path class="chart-area chart-area-tx" d="${H.area(u)}" fill="url(#live-tx-grad)" />
-          <path class="chart-curve chart-curve-rx" d="${B.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path class="chart-curve chart-curve-tx" d="${H.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <line x1="${d.left}" y1="${d.top}" x2="${p-d.right}" y2="${d.top}" class="chart-grid" />
+          <line x1="${d.left}" y1="${y(w/2)}" x2="${p-d.right}" y2="${y(w/2)}" class="chart-grid" />
+          <line x1="${d.left}" y1="${i-d.bottom}" x2="${p-d.right}" y2="${i-d.bottom}" class="chart-axis" />
+          <text x="8" y="${d.top+5}" class="chart-max">${o(T(w))}</text>
+          <text x="8" y="${y(w/2)+4}" class="chart-max">${o(T(w/2))}</text>
+          <text x="36" y="${i-d.bottom+4}" class="chart-max">0 bps</text>
+          <path class="chart-area chart-area-rx" d="${$.area(m)}" fill="url(#live-rx-grad)" />
+          <path class="chart-area chart-area-tx" d="${C.area(m)}" fill="url(#live-tx-grad)" />
+          <path class="chart-curve chart-curve-rx" d="${$.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="chart-curve chart-curve-tx" d="${C.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
           ${_}
-          ${N}
-          ${C}
+          ${M}
+          ${A}
         </svg>
       </div>
     `}return`
@@ -948,53 +1487,53 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
       <button data-action="set_server_chart_range" data-range="7d" role="tab" aria-selected="false" aria-label="\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 7 \u0E27\u0E31\u0E19">7D</button>
     </div>
   `}
-          ${d}
+          ${c}
         </div>
       </div>
       <div class="live-chart-legend">
-        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download: <strong>${n(o)}</strong></span>
-        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload: <strong>${n(p)}</strong></span>
+        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download: <strong>${o(r)}</strong></span>
+        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload: <strong>${o(l)}</strong></span>
       </div>
-      ${g}
+      ${v}
     </section>
-  `}function tt(e="1h",t={},s={},a=""){let r=Array.isArray(t?.points)?t.points:[],o=!!t?.loading,p=t?.error?String(t.error):"",d=t?.available_since,h=Number(t?.bucket_seconds)||(e==="1h"?60:e==="24h"?300:1800),i={"1h":{eyebrow:"HISTORICAL TRAFFIC (1H)",title:"Historical Network Activity \u2014 Last 1 Hour",desc:"Historical \u2014 Last 1 Hour \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 1 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 60 \u0E08\u0E38\u0E14)"},"24h":{eyebrow:"HISTORICAL TRAFFIC (24H)",title:"Historical Network Activity \u2014 Last 24 Hours",desc:"Historical \u2014 Last 24 Hours \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 5 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 288 \u0E08\u0E38\u0E14)"},"7d":{eyebrow:"HISTORICAL TRAFFIC (7D)",title:"Historical Network Activity \u2014 Last 7 Days",desc:"Historical \u2014 Last 7 Days \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 30 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 336 \u0E08\u0E38\u0E14)"}},c=i[e]||i["1h"],g=d?` \xB7 \u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E15\u0E31\u0E49\u0E07\u0E41\u0E15\u0E48 ${n(Z(d))}`:"",f=`${c.desc}${g}`,S=a||`
+  `}function ht(e="1h",t={},s={},a=""){let n=Array.isArray(t?.points)?t.points:[],r=!!t?.loading,l=t?.error?String(t.error):"",c=t?.available_since,p=Number(t?.bucket_seconds)||(e==="1h"?60:e==="24h"?300:1800),i={"1h":{eyebrow:"HISTORICAL TRAFFIC (1H)",title:"Historical Network Activity \u2014 Last 1 Hour",desc:"Historical \u2014 Last 1 Hour \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 1 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 60 \u0E08\u0E38\u0E14)"},"24h":{eyebrow:"HISTORICAL TRAFFIC (24H)",title:"Historical Network Activity \u2014 Last 24 Hours",desc:"Historical \u2014 Last 24 Hours \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 5 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 288 \u0E08\u0E38\u0E14)"},"7d":{eyebrow:"HISTORICAL TRAFFIC (7D)",title:"Historical Network Activity \u2014 Last 7 Days",desc:"Historical \u2014 Last 7 Days \xB7 \u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 aggregate \u0E17\u0E38\u0E01 30 \u0E19\u0E32\u0E17\u0E35 (\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 336 \u0E08\u0E38\u0E14)"}},d=i[e]||i["1h"],v=c?` \xB7 \u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E15\u0E31\u0E49\u0E07\u0E41\u0E15\u0E48 ${o(X(c))}`:"",h=`${d.desc}${v}`,w=a||`
     <div class="range-switch server-chart-range-switch" role="tablist" aria-label="\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E01\u0E23\u0E32\u0E1F Server Network Activity">
       <button data-action="set_server_chart_range" data-range="live" role="tab" aria-selected="false" aria-label="\u0E01\u0E23\u0E32\u0E1F Live (\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19)">LIVE</button>
       <button class="${e==="1h"?"is-selected":""}" data-action="set_server_chart_range" data-range="1h" role="tab" aria-selected="${e==="1h"}" aria-label="\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 1 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07">1H</button>
       <button class="${e==="24h"?"is-selected":""}" data-action="set_server_chart_range" data-range="24h" role="tab" aria-selected="${e==="24h"}" aria-label="\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 24 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07">24H</button>
       <button class="${e==="7d"?"is-selected":""}" data-action="set_server_chart_range" data-range="7d" role="tab" aria-selected="${e==="7d"}" aria-label="\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 7 \u0E27\u0E31\u0E19">7D</button>
     </div>
-  `,x="";o?x='<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u21BB</span> \u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u2026</span>':p&&r.length>0?x='<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">\u26A0</span> \u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08</span>':r.length>0&&(x=`<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u25CF</span> ${r.length} \u0E08\u0E38\u0E14</span>`);let w="";if(r.length>0){let V=k(r.reduce((m,$)=>m+(Number($.rx_bps_avg)||0),0)/r.length),B=k(r.reduce((m,$)=>m+(Number($.tx_bps_avg)||0),0)/r.length),H=k(Math.max(...r.map(m=>Number(m.rx_bps_max)||Number(m.rx_bps_avg)||0))),u=k(Math.max(...r.map(m=>Number(m.tx_bps_max)||Number(m.tx_bps_avg)||0))),_=r.filter(m=>m.ping_ms_avg!==null&&m.ping_ms_avg!==void 0&&Number.isFinite(Number(m.ping_ms_avg))),N=_.length>0?`${(_.reduce((m,$)=>m+Number($.ping_ms_avg),0)/_.length).toFixed(1)} ms`:null,C=r.some(m=>m.had_service_failure||m.had_listener_failure);w=`
+  `,f="";r?f='<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u21BB</span> \u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u2026</span>':l&&n.length>0?f='<span class="live-status-tag status-stale"><span class="status-glyph" aria-hidden="true">\u26A0</span> \u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08</span>':n.length>0&&(f=`<span class="live-status-tag status-live"><span class="status-glyph" aria-hidden="true">\u25CF</span> ${n.length} \u0E08\u0E38\u0E14</span>`);let y="";if(n.length>0){let L=T(n.reduce((b,k)=>b+(Number(k.rx_bps_avg)||0),0)/n.length),$=T(n.reduce((b,k)=>b+(Number(k.tx_bps_avg)||0),0)/n.length),C=T(Math.max(...n.map(b=>Number(b.rx_bps_max)||Number(b.rx_bps_avg)||0))),m=T(Math.max(...n.map(b=>Number(b.tx_bps_max)||Number(b.tx_bps_avg)||0))),_=n.filter(b=>b.ping_ms_avg!==null&&b.ping_ms_avg!==void 0&&Number.isFinite(Number(b.ping_ms_avg))),M=_.length>0?`${(_.reduce((b,k)=>b+Number(k.ping_ms_avg),0)/_.length).toFixed(1)} ms`:null,A=n.some(b=>b.had_service_failure||b.had_listener_failure);y=`
       <div class="live-chart-legend">
-        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download (Avg): <strong>${n(V)}</strong> <small>(Peak: ${n(H)})</small></span>
-        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload (Avg): <strong>${n(B)}</strong> <small>(Peak: ${n(u)})</small></span>
-        ${N?`<span class="legend-item"><i class="legend-dot legend-ping"></i> Latency (VPS \u2192 Upstream): <strong>${n(N)}</strong></span>`:""}
-        ${C?'<span class="legend-item legend-alert"><i class="legend-dot legend-degraded"></i> \u0E21\u0E35 Service/Listener \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32</span>':""}
+        <span class="legend-item"><i class="legend-dot legend-rx"></i> VPS Download (Avg): <strong>${o(L)}</strong> <small>(Peak: ${o(C)})</small></span>
+        <span class="legend-item"><i class="legend-dot legend-tx"></i> VPS Upload (Avg): <strong>${o($)}</strong> <small>(Peak: ${o(m)})</small></span>
+        ${M?`<span class="legend-item"><i class="legend-dot legend-ping"></i> Latency (VPS \u2192 Upstream): <strong>${o(M)}</strong></span>`:""}
+        ${A?'<span class="legend-item legend-alert"><i class="legend-dot legend-degraded"></i> \u0E21\u0E35 Service/Listener \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32</span>':""}
       </div>
-    `}let A="";if(o&&r.length===0)A=`
+    `}let x="";if(r&&n.length===0)x=`
       <div class="chart-empty chart-loading" role="status" aria-label="\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07">
-        <strong>\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 (${n(e.toUpperCase())})\u2026</strong>
+        <strong>\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 (${o(e.toUpperCase())})\u2026</strong>
         <span>\u0E01\u0E33\u0E25\u0E31\u0E07\u0E14\u0E36\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Time-series \u0E08\u0E32\u0E01 Server History API</span>
       </div>
-    `;else if(p&&r.length===0)A=`
+    `;else if(l&&n.length===0)x=`
       <div class="chart-empty chart-error" role="alert">
         <strong>\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E44\u0E21\u0E48\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27</strong>
-        <span>${n(p)}</span>
+        <span>${o(l)}</span>
       </div>
-    `;else if(r.length===0)A=`
+    `;else if(n.length===0)x=`
       <div class="chart-empty">
         <strong>\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E19\u0E35\u0E49</strong>
         <span>\u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E33\u0E25\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E2A\u0E49\u0E19\u0E28\u0E39\u0E19\u0E22\u0E4C\u0E41\u0E17\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E23\u0E34\u0E07 (\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E40\u0E23\u0E34\u0E48\u0E21\u0E2A\u0E30\u0E2A\u0E21\u0E40\u0E21\u0E37\u0E48\u0E2D\u0E23\u0E30\u0E1A\u0E1A\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19)</span>
       </div>
-    `;else{let V=p?`<div class="inline-alert chart-stale-alert" role="alert">\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E2D\u0E32\u0E08\u0E44\u0E21\u0E48\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15 (\u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${n(p)}) \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:"",B=840,H=240,u={left:68,right:20,top:24,bottom:36},_=Math.max(1e3,...r.flatMap(v=>[Number(v.rx_bps_avg)||0,Number(v.tx_bps_avg)||0])),N=v=>u.left+v*(B-u.left-u.right)/Math.max(1,r.length-1),C=v=>H-u.bottom-(Number(v)||0)*(H-u.top-u.bottom)/_,m=De(r,h,1.5),$="",I=0,E=H-u.bottom;for(let v of m){let T=v.map((W,R)=>I+R);if(I+=v.length,v.length>1){let W=v.map((Q,fe)=>({x:N(T[fe]),y:C(Q.rx_bps_avg)})),R=v.map((Q,fe)=>({x:N(T[fe]),y:C(Q.tx_bps_avg)})),ne=ae(W),ie=ae(R);$+=`
-          <path class="chart-area chart-area-rx" d="${ne.area(E)}" fill="url(#hist-rx-grad)" />
-          <path class="chart-area chart-area-tx" d="${ie.area(E)}" fill="url(#hist-tx-grad)" />
-          <path class="chart-curve chart-curve-rx" d="${ne.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path class="chart-curve chart-curve-tx" d="${ie.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-        `}}let q=r.map((v,T)=>{let R=`${xe(v.bucket_start,e)} \xB7 VPS Download: ${k(v.rx_bps_avg)} (Peak: ${k(v.rx_bps_max||v.rx_bps_avg)}) \xB7 VPS Upload: ${k(v.tx_bps_avg)} (Peak: ${k(v.tx_bps_max||v.tx_bps_avg)}) \xB7 Samples: ${v.sample_count}`;v.ping_ms_avg!==null&&v.ping_ms_avg!==void 0&&(R+=` \xB7 Latency (VPS \u2192 Upstream): ${Number(v.ping_ms_avg).toFixed(1)} ms`),v.packet_loss_percent_avg!==null&&v.packet_loss_percent_avg!==void 0&&Number(v.packet_loss_percent_avg)>0&&(R+=` \xB7 Loss: ${Number(v.packet_loss_percent_avg).toFixed(1)}%`),(v.had_service_failure||v.had_listener_failure)&&(R+=" \xB7 \u26A0\uFE0F Shadowsocks Service/Listener Degraded");let ne=`<circle tabindex="0" cx="${N(T)}" cy="${C(v.rx_bps_avg)}" r="3" fill="#3f76b7" aria-label="${n(R)}"><title>${n(R)}</title></circle>`,ie=`<circle tabindex="0" cx="${N(T)}" cy="${C(v.tx_bps_avg)}" r="3" fill="#287b5b" aria-label="${n(R)}"><title>${n(R)}</title></circle>`,Q=v.had_service_failure||v.had_listener_failure?`<circle cx="${N(T)}" cy="${C(v.rx_bps_avg)}" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" class="degradation-marker" aria-label="${n(R)}"><title>${n(R)}</title></circle>`:"";return`${ne}${ie}${Q}`}).join(""),z=r.map((v,T)=>{let W=Math.max(1,Math.floor(r.length/5));return T%W!==0&&T!==r.length-1?"":`<text x="${N(T)}" y="${H-12}" text-anchor="middle" class="chart-time-label">${n(xe(v.bucket_start,e))}</text>`}).join("");A=`
-      ${V}
-      <div class="chart-wrap" role="img" aria-label="\u0E01\u0E23\u0E32\u0E1F ${n(c.title)}">
-        <svg class="activity-chart historical-network-chart" viewBox="0 0 ${B} ${H}" aria-hidden="false">
+    `;else{let L=l?`<div class="inline-alert chart-stale-alert" role="alert">\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E2D\u0E32\u0E08\u0E44\u0E21\u0E48\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15 (\u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${o(l)}) \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:"",$=840,C=240,m={left:68,right:20,top:24,bottom:36},_=Math.max(1e3,...n.flatMap(g=>[Number(g.rx_bps_avg)||0,Number(g.tx_bps_avg)||0])),M=g=>m.left+g*($-m.left-m.right)/Math.max(1,n.length-1),A=g=>C-m.bottom-(Number(g)||0)*(C-m.top-m.bottom)/_,b=ze(n,p,1.5),k="",H=0,q=C-m.bottom;for(let g of b){let E=g.map((ee,R)=>H+R);if(H+=g.length,g.length>1){let ee=g.map((te,ke)=>({x:M(E[ke]),y:A(te.rx_bps_avg)})),R=g.map((te,ke)=>({x:M(E[ke]),y:A(te.tx_bps_avg)})),le=re(ee),ce=re(R);k+=`
+          <path class="chart-area chart-area-rx" d="${le.area(q)}" fill="url(#hist-rx-grad)" />
+          <path class="chart-area chart-area-tx" d="${ce.area(q)}" fill="url(#hist-tx-grad)" />
+          <path class="chart-curve chart-curve-rx" d="${le.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="chart-curve chart-curve-tx" d="${ce.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        `}}let G=n.map((g,E)=>{let R=`${Le(g.bucket_start,e)} \xB7 VPS Download: ${T(g.rx_bps_avg)} (Peak: ${T(g.rx_bps_max||g.rx_bps_avg)}) \xB7 VPS Upload: ${T(g.tx_bps_avg)} (Peak: ${T(g.tx_bps_max||g.tx_bps_avg)}) \xB7 Samples: ${g.sample_count}`;g.ping_ms_avg!==null&&g.ping_ms_avg!==void 0&&(R+=` \xB7 Latency (VPS \u2192 Upstream): ${Number(g.ping_ms_avg).toFixed(1)} ms`),g.packet_loss_percent_avg!==null&&g.packet_loss_percent_avg!==void 0&&Number(g.packet_loss_percent_avg)>0&&(R+=` \xB7 Loss: ${Number(g.packet_loss_percent_avg).toFixed(1)}%`),(g.had_service_failure||g.had_listener_failure)&&(R+=" \xB7 \u26A0\uFE0F Shadowsocks Service/Listener Degraded");let le=`<circle tabindex="0" cx="${M(E)}" cy="${A(g.rx_bps_avg)}" r="3" fill="#3f76b7" aria-label="${o(R)}"><title>${o(R)}</title></circle>`,ce=`<circle tabindex="0" cx="${M(E)}" cy="${A(g.tx_bps_avg)}" r="3" fill="#287b5b" aria-label="${o(R)}"><title>${o(R)}</title></circle>`,te=g.had_service_failure||g.had_listener_failure?`<circle cx="${M(E)}" cy="${A(g.rx_bps_avg)}" r="5.5" fill="#ef4444" stroke="#ffffff" stroke-width="2" class="degradation-marker" aria-label="${o(R)}"><title>${o(R)}</title></circle>`:"";return`${le}${ce}${te}`}).join(""),Q=n.map((g,E)=>{let ee=Math.max(1,Math.floor(n.length/5));return E%ee!==0&&E!==n.length-1?"":`<text x="${M(E)}" y="${C-12}" text-anchor="middle" class="chart-time-label">${o(Le(g.bucket_start,e))}</text>`}).join("");x=`
+      ${L}
+      <div class="chart-wrap" role="img" aria-label="\u0E01\u0E23\u0E32\u0E1F ${o(d.title)}">
+        <svg class="activity-chart historical-network-chart" viewBox="0 0 ${$} ${C}" aria-hidden="false">
           <defs>
             <linearGradient id="hist-rx-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
@@ -1005,39 +1544,39 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
               <stop offset="100%" stop-color="#10b981" stop-opacity="0.0" />
             </linearGradient>
           </defs>
-          <line x1="${u.left}" y1="${u.top}" x2="${B-u.right}" y2="${u.top}" class="chart-grid" />
-          <line x1="${u.left}" y1="${C(_/2)}" x2="${B-u.right}" y2="${C(_/2)}" class="chart-grid" />
-          <line x1="${u.left}" y1="${H-u.bottom}" x2="${B-u.right}" y2="${H-u.bottom}" class="chart-axis" />
-          <text x="8" y="${u.top+5}" class="chart-max">${n(k(_))}</text>
-          <text x="8" y="${C(_/2)+4}" class="chart-max">${n(k(_/2))}</text>
-          <text x="36" y="${H-u.bottom+4}" class="chart-max">0 bps</text>
-          ${$}
-          ${q}
-          ${z}
+          <line x1="${m.left}" y1="${m.top}" x2="${$-m.right}" y2="${m.top}" class="chart-grid" />
+          <line x1="${m.left}" y1="${A(_/2)}" x2="${$-m.right}" y2="${A(_/2)}" class="chart-grid" />
+          <line x1="${m.left}" y1="${C-m.bottom}" x2="${$-m.right}" y2="${C-m.bottom}" class="chart-axis" />
+          <text x="8" y="${m.top+5}" class="chart-max">${o(T(_))}</text>
+          <text x="8" y="${A(_/2)+4}" class="chart-max">${o(T(_/2))}</text>
+          <text x="36" y="${C-m.bottom+4}" class="chart-max">0 bps</text>
+          ${k}
+          ${G}
+          ${Q}
         </svg>
       </div>
     `}return`
-    <section class="panel live-chart-panel historical-chart-panel" aria-label="${n(c.title)}">
+    <section class="panel live-chart-panel historical-chart-panel" aria-label="${o(d.title)}">
       <div class="panel-title-row">
         <div>
-          <div class="panel-eyebrow">${n(c.eyebrow)}</div>
-          <h3>${n(c.title)}</h3>
-          <p class="muted">${n(f)}</p>
+          <div class="panel-eyebrow">${o(d.eyebrow)}</div>
+          <h3>${o(d.title)}</h3>
+          <p class="muted">${o(h)}</p>
         </div>
         <div class="chart-meta-actions">
-          ${S}
-          ${x}
+          ${w}
+          ${f}
         </div>
       </div>
-      ${w}
-      ${A}
+      ${y}
+      ${x}
     </section>
-  `}function st(e={},t={}){let s=["live","1h","24h","7d"].includes(e.range)?e.range:"live",a=Array.isArray(e.liveHistory)?e.liveHistory:[],r=e.history||{},p=`<div class="range-switch server-chart-range-switch" role="tablist" aria-label="\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E01\u0E23\u0E32\u0E1F Server Network Activity">${["live","1h","24h","7d"].map(d=>{let h=d===s,i=d.toUpperCase();return`<button class="${h?"is-selected":""}" data-action="set_server_chart_range" data-range="${d}" role="tab" aria-selected="${h}" aria-label="${n(d==="live"?"\u0E01\u0E23\u0E32\u0E1F Live Real-time (~5 \u0E19\u0E32\u0E17\u0E35)":d==="1h"?"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 1 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 1 \u0E19\u0E32\u0E17\u0E35)":d==="24h"?"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 24 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 5 \u0E19\u0E32\u0E17\u0E35)":"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 7 \u0E27\u0E31\u0E19 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 30 \u0E19\u0E32\u0E17\u0E35)")}">${i}</button>`}).join("")}</div>`;return s==="live"?et(a,t,p):tt(s,r,t,p)}function at(e={}){let t=e.stats||{},s=e.server||{},a=e.liveServerHistory||[],r=u=>{let _=Number(u);return Number.isFinite(_)&&_>=0?_:0},o=[["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14",t.users??0,"users","\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A",`${t.userBreakdown?.suspended??0} \u0E23\u0E30\u0E07\u0E31\u0E1A \xB7 ${t.userBreakdown?.banned??0} \u0E41\u0E1A\u0E19`],["License \u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E44\u0E14\u0E49",t.activeLicenses??0,"active","\u0E2A\u0E16\u0E32\u0E19\u0E30 active \u0E41\u0E25\u0E30\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E17\u0E35\u0E48\u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49",`${t.licenseBreakdown?.expiringSoon??0} \u0E43\u0E01\u0E25\u0E49\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38`],["Session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19",t.activeSessions??0,"session","Session \u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01 revoke","\u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E01\u0E31\u0E1A\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E2D\u0E19\u0E44\u0E25\u0E19\u0E4C"],["Online \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14",t.onlineSessionCount??t.recentlyOnline??0,"online","Current session \u0E17\u0E35\u0E48 heartbeat \u0E20\u0E32\u0E22\u0E43\u0E19 2 \u0E19\u0E32\u0E17\u0E35","\u0E04\u0E48\u0E32\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E08\u0E32\u0E01 heartbeat"],["\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33",t.installations??t.activeInstallations??0,"device","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E40\u0E04\u0E22\u0E08\u0E14\u0E08\u0E33","\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E2D\u0E2D\u0E19\u0E44\u0E25\u0E19\u0E4C"],["\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E43\u0E0A\u0E49",t.usableCoupons??t.unusedCoupons??0,"coupon","\u0E04\u0E39\u0E1B\u0E2D\u0E07 active \u0E43\u0E19 batch \u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49","\u0E15\u0E31\u0E14 batch \u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38/revoke \u0E41\u0E25\u0E49\u0E27"]],p=(e.recent||[]).map(u=>`<tr>${b(u.title)}${b(u.detail)}${L(u.time)}</tr>`),d=["24h","7d","14d","30d"].includes(e.range)?e.range:"14d",h=Array.isArray(e.trend)?e.trend:[],i=Math.max(1,...h.flatMap(u=>[r(u.sessions),r(u.redemptions)])),c=840,g=280,f={left:46,right:18,top:18,bottom:42},S=u=>f.left+u*(c-f.left-f.right)/Math.max(1,h.length-1),x=u=>g-f.bottom-u*(g-f.top-f.bottom)/i,w=(u,_,N,C)=>{let m=h.map((q,z)=>({x:S(z),y:x(r(q[u]))})),$=ae(m),I=g-f.bottom,E=h.map((q,z)=>{let v=r(q[u]),T=`${le(q.bucket)} \xB7 ${C} ${v}`;return`<circle tabindex="0" cx="${S(z)}" cy="${x(v)}" r="4" fill="${_}" aria-label="${n(T)}"><title>${n(T)}</title></circle>`}).join("");return`
-      <path class="chart-area" d="${$.area(I)}" fill="url(#${N})" />
-      <path class="chart-curve" d="${$.line}" fill="none" stroke="${_}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-      ${E}
-    `},A=h.map((u,_)=>{let N=Math.max(1,Math.ceil(h.length/7));return _%N!==0&&_!==h.length-1?"":`<text x="${S(_)}" y="${g-14}" text-anchor="middle">${n(Ee(u.bucket,d))}</text>`}).join(""),V=h.length?`<div class="chart-wrap" role="img" aria-label="\u0E01\u0E23\u0E32\u0E1F Launcher activity">
-        <svg class="activity-chart" viewBox="0 0 ${c} ${g}" aria-hidden="false">
+  `}function gt(e={},t={}){let s=["live","1h","24h","7d"].includes(e.range)?e.range:"live",a=Array.isArray(e.liveHistory)?e.liveHistory:[],n=e.history||{},l=`<div class="range-switch server-chart-range-switch" role="tablist" aria-label="\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E01\u0E23\u0E32\u0E1F Server Network Activity">${["live","1h","24h","7d"].map(c=>{let p=c===s,i=c.toUpperCase();return`<button class="${p?"is-selected":""}" data-action="set_server_chart_range" data-range="${c}" role="tab" aria-selected="${p}" aria-label="${o(c==="live"?"\u0E01\u0E23\u0E32\u0E1F Live Real-time (~5 \u0E19\u0E32\u0E17\u0E35)":c==="1h"?"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 1 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 1 \u0E19\u0E32\u0E17\u0E35)":c==="24h"?"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 24 \u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 5 \u0E19\u0E32\u0E17\u0E35)":"\u0E01\u0E23\u0E32\u0E1F\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07 7 \u0E27\u0E31\u0E19 (\u0E04\u0E27\u0E32\u0E21\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14 30 \u0E19\u0E32\u0E17\u0E35)")}">${i}</button>`}).join("")}</div>`;return s==="live"?bt(a,t,l):ht(s,n,t,l)}function ft(e={}){let t=e.stats||{},s=e.server||{},a=e.liveServerHistory||[],n=m=>{let _=Number(m);return Number.isFinite(_)&&_>=0?_:0},r=[["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14",t.users??0,"users","\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A",`${t.userBreakdown?.suspended??0} \u0E23\u0E30\u0E07\u0E31\u0E1A \xB7 ${t.userBreakdown?.banned??0} \u0E41\u0E1A\u0E19`],["License \u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E44\u0E14\u0E49",t.activeLicenses??0,"active","\u0E2A\u0E16\u0E32\u0E19\u0E30 active \u0E41\u0E25\u0E30\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E17\u0E35\u0E48\u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49",`${t.licenseBreakdown?.expiringSoon??0} \u0E43\u0E01\u0E25\u0E49\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38`],["Session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19",t.activeSessions??0,"session","Session \u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01 revoke","\u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E01\u0E31\u0E1A\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E2D\u0E2D\u0E19\u0E44\u0E25\u0E19\u0E4C"],["Online \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14",t.onlineSessionCount??t.recentlyOnline??0,"online","Current session \u0E17\u0E35\u0E48 heartbeat \u0E20\u0E32\u0E22\u0E43\u0E19 2 \u0E19\u0E32\u0E17\u0E35","\u0E04\u0E48\u0E32\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E08\u0E32\u0E01 heartbeat"],["\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33",t.installations??t.activeInstallations??0,"device","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E40\u0E04\u0E22\u0E08\u0E14\u0E08\u0E33","\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E2D\u0E2D\u0E19\u0E44\u0E25\u0E19\u0E4C"],["\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E43\u0E0A\u0E49",t.usableCoupons??t.unusedCoupons??0,"coupon","\u0E04\u0E39\u0E1B\u0E2D\u0E07 active \u0E43\u0E19 batch \u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49","\u0E15\u0E31\u0E14 batch \u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38/revoke \u0E41\u0E25\u0E49\u0E27"]],l=(e.recent||[]).map(m=>`<tr>${S(m.title)}${S(m.detail)}${B(m.time)}</tr>`),c=["24h","7d","14d","30d"].includes(e.range)?e.range:"14d",p=Array.isArray(e.trend)?e.trend:[],i=Math.max(1,...p.flatMap(m=>[n(m.sessions),n(m.redemptions)])),d=840,v=280,h={left:46,right:18,top:18,bottom:42},w=m=>h.left+m*(d-h.left-h.right)/Math.max(1,p.length-1),f=m=>v-h.bottom-m*(v-h.top-h.bottom)/i,y=(m,_,M,A)=>{let b=p.map((G,Q)=>({x:w(Q),y:f(n(G[m]))})),k=re(b),H=v-h.bottom,q=p.map((G,Q)=>{let g=n(G[m]),E=`${ue(G.bucket)} \xB7 ${A} ${g}`;return`<circle tabindex="0" cx="${w(Q)}" cy="${f(g)}" r="4" fill="${_}" aria-label="${o(E)}"><title>${o(E)}</title></circle>`}).join("");return`
+      <path class="chart-area" d="${k.area(H)}" fill="url(#${M})" />
+      <path class="chart-curve" d="${k.line}" fill="none" stroke="${_}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      ${q}
+    `},x=p.map((m,_)=>{let M=Math.max(1,Math.ceil(p.length/7));return _%M!==0&&_!==p.length-1?"":`<text x="${w(_)}" y="${v-14}" text-anchor="middle">${o(Ze(m.bucket,c))}</text>`}).join(""),L=p.length?`<div class="chart-wrap" role="img" aria-label="\u0E01\u0E23\u0E32\u0E1F Launcher activity">
+        <svg class="activity-chart" viewBox="0 0 ${d} ${v}" aria-hidden="false">
           <defs>
             <linearGradient id="trend-sessions-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#d83e80" stop-opacity="0.20" />
@@ -1048,17 +1587,17 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
               <stop offset="100%" stop-color="#287b5b" stop-opacity="0.0" />
             </linearGradient>
           </defs>
-          <line x1="${f.left}" y1="${f.top}" x2="${c-f.right}" y2="${f.top}" class="chart-grid" />
-          <line x1="${f.left}" y1="${x(i/2)}" x2="${c-f.right}" y2="${x(i/2)}" class="chart-grid" />
-          <line x1="${f.left}" y1="${g-f.bottom}" x2="${c-f.right}" y2="${g-f.bottom}" class="chart-axis" />
-          <text x="8" y="${f.top+6}" class="chart-max">${i}</text>
-          <text x="8" y="${x(i/2)+4}" class="chart-max">${Math.round(i/2)}</text>
-          <text x="28" y="${g-f.bottom+4}" class="chart-max">0</text>
-          ${w("sessions","#d83e80","trend-sessions-grad","Session \u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E2B\u0E21\u0E48")}
-          ${w("redemptions","#287b5b","trend-redemptions-grad","\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08")}
-          ${A}
+          <line x1="${h.left}" y1="${h.top}" x2="${d-h.right}" y2="${h.top}" class="chart-grid" />
+          <line x1="${h.left}" y1="${f(i/2)}" x2="${d-h.right}" y2="${f(i/2)}" class="chart-grid" />
+          <line x1="${h.left}" y1="${v-h.bottom}" x2="${d-h.right}" y2="${v-h.bottom}" class="chart-axis" />
+          <text x="8" y="${h.top+6}" class="chart-max">${i}</text>
+          <text x="8" y="${f(i/2)+4}" class="chart-max">${Math.round(i/2)}</text>
+          <text x="28" y="${v-h.bottom+4}" class="chart-max">0</text>
+          ${y("sessions","#d83e80","trend-sessions-grad","Session \u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E2B\u0E21\u0E48")}
+          ${y("redemptions","#287b5b","trend-redemptions-grad","\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08")}
+          ${x}
         </svg>
-      </div>`:'<div class="chart-empty"><strong>\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E19\u0E35\u0E49</strong><span>\u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E33\u0E25\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E2A\u0E49\u0E19\u0E28\u0E39\u0E19\u0E22\u0E4C\u0E41\u0E17\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E23\u0E34\u0E07</span></div>',B=e._ui?.refreshing?'<span class="refreshing" role="status">\u0E01\u0E33\u0E25\u0E31\u0E07\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u2026</span>':"",H=e._ui?.error?`<div class="inline-alert" role="alert">\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${n(e._ui.error)} \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:"";return`
+      </div>`:'<div class="chart-empty"><strong>\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E43\u0E19\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E19\u0E35\u0E49</strong><span>\u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E33\u0E25\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E2A\u0E49\u0E19\u0E28\u0E39\u0E19\u0E22\u0E4C\u0E41\u0E17\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E23\u0E34\u0E07</span></div>',$=e._ui?.refreshing?'<span class="refreshing" role="status">\u0E01\u0E33\u0E25\u0E31\u0E07\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u2026</span>':"",C=e._ui?.error?`<div class="inline-alert" role="alert">\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08: ${o(e._ui.error)} \xB7 \u0E01\u0E33\u0E25\u0E31\u0E07\u0E41\u0E2A\u0E14\u0E07\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E35\u0E48\u0E21\u0E35</div>`:"";return`
     <div class="dashboard-head">
       <div>
         <span class="system-status"><i></i> \u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D Admin API \u0E41\u0E25\u0E49\u0E27 \xB7 Auto-polling 5s</span>
@@ -1066,21 +1605,21 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         <p class="muted">Metrics \u0E17\u0E35\u0E48\u0E41\u0E22\u0E01 Session, Online \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14, VPS Infrastructure \u0E41\u0E25\u0E30 Live Network \u0E2D\u0E22\u0E48\u0E32\u0E07\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07</p>
       </div>
       <div class="refresh-meta">
-        <span>\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15 ${n(Z(e.generatedAt))}</span>
-        <span>${n(e.timezone||"Asia/Bangkok")} (UTC+7)</span>
+        <span>\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15 ${o(X(e.generatedAt))}</span>
+        <span>${o(e.timezone||"Asia/Bangkok")} (UTC+7)</span>
         <div>
-          ${B}
+          ${$}
           <button class="button" data-action="refresh_overview" aria-label="\u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Dashboard" ${e._ui?.refreshing?"disabled":""}>\u21BB \u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A</button>
         </div>
       </div>
     </div>
-    ${H}
-    ${Qe(s,t)}
-    ${st({range:e.serverChartRange||"live",liveHistory:a,history:e.serverHistory||{}},s)}
+    ${C}
+    ${vt(s,t)}
+    ${gt({range:e.serverChartRange||"live",liveHistory:a,history:e.serverHistory||{}},s)}
     <div class="section-title-divider">
       <h3>\u0E2A\u0E16\u0E34\u0E15\u0E34\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01\u0E41\u0E25\u0E30\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 (Session Authority)</h3>
     </div>
-    <section class="stats-grid">${o.map(([u,_,N,C,m])=>`<article class="stat-card stat-${N}"><span>${u}</span><strong>${n(r(_))}</strong><p>${C}</p><small>${n(m)}</small></article>`).join("")}</section>
+    <section class="stats-grid">${r.map(([m,_,M,A,b])=>`<article class="stat-card stat-${M}"><span>${m}</span><strong>${o(n(_))}</strong><p>${A}</p><small>${o(b)}</small></article>`).join("")}</section>
     <section class="panel chart-panel">
       <div class="panel-title-row">
         <div>
@@ -1089,26 +1628,26 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
           <p class="muted">Session \u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E2B\u0E21\u0E48\u0E41\u0E25\u0E30\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \xB7 \u0E40\u0E27\u0E25\u0E32 Asia/Bangkok</p>
         </div>
         <div class="range-switch" aria-label="\u0E0A\u0E48\u0E27\u0E07\u0E40\u0E27\u0E25\u0E32\u0E01\u0E23\u0E32\u0E1F">
-          ${["24h","7d","14d","30d"].map(u=>`<button class="${u===d?"is-selected":""}" data-action="set_range" data-range="${u}" aria-pressed="${u===d}">${u.toUpperCase()}</button>`).join("")}
+          ${["24h","7d","14d","30d"].map(m=>`<button class="${m===c?"is-selected":""}" data-action="set_range" data-range="${m}" aria-pressed="${m===c}">${m.toUpperCase()}</button>`).join("")}
         </div>
       </div>
       <div class="chart-legend"><span><i class="legend-sessions"></i>Session \u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E2B\u0E21\u0E48</span><span><i class="legend-redemptions"></i>\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08</span></div>
-      ${V}
+      ${L}
     </section>
     <section class="ops-grid">
-      <article class="panel ops-summary"><h3>Operational summary</h3><dl><div><dt>\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01 Active</dt><dd>${r(t.userBreakdown?.active)}</dd></div><div><dt>License \u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38</dt><dd>${r(t.licenseBreakdown?.expired)}</dd></div><div><dt>License \u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01</dt><dd>${r(t.licenseBreakdown?.revoked)}</dd></div></dl></article>
+      <article class="panel ops-summary"><h3>Operational summary</h3><dl><div><dt>\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01 Active</dt><dd>${n(t.userBreakdown?.active)}</dd></div><div><dt>License \u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38</dt><dd>${n(t.licenseBreakdown?.expired)}</dd></div><div><dt>License \u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01</dt><dd>${n(t.licenseBreakdown?.revoked)}</dd></div></dl></article>
       <section class="panel">
         <div class="panel-title-row"><h3>\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14</h3></div>
-        ${O(["\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23","\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14","\u0E40\u0E27\u0E25\u0E32"],p)}
+        ${j(["\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23","\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14","\u0E40\u0E27\u0E25\u0E32"],l,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",{paginate:!1})}
       </section>
     </section>
-  `}function rt(e=[],t=null){let s=e.map(a=>{let r=a.role==="customer"?D("generate_recovery_code",a.id,"\u0E2A\u0E23\u0E49\u0E32\u0E07 Recovery Code","button-warning"):"",p=a.id===t?.userId?"\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19":a.status==="active"?`${D("suspend_user",a.id,"\u0E23\u0E30\u0E07\u0E31\u0E1A","button-danger")} ${D("ban_user",a.id,"\u0E41\u0E1A\u0E19","button-danger")}`:D("activate_user",a.id,"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49","button-success");return`<tr>${b(a.username,"primary")}${b(a.display_name)}${b(a.role)}<td>${F(a.status)}</td>${L(a.updated_at)}<td class="actions">${r} ${p}</td></tr>`});return`${G("\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E32\u0E01 public.profiles")}${O(["Username","\u0E0A\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07","\u0E1A\u0E17\u0E1A\u0E32\u0E17","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E41\u0E01\u0E49\u0E44\u0E02\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],s)}`}function Ve(e){if(!e)return"";let t=n(e.username),s=e.error?`<div class="form-error" role="alert">${n(e.error)}</div>`:"";if(e.phase==="success")return`
+  `}function yt(e=[],t=null,s=1){let a=e.map(n=>{let r=n.role==="customer"?D("generate_recovery_code",n.id,"\u0E2A\u0E23\u0E49\u0E32\u0E07 Recovery Code","button-warning"):"",c=n.id===t?.userId?"\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19":n.status==="active"?`${D("suspend_user",n.id,"\u0E23\u0E30\u0E07\u0E31\u0E1A","button-danger")} ${D("ban_user",n.id,"\u0E41\u0E1A\u0E19","button-danger")}`:D("activate_user",n.id,"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49","button-success");return`<tr>${S(n.username,"primary")}${S(n.display_name)}${S(n.role)}<td>${P(n.status)}</td>${B(n.updated_at)}<td class="actions">${r} ${c}</td></tr>`});return`${z("\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E32\u0E01 public.profiles")}${j(["Username","\u0E0A\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07","\u0E1A\u0E17\u0E1A\u0E32\u0E17","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E41\u0E01\u0E49\u0E44\u0E02\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],a,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",{page:s,pageSize:10})}`}function We(e){if(!e)return"";let t=o(e.username),s=e.error?`<div class="form-error" role="alert">${o(e.error)}</div>`:"";if(e.phase==="success")return`
       <div class="modal-backdrop" role="presentation">
         <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
           <h2 id="recovery-title">Recovery Code \u0E02\u0E2D\u0E07 ${t}</h2>
           <p class="muted">\u0E2A\u0E48\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E19\u0E35\u0E49\u0E43\u0E2B\u0E49\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E1C\u0E48\u0E32\u0E19\u0E0A\u0E48\u0E2D\u0E07\u0E17\u0E32\u0E07\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27 \u0E23\u0E2B\u0E31\u0E2A\u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49\u0E04\u0E23\u0E31\u0E49\u0E07\u0E40\u0E14\u0E35\u0E22\u0E27\u0E41\u0E25\u0E30\u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E44\u0E21\u0E48\u0E41\u0E2A\u0E14\u0E07\u0E0B\u0E49\u0E33\u0E2B\u0E25\u0E31\u0E07\u0E1B\u0E34\u0E14\u0E2B\u0E23\u0E37\u0E2D\u0E23\u0E35\u0E40\u0E1F\u0E23\u0E0A</p>
-          <code class="temporary-password">${n(e.recoveryCode)}</code>
-          <p><strong>\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38\u0E43\u0E19 ${n(e.countdown||"00:00")}</strong> \xB7 \u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49\u0E04\u0E23\u0E31\u0E49\u0E07\u0E40\u0E14\u0E35\u0E22\u0E27</p>
+          <code class="temporary-password">${o(e.recoveryCode)}</code>
+          <p><strong>\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38\u0E43\u0E19 ${o(e.countdown||"00:00")}</strong> \xB7 \u0E43\u0E0A\u0E49\u0E44\u0E14\u0E49\u0E04\u0E23\u0E31\u0E49\u0E07\u0E40\u0E14\u0E35\u0E22\u0E27</p>
           <div class="modal-actions">
             <button class="button button-primary" type="button" data-action="copy_recovery_code">\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A</button>
             <button class="button" type="button" data-action="close_recovery_code">\u0E1B\u0E34\u0E14\u0E41\u0E25\u0E30\u0E25\u0E49\u0E32\u0E07\u0E23\u0E2B\u0E31\u0E2A</button>
@@ -1121,7 +1660,7 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         <h2 id="recovery-title">\u0E2A\u0E23\u0E49\u0E32\u0E07 Recovery Code</h2>
         <p>\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E43\u0E0A\u0E49\u0E04\u0E23\u0E31\u0E49\u0E07\u0E40\u0E14\u0E35\u0E22\u0E27\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A <strong>${t}</strong> \u0E23\u0E2B\u0E31\u0E2A\u0E21\u0E35\u0E2D\u0E32\u0E22\u0E38 5 \u0E19\u0E32\u0E17\u0E35 \u0E41\u0E25\u0E30\u0E01\u0E32\u0E23\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E30\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E40\u0E14\u0E34\u0E21\u0E17\u0E31\u0E19\u0E17\u0E35 Admin \u0E08\u0E30\u0E44\u0E21\u0E48\u0E17\u0E23\u0E32\u0E1A\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19\u0E43\u0E2B\u0E21\u0E48\u0E17\u0E35\u0E48\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01</p>
         <form id="recovery-code-form" class="stack">
-          <input name="userId" type="hidden" value="${n(e.userId)}" />
+          <input name="userId" type="hidden" value="${o(e.userId)}" />
           <label>
             \u0E1E\u0E34\u0E21\u0E1E\u0E4C Username \u201C${t}\u201D \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19
             <input name="confirmUsername" type="text" maxlength="32" autocomplete="off" required ${a?"disabled":""} />
@@ -1134,11 +1673,11 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         </form>
       </section>
     </div>
-  `}function nt(e=[]){let t=e.map(s=>`<tr>${b(s.code,"primary")}${b(s.name)}<td>${F(s.is_active?"active":"inactive")}</td>${L(s.created_at)}</tr>`);return`${G("\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E14\u0E08\u0E33\u0E44\u0E14\u0E49\u0E2B\u0E25\u0E32\u0E22\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07 \u0E41\u0E15\u0E48\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E01\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07")}${O(["\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E0A\u0E37\u0E48\u0E2D","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D"],t)}`}function it(e=[]){let t=e.map(s=>`<tr>${b(s.username,"primary")}${b(s.product)}${b(s.product_code)}<td>${F(s.effective_status||s.status)}</td>${L(s.valid_from)}${L(s.valid_until)}<td class="actions">${D("extend_license",s.id,"\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38")} ${s.status!=="revoked"?D("revoke_license",s.id,"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01","button-danger"):""}</td></tr>`);return`${G("\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19","\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38\u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License \u0E01\u0E32\u0E23\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D\u0E40\u0E02\u0E49\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E32\u0E01\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E30\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E40\u0E14\u0E34\u0E21")}${O(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E0A\u0E49","\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],t)}`}function ot(e=[]){let t=e.map(s=>{let a=[s.has_archived_codes?D("copy_coupon_codes",s.id,"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A","button-success"):"",s.status==="active"?D("revoke_batch",s.id,"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E0A\u0E38\u0E14","button-danger"):"",s.status==="revoked"&&s.redeemed_count===0?D("delete_batch",s.id,"\u0E25\u0E1A","button-danger"):""].filter(Boolean).join(" ");return`<tr>${b(s.batch,"primary")}${b(s.product)}${b(s.product_code)}${b(s.duration_days)}${b(`${s.active_count}/${s.actual_quantity}`)}${b(s.redeemed_count)}<td>${F(s.status)}</td>${L(s.expires_at)}${L(s.created_at)}<td class="actions">${a}</td></tr>`});return`
-    ${G("\u0E04\u0E39\u0E1B\u0E2D\u0E07","\u0E2A\u0E23\u0E49\u0E32\u0E07 \u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 \u0E25\u0E1A \u0E41\u0E25\u0E30\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E17\u0E35\u0E48\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E27\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E19\u0E35\u0E49",'<button class="button button-primary" data-action="show-coupon-form">\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07</button>')}
+  `}function $t(e=[],t=1){let s=e.map(a=>`<tr>${S(a.code,"primary")}${S(a.name)}<td>${P(a.is_active?"active":"inactive")}</td>${B(a.created_at)}</tr>`);return`${z("\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E14\u0E08\u0E33\u0E44\u0E14\u0E49\u0E2B\u0E25\u0E32\u0E22\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07 \u0E41\u0E15\u0E48\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E01\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07")}${j(["\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E0A\u0E37\u0E48\u0E2D","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D"],s,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",{page:t,pageSize:10})}`}function xt(e=[],t=1){let s=e.map(a=>`<tr>${S(a.username,"primary")}${S(a.product)}${S(a.product_code)}<td>${P(a.effective_status||a.status)}</td>${B(a.valid_from)}${B(a.valid_until)}<td class="actions">${D("extend_license",a.id,"\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38")} ${a.status!=="revoked"?D("revoke_license",a.id,"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01","button-danger"):""}</td></tr>`);return`${z("\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19","\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38\u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License \u0E01\u0E32\u0E23\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D\u0E40\u0E02\u0E49\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E32\u0E01\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E30\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E40\u0E14\u0E34\u0E21")}${j(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E43\u0E0A\u0E49","\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],s,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",{page:t,pageSize:10})}`}function _t(e=[],t=1){let s=e.map(a=>{let n=[a.has_archived_codes?D("copy_coupon_codes",a.id,"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A","button-success"):"",a.status==="active"?D("revoke_batch",a.id,"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E0A\u0E38\u0E14","button-danger"):"",a.status==="revoked"&&a.redeemed_count===0?D("delete_batch",a.id,"\u0E25\u0E1A","button-danger"):""].filter(Boolean).join(" ");return`<tr>${S(a.batch,"primary")}${S(a.product)}${S(a.product_code)}${S(a.duration_days)}${S(`${a.active_count}/${a.actual_quantity}`)}${S(a.redeemed_count)}<td>${P(a.status)}</td>${B(a.expires_at)}${B(a.created_at)}<td class="actions">${n}</td></tr>`});return`
+    ${z("\u0E04\u0E39\u0E1B\u0E2D\u0E07","\u0E2A\u0E23\u0E49\u0E32\u0E07 \u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 \u0E25\u0E1A \u0E41\u0E25\u0E30\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E17\u0E35\u0E48\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E27\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E19\u0E35\u0E49",'<button class="button button-primary" data-action="show-coupon-form">\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07</button>')}
     <div id="coupon-form-host"></div>
-    ${O(["\u0E0A\u0E38\u0E14","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E27\u0E31\u0E19","\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E43\u0E0A\u0E49/\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14","\u0E43\u0E0A\u0E49\u0E41\u0E25\u0E49\u0E27","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],t)}
-  `}function qe(){return`
+    ${j(["\u0E0A\u0E38\u0E14","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E27\u0E31\u0E19","\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E43\u0E0A\u0E49/\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14","\u0E43\u0E0A\u0E49\u0E41\u0E25\u0E49\u0E27","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],s,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25",{page:t,pageSize:10})}
+  `}function Qe(){return`
     <form id="coupon-form" class="panel inline-form">
       <label>Product code<input name="productCode" value="neko-family-proxy" required /></label>
       <label>\u0E08\u0E33\u0E19\u0E27\u0E19\u0E27\u0E31\u0E19<input name="durationDays" type="number" min="1" max="3650" value="30" required /></label>
@@ -1146,23 +1685,23 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
       <label>\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38<input name="note" maxlength="500" /></label>
       <div class="form-actions"><button class="button button-primary" type="submit">\u0E2A\u0E23\u0E49\u0E32\u0E07</button><button class="button" type="button" data-action="hide-coupon-form">\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01</button></div>
     </form>
-  `}function lt(e=[],t=null,s=Date.now()){let a=e.map(r=>{let o=!!r.revoked_at,p=Date.parse(r.last_seen_at),d=Number.isFinite(p)&&s-p<=120*1e3,h=o?"revoked":d?"online":"offline",i=o?"Revoked":d?"Online":"Offline",c=r.id?`<span class="truncated-id copyable-cell" title="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 Session ID: ${n(r.id)}" data-copy="${n(r.id)}">${n(r.id.slice(0,8))}\u2026</span>`:"\u2014",g=r.license_id?`<span class="truncated-id copyable-cell" title="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 License ID: ${n(r.license_id)}" data-copy="${n(r.license_id)}">${n(r.license_id.slice(0,8))}\u2026</span>`:"\u2014",f=t===r.id,S=o?'<span class="muted">\u0E22\u0E38\u0E15\u0E34\u0E41\u0E25\u0E49\u0E27</span>':D("revoke_session",r.id,"\u0E22\u0E38\u0E15\u0E34\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19","button-danger",f);return`<tr>${b(r.username,"primary")}<td>${F(h,i)}</td><td>${c}</td><td>${g}</td>${L(r.created_at)}${L(r.last_seen_at)}<td class="actions">${S}</td></tr>`});return`${G("\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34 Launcher session","\u0E41\u0E15\u0E48\u0E25\u0E30\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E21\u0E35 session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23 \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32\u0E16\u0E39\u0E01\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E41\u0E25\u0E49\u0E27")}${O(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E16\u0E32\u0E19\u0E30","Session ID","License","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E21\u0E37\u0E48\u0E2D","Heartbeat \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],a,"\u0E44\u0E21\u0E48\u0E21\u0E35 Launcher session \u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A")}`}function ct(e=[],t=null){let s=e.map(a=>{let r=t===a.active_session_id,o=a.active_session_id?D("revoke_session",a.active_session_id,"\u0E22\u0E38\u0E15\u0E34\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19","button-danger",r):"\u2014";return`<tr>${b(a.username,"primary")}${b(a.display_name)}${b(a.installation_key_hash_masked)}<td>${F("remembered","\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49")}</td><td>${a.owns_active_session?F("online","\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19"):F("inactive","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07")}</td>${L(a.created_at)}${L(a.last_seen_at)}${L(a.active_session_created_at)}${L(a.active_session_last_seen_at)}<td class="actions">${o}</td></tr>`});return`${G("\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49","\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E01\u0E32\u0E23\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E21\u0E35\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23 \u0E41\u0E25\u0E30\u0E01\u0E32\u0E23\u0E40\u0E02\u0E49\u0E32\u0E43\u0E0A\u0E49\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E30\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E40\u0E14\u0E34\u0E21")}${O(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07","Installation hash","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D","\u0E1E\u0E1A\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19","Heartbeat \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],s,"\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07")}`}function dt(e=[]){let t=e.map(s=>`<tr>${b(s.username,"primary")}${b(s.product)}${b(s.batch)}<td>${F(s.succeeded?"success":"rejected")}</td>${b(s.error_code)}${L(s.attempted_at)}</tr>`);return`${G("\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E04\u0E27\u0E32\u0E21\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08\u0E41\u0E25\u0E30\u0E02\u0E49\u0E2D\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14\u0E43\u0E19\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07")}${O(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E0A\u0E38\u0E14","\u0E1C\u0E25\u0E25\u0E31\u0E1E\u0E18\u0E4C","\u0E02\u0E49\u0E2D\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14","\u0E40\u0E27\u0E25\u0E32"],t,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07")}`}function ut(e=[]){let t=e.map(s=>`<tr>${b(s.title,"primary")}${b(s.username)}${b(s.detail)}${L(s.time)}</tr>`);return`${G("\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19","Audit log \u0E17\u0E35\u0E48\u0E04\u0E31\u0E14\u0E40\u0E09\u0E1E\u0E32\u0E30 metadata \u0E17\u0E35\u0E48\u0E1B\u0E25\u0E2D\u0E14\u0E20\u0E31\u0E22\u0E41\u0E25\u0E30\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E42\u0E22\u0E0A\u0E19\u0E4C")}${O(["\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17","\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49","\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14","\u0E40\u0E27\u0E25\u0E32"],t,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01 Audit event")}`}function Ge(e,t,s=null,a=null){return e==="users"?rt(t,s):e==="products"?nt(t):e==="licenses"?it(t):e==="coupons"?ot(t):e==="redemptions"?dt(t):e==="installations"?ct(t,a):e==="sessions"?lt(t,a):e==="audit"?ut(t):at(t)}var pt='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',mt='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>',vt='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',ht='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';function Xe(e=""){return`
+  `}function kt(e=[],t=null,s=Date.now(),a=1){let n=e.map(r=>{let l=!!r.revoked_at,c=Date.parse(r.last_seen_at),p=Number.isFinite(c)&&s-c<=120*1e3,i=l?"revoked":p?"online":"offline",d=l?"Revoked":p?"Online":"Offline",v=r.id?`<span class="truncated-id copyable-cell" title="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 Session ID: ${o(r.id)}" data-copy="${o(r.id)}">${o(r.id.slice(0,8))}\u2026</span>`:"\u2014",h=r.license_id?`<span class="truncated-id copyable-cell" title="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 License ID: ${o(r.license_id)}" data-copy="${o(r.license_id)}">${o(r.license_id.slice(0,8))}\u2026</span>`:"\u2014",w=t===r.id,f=l?'<span class="muted">\u0E22\u0E38\u0E15\u0E34\u0E41\u0E25\u0E49\u0E27</span>':D("revoke_session",r.id,"\u0E22\u0E38\u0E15\u0E34\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19","button-danger",w);return`<tr>${S(r.username,"primary")}<td>${P(i,d)}</td><td>${v}</td><td>${h}</td>${B(r.created_at)}${B(r.last_seen_at)}<td class="actions">${f}</td></tr>`});return`${z("\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34 Launcher session","\u0E41\u0E15\u0E48\u0E25\u0E30\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E21\u0E35 session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23 \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32\u0E16\u0E39\u0E01\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E41\u0E25\u0E49\u0E27")}${j(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E16\u0E32\u0E19\u0E30","Session ID","License","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E21\u0E37\u0E48\u0E2D","Heartbeat \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],n,"\u0E44\u0E21\u0E48\u0E21\u0E35 Launcher session \u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A",{page:a,pageSize:10})}`}function wt(e=[],t=null,s=1){let a=e.map(n=>{let r=t===n.active_session_id,l=n.active_session_id?D("revoke_session",n.active_session_id,"\u0E22\u0E38\u0E15\u0E34\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19","button-danger",r):"\u2014";return`<tr>${S(n.username,"primary")}${S(n.display_name)}${S(n.installation_key_hash_masked)}<td>${P("remembered","\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49")}</td><td>${n.owns_active_session?P("online","\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19"):P("inactive","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07")}</td>${B(n.created_at)}${B(n.last_seen_at)}${B(n.active_session_created_at)}${B(n.active_session_last_seen_at)}<td class="actions">${l}</td></tr>`});return`${z("\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49","\u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E17\u0E35\u0E48\u0E08\u0E14\u0E08\u0E33\u0E44\u0E27\u0E49\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E01\u0E32\u0E23\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E17\u0E35\u0E48\u0E01\u0E33\u0E25\u0E31\u0E07\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E21\u0E35\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E44\u0E14\u0E49\u0E2B\u0E19\u0E36\u0E48\u0E07\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23 \u0E41\u0E25\u0E30\u0E01\u0E32\u0E23\u0E40\u0E02\u0E49\u0E32\u0E43\u0E0A\u0E49\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E30\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E40\u0E14\u0E34\u0E21")}${j(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07","Installation hash","\u0E2A\u0E16\u0E32\u0E19\u0E30","\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19\u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19","\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E21\u0E37\u0E48\u0E2D","\u0E1E\u0E1A\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E0B\u0E2A\u0E0A\u0E31\u0E19","Heartbeat \u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14","\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07"],a,"\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07",{page:s,pageSize:10})}`}function St(e=[],t=1){let s=e.map(a=>`<tr>${S(a.username,"primary")}${S(a.product)}${S(a.batch)}<td>${P(a.succeeded?"success":"rejected")}</td>${S(a.error_code)}${B(a.attempted_at)}</tr>`);return`${z("\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07","\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E04\u0E27\u0E32\u0E21\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08\u0E41\u0E25\u0E30\u0E02\u0E49\u0E2D\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14\u0E43\u0E19\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07")}${j(["\u0E2A\u0E21\u0E32\u0E0A\u0E34\u0E01","\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32","\u0E0A\u0E38\u0E14","\u0E1C\u0E25\u0E25\u0E31\u0E1E\u0E18\u0E4C","\u0E02\u0E49\u0E2D\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14","\u0E40\u0E27\u0E25\u0E32"],s,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E04\u0E39\u0E1B\u0E2D\u0E07",{page:t,pageSize:10})}`}function Ct(e=[],t=1){let s=e.map(a=>`<tr>${S(a.title,"primary")}${S(a.username)}${S(a.detail)}${B(a.time)}</tr>`);return`${z("\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19","Audit log \u0E17\u0E35\u0E48\u0E04\u0E31\u0E14\u0E40\u0E09\u0E1E\u0E32\u0E30 metadata \u0E17\u0E35\u0E48\u0E1B\u0E25\u0E2D\u0E14\u0E20\u0E31\u0E22\u0E41\u0E25\u0E30\u0E21\u0E35\u0E1B\u0E23\u0E30\u0E42\u0E22\u0E0A\u0E19\u0E4C")}${j(["\u0E1B\u0E23\u0E30\u0E40\u0E20\u0E17","\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49","\u0E23\u0E32\u0E22\u0E25\u0E30\u0E40\u0E2D\u0E35\u0E22\u0E14","\u0E40\u0E27\u0E25\u0E32"],s,"\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01 Audit event",{page:t,pageSize:10})}`}function et(e,t,s=null,a=null,n=1){return e==="users"?yt(t,s,n):e==="products"?$t(t,n):e==="licenses"?xt(t,n):e==="coupons"?_t(t,n):e==="redemptions"?St(t,n):e==="installations"?wt(t,a,n):e==="sessions"?kt(t,a,void 0,n):e==="audit"?Ct(t,n):ft(t)}var Nt='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',Lt='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>',At='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',Tt='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';function tt(e=""){return`
     <button type="button" class="theme-toggle ${e}" data-action="toggle_theme" aria-label="\u0E2A\u0E25\u0E31\u0E1A\u0E42\u0E2B\u0E21\u0E14\u0E2A\u0E27\u0E48\u0E32\u0E07/\u0E21\u0E37\u0E14" title="\u0E2A\u0E25\u0E31\u0E1A\u0E42\u0E2B\u0E21\u0E14\u0E2A\u0E27\u0E48\u0E32\u0E07/\u0E21\u0E37\u0E14">
-      <span class="icon-moon">${vt}</span>
-      <span class="icon-sun">${ht}</span>
+      <span class="icon-moon">${At}</span>
+      <span class="icon-sun">${Tt}</span>
     </button>
-  `}function ft({id:e,name:t,label:s,autocomplete:a}){return`
+  `}function Mt({id:e,name:t,label:s,autocomplete:a}){return`
     <label for="${e}">${s}</label>
     <div class="field">
       <input id="${e}" name="${t}" type="password" autocomplete="${a}" required placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" />
       <button type="button" class="password-toggle" data-toggle-password="#${e}" aria-label="\u0E41\u0E2A\u0E14\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E0B\u0E48\u0E2D\u0E19\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19">
-        <span class="eye-open">${pt}</span>
-        <span class="eye-closed">${mt}</span>
+        <span class="eye-open">${Nt}</span>
+        <span class="eye-closed">${Lt}</span>
       </button>
     </div>
-  `}function Ze(e=""){return`
+  `}function at(e=""){return`
     <main class="auth-page">
-      ${Xe("theme-toggle-floating")}
+      ${tt("theme-toggle-floating")}
       <section class="auth-card">
         <div class="auth-brand">
           <div class="brand-mark">\u2726</div>
@@ -1176,14 +1715,14 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
         <form id="login-form" class="stack">
           <label for="admin-username">Username</label>
           <input id="admin-username" name="username" type="text" autocomplete="username" required placeholder="admin" />
-          ${ft({id:"admin-password",name:"password",label:"\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19",autocomplete:"current-password"})}
+          ${Mt({id:"admin-password",name:"password",label:"\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19",autocomplete:"current-password"})}
           <button class="button button-primary" type="submit" data-label-idle="\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A">\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A</button>
-          <div id="login-error" class="form-error" role="alert" ${e?"":"hidden"}>${n(e)}</div>
+          <div id="login-error" class="form-error" role="alert" ${e?"":"hidden"}>${o(e)}</div>
         </form>
       </section>
       <p class="auth-footnote">\u0E01\u0E32\u0E23\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E41\u0E25\u0E30\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E43\u0E19 audit log</p>
     </main>
-  `}function Ke(e,t){let s=t?.name||t?.username||"Admin",a=n(String(s).trim().slice(0,1).toUpperCase()||"N");return`
+  `}function st(e,t){let s=t?.name||t?.username||"Admin",a=o(String(s).trim().slice(0,1).toUpperCase()||"N");return`
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -1196,19 +1735,19 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
           </div>
         </div>
         <nav class="nav" aria-label="\u0E40\u0E21\u0E19\u0E39\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25">
-          ${Ce.map(r=>`<button class="nav-item ${r.id===e?"is-active":""}" data-section="${r.id}" ${r.id===e?'aria-current="page"':""}><span aria-hidden="true">${r.icon||"\u2022"}</span>${r.label}</button>`).join("")}
+          ${Pe.map(n=>`<button class="nav-item ${n.id===e?"is-active":""}" data-section="${n.id}" ${n.id===e?'aria-current="page"':""}><span aria-hidden="true">${n.icon||"\u2022"}</span>${n.label}</button>`).join("")}
         </nav>
         <div class="sidebar-footer">
           <div class="admin-chip">
             <div class="avatar" aria-hidden="true">${a}</div>
             <div class="admin-meta">
-              <div class="admin-label">${n(s)}</div>
+              <div class="admin-label">${o(s)}</div>
               <div class="admin-role">Administrator</div>
             </div>
           </div>
           <div class="admin-actions-row">
             <button class="button button-ghost button-small" data-action="logout">\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E23\u0E30\u0E1A\u0E1A</button>
-            ${Xe()}
+            ${tt()}
           </div>
         </div>
       </aside>
@@ -1224,11 +1763,143 @@ html[data-theme="dark"] .status-revoked, html[data-theme="dark"] .status-banned 
       </main>
     </div>
     <div id="toast" class="toast" hidden></div>
-  `}function M(e,t="info"){let s=document.querySelector("#toast");s&&(s.className=`toast toast-${t}`,s.textContent=e,s.hidden=!1,window.clearTimeout(M.timer),M.timer=window.setTimeout(()=>{s.hidden=!0},3600))}var gt=5e3,bt=3e4,Ye="neko-control-theme";function $t(){try{let e=localStorage.getItem(Ye);if(e==="light"||e==="dark")return e}catch{}return window.matchMedia?.("(prefers-color-scheme: dark)").matches?"dark":"light"}var re=$t();document.documentElement.dataset.theme=re;function yt(){re=re==="dark"?"light":"dark",document.documentElement.dataset.theme=re;try{localStorage.setItem(Ye,re)}catch{}}var j=document.querySelector("#app"),l=Pe(),me="",y=null,Ae=null,we=0,K=!1,de=null,Se=!1,ue=null,pe=!1,ce=0;function U(){if(!P.authenticated){y=null,he(),j.innerHTML=Ze(me);return}j.innerHTML=Ke(l.state.active,P.viewer);let e=j.querySelector("#content"),t=l.state.data[l.state.active];if(l.state.loading&&t===void 0)e.innerHTML='<div class="dashboard-skeleton" role="status" aria-label="\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25"><div></div><div></div><div></div><div></div><div></div><div></div><section></section></div>';else if(l.state.error&&t===void 0)e.innerHTML=`<div class="panel"><div class="form-error">${n(l.state.error)}</div></div>`;else{let s=l.state.active==="coupons"&&Array.isArray(t)?t.map(r=>({...r,has_archived_codes:Me(r.id)})):l.state.active==="overview"?{...t||{},liveServerHistory:l.state.liveServerHistory,serverChartRange:l.state.serverChartRange,serverHistory:l.state.serverHistory,_ui:{refreshing:l.state.refreshing,error:l.state.error}}:t,a=l.state.active==="overview"?"":je({refreshing:l.state.refreshing,error:l.state.error});if(e.innerHTML=`${a}${Ge(l.state.active,s,P.viewer,l.state.actionBusyId)}`,l.state.couponFormOpen){let r=j.querySelector("#coupon-form-host");r&&(r.innerHTML=qe())}}j.insertAdjacentHTML("beforeend",Ve(y))}async function Y(e){return e?.status!==401?!1:(he(),await P.logout({forceLocal:!0}),!0)}async function ve(e=l.state.serverChartRange,t=!1){if(e==="live"||pe)return;let s=++ce;pe=!0,t||l.patch({serverHistory:{...l.state.serverHistory,loading:!0,error:""}});try{let a=await Ie(e);if(s!==ce||l.state.serverChartRange!==e)return;l.patch({serverHistory:{range:a.range||e,bucket_seconds:a.bucket_seconds||(e==="1h"?60:e==="24h"?300:1800),available_since:a.available_since||null,points:Array.isArray(a.points)?a.points:[],points_count:a.points_count||(a.points?a.points.length:0),loading:!1,error:"",lastSuccessAt:new Date().toISOString()}})}catch(a){if(s!==ce||l.state.serverChartRange!==e||await Y(a))return;l.patch({serverHistory:{...l.state.serverHistory,loading:!1,error:a instanceof Error?a.message:"\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"}})}finally{s===ce&&(pe=!1)}}async function xt(){!P.authenticated||l.state.active!=="overview"||document.visibilityState!=="visible"||l.state.serverChartRange==="live"||pe||await ve(l.state.serverChartRange,!0)}async function ze(){if(!(!P.authenticated||l.state.active!=="overview"||document.visibilityState!=="visible"||Se)){Se=!0;try{let e=await te("overview",{range:l.state.overviewRange});if(l.state.active!=="overview")return;let t=ye(l.state.liveServerHistory,e.data?.server);l.patch({data:{...l.state.data,overview:e.data},liveServerHistory:t,refreshing:!1,error:""})}catch(e){if(await Y(e))return;l.patch({refreshing:!1,error:e instanceof Error?e.message:"\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Real-time \u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"})}finally{Se=!1}}}function _t(){he(),de=setInterval(ze,gt),ue=setInterval(xt,bt)}function he(){de&&(clearInterval(de),de=null),ue&&(clearInterval(ue),ue=null)}async function X(e=l.state.active){let t=++we,s=l.state.data[e],a=s!==void 0;l.patch({loading:!a,refreshing:a,error:""});try{let r=await te(e,{range:e==="overview"?l.state.overviewRange:void 0});if(t!==we||e!==l.state.active)return;let o=e==="overview"?ye(l.state.liveServerHistory,r.data?.server):l.state.liveServerHistory;l.patch({data:{...l.state.data,[e]:r.data},liveServerHistory:o,loading:!1,refreshing:!1}),e==="overview"&&_t()}catch(r){if(t!==we||e!==l.state.active||await Y(r))return;l.patch({loading:!1,refreshing:!1,...e==="overview"&&s?.range?{overviewRange:s.range}:{},error:r instanceof Error?r.message:"\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"})}}async function wt(e,t){if(K||l.state.actionBusyId)return;let s=(l.state.data[l.state.active]||[]).find(d=>d.id===t||e==="revoke_session"&&d.active_session_id===t);if(e==="generate_recovery_code"){if(!s||s.role!=="customer")return;y={userId:s.id,username:String(s.username||"").trim().toLowerCase(),phase:"confirm",error:"",recoveryCode:"",countdown:"05:00",expiresAt:""},U();return}if(["suspend_user","ban_user","activate_user"].includes(e)){let d={suspend_user:"suspended",ban_user:"banned",activate_user:"active"}[e],h={suspended:"\u0E23\u0E30\u0E07\u0E31\u0E1A\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E30\u0E43\u0E0A\u0E49\u0E17\u0E38\u0E01\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E25\u0E30 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E08\u0E30\u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01",banned:"\u0E41\u0E1A\u0E19\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E30\u0E43\u0E0A\u0E49\u0E17\u0E38\u0E01\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E25\u0E30 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E08\u0E30\u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01",active:"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E19\u0E35\u0E49\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48"}[d],i=s?.username||t;if(!window.confirm(`${h}
-\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22: ${i}`))return;await Ne({action:"set_user_status",userId:t,status:d},t);return}if(e==="extend_license"){let d=Number(window.prompt("\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38\u0E01\u0E35\u0E48\u0E27\u0E31\u0E19","30"));if(!Number.isInteger(d)||d<1)return;await Ne({action:"extend_license",licenseId:t,days:d},t);return}let a=[s?.username,s?.display_name||s?.device,s?.product||s?.batch].filter(Boolean).join(" / "),o=`${{revoke_license:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License \u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48",revoke_session:"\u0E22\u0E38\u0E15\u0E34 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E08\u0E30\u0E22\u0E31\u0E07\u0E04\u0E07\u0E16\u0E39\u0E01\u0E08\u0E14\u0E08\u0E33\u0E41\u0E25\u0E30\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E43\u0E2B\u0E21\u0E48\u0E44\u0E14\u0E49",revoke_batch:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E31\u0E49\u0E07\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48",delete_batch:"\u0E25\u0E1A\u0E0A\u0E38\u0E14\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E19\u0E35\u0E49\u0E16\u0E32\u0E27\u0E23\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E22\u0E49\u0E2D\u0E19\u0E01\u0E25\u0E31\u0E1A\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49"}[e]||"\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48"}${a?`
-\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22: ${a}`:""}`;if(!window.confirm(o))return;let p={revoke_license:{action:e,licenseId:t},revoke_session:{action:e,sessionId:t},revoke_batch:{action:e,batchId:t},delete_batch:{action:e,batchId:t}}[e];p&&await Ne(p,t)&&e==="delete_batch"&&Be(t)}function ke(){clearInterval(Ae),Ae=null,y&&(y.recoveryCode="",y.error=""),y=null,U()}function Je(){if(!y?.expiresAt)return;let e=Math.max(0,Date.parse(y.expiresAt)-Date.now()),t=Math.ceil(e/1e3);y.countdown=`${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`,U()}async function St(e){if(!y||y.phase==="submitting")return;let t=new FormData(e),s=String(t.get("confirmUsername")||"").trim().toLowerCase();if(s!==y.username){y.error="Username \u0E17\u0E35\u0E48\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E1A\u0E31\u0E0D\u0E0A\u0E35",U();return}y.phase="submitting",y.error="",U();try{let a=await oe({action:"generate_recovery_code",userId:y.userId,confirmUsername:s});if(y.phase="success",y.recoveryCode=String(a.recovery_code||""),y.expiresAt=String(a.expires_at||""),!y.recoveryCode||!Number.isFinite(Date.parse(y.expiresAt)))throw new Error("\u0E40\u0E0B\u0E34\u0E23\u0E4C\u0E1F\u0E40\u0E27\u0E2D\u0E23\u0E4C\u0E44\u0E21\u0E48\u0E2A\u0E48\u0E07 Recovery Code \u0E17\u0E35\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E25\u0E31\u0E1A\u0E21\u0E32");Je(),Ae=setInterval(Je,1e3),await X("users")}catch(a){if(await Y(a))return;y.phase="confirm",y.recoveryCode="",y.error=a instanceof Error?a.message:"\u0E2A\u0E23\u0E49\u0E32\u0E07 Recovery Code \u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",U()}}async function Ne(e,t=null){if(K)return!1;K=!0,t&&l.patch({actionBusyId:t});try{return await oe(e),M("\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","success"),await X(),!0}catch(s){return await Y(s)||M(s instanceof Error?s.message:"\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","error"),!1}finally{K=!1,t&&l.patch({actionBusyId:null})}}async function kt(e){let t=$e(e);if(!t.length){M("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E02\u0E2D\u0E07\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E19\u0E35\u0E49","error");return}let s=t.join(`
-`);try{await navigator.clipboard.writeText(s),M(`\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07 ${t.length} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E25\u0E49\u0E27`,"success")}catch{window.prompt("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07",s)}}async function Nt(e){if(K)return;K=!0;let t=new FormData(e);try{let s=await oe({action:"generate_coupons",productCode:t.get("productCode"),durationDays:Number(t.get("durationDays")),quantity:Number(t.get("quantity")),note:t.get("note")||null});l.patch({couponFormOpen:!1});let a=s.batch?.id,r=Re(a,s.codes);M(`\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07 ${s.codes?.length||0} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E25\u0E49\u0E27`,"success"),s.codes?.length&&window.prompt(r?"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49 (\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E27\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27)":"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E41\u0E25\u0E30\u0E40\u0E01\u0E47\u0E1A\u0E44\u0E27\u0E49 \u0E23\u0E2B\u0E31\u0E2A\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E23\u0E35\u0E22\u0E01\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E44\u0E14\u0E49",s.codes.join(`
-`)),await X("coupons")}catch(s){if(await Y(s))return;M(s instanceof Error?s.message:"\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","error")}finally{K=!1}}var P=Fe(()=>{me="",U()});l.subscribe(U);document.addEventListener("visibilitychange",()=>{document.visibilityState==="visible"&&P.authenticated&&l.state.active==="overview"&&(ze(),l.state.serverChartRange!=="live"&&ve(l.state.serverChartRange,!0))});j.addEventListener("submit",async e=>{if(e.preventDefault(),e.target.id==="login-form"){let t=e.target,s=new FormData(t),a=String(s.get("username")||""),r=String(s.get("password")||""),o=t.querySelector('button[type="submit"]'),p=j.querySelector("#login-error"),d=t.querySelectorAll("input"),h=i=>{for(let c of d)c.disabled=i;o&&(o.disabled=i,o.textContent=i?"\u0E01\u0E33\u0E25\u0E31\u0E07\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u2026":o.dataset.labelIdle||"\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A")};p&&(p.hidden=!0,p.textContent=""),h(!0);try{await P.login(a,r),await X("overview")}catch(i){me=i instanceof Error?i.message:"\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",p?(p.textContent=me,p.hidden=!1):U()}finally{P.authenticated||(h(!1),j.querySelector("#admin-password")?.focus())}}else e.target.id==="coupon-form"?await Nt(e.target):e.target.id==="recovery-code-form"&&await St(e.target)});j.addEventListener("click",async e=>{let t=e.target.closest("[data-toggle-password]");if(t){let o=document.querySelector(t.dataset.togglePassword);if(o){let p=o.type==="password";o.type=p?"text":"password",t.classList.toggle("is-visible",p),t.setAttribute("aria-label",p?"\u0E0B\u0E48\u0E2D\u0E19\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19":"\u0E41\u0E2A\u0E14\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19"),o.focus({preventScroll:!0});let d=String(o.value).length;o.setSelectionRange(d,d)}return}let s=e.target.closest("[data-copy]");if(s){let o=s.dataset.copy;if(o){try{await navigator.clipboard.writeText(o),M("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E41\u0E25\u0E49\u0E27","success")}catch{window.prompt("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A",o)}return}}let a=e.target.closest("[data-section], [data-action]");if(!a)return;if(a.dataset.section){ke(),l.patch({active:a.dataset.section,couponFormOpen:!1}),await X(a.dataset.section);return}let r=a.dataset.action;if(r==="toggle_theme"){yt();return}if(r==="refresh_overview"){await X("overview"),l.state.serverChartRange!=="live"&&ve(l.state.serverChartRange,!0);return}if(r==="set_server_chart_range"){let o=a.dataset.range;if(!["live","1h","24h","7d"].includes(o))return;l.patch({serverChartRange:o}),o!=="live"&&ve(o,!1);return}if(r==="set_range"){let o=a.dataset.range;if(!["24h","7d","14d","30d"].includes(o))return;l.patch({overviewRange:o}),await X("overview");return}if(r==="logout"){ke(),he();try{await P.logout()}catch{M("\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07","error")}return}if(r==="close_recovery_code"){ke();return}if(r==="copy_recovery_code"){let o=y?.recoveryCode||"";if(!o)return;try{await navigator.clipboard.writeText(o),M("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 Recovery Code \u0E41\u0E25\u0E49\u0E27","success")}catch{M("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E41\u0E25\u0E30\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E14\u0E49\u0E27\u0E22\u0E15\u0E19\u0E40\u0E2D\u0E07","error")}return}if(r==="show-coupon-form"){l.patch({couponFormOpen:!0});return}if(r==="hide-coupon-form"){l.patch({couponFormOpen:!1});return}if(r==="copy_coupon_codes"){await kt(a.dataset.id);return}await wt(r,a.dataset.id)});U();P.restore().then(e=>{e&&X("overview")});})();
+  `}var nt={success:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',error:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',info:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'};function I(e,t="info"){let s=document.querySelector("#toast");s&&(s.className=`toast toast-${t}`,s.innerHTML=`
+    <span class="toast-icon" aria-hidden="true">${nt[t]||nt.info}</span>
+    <span class="toast-message">${o(e)}</span>
+  `,s.hidden=!1,window.clearTimeout(I.timer),I.timer=window.setTimeout(()=>{s.hidden=!0},3600))}var Ht='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>',rt='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="16 9 10 15 7 12"/></svg>',ot='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',It='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',Bt='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',pe='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',Et='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',ve='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',me=null,K=null;async function oe(e){try{if(navigator.clipboard)return await navigator.clipboard.writeText(e),!0}catch{}try{let t=document.createElement("textarea");t.value=e,t.style.position="fixed",t.style.left="-9999px",t.style.top="0",t.style.opacity="0",document.body.appendChild(t),t.focus(),t.select();let s=document.execCommand("copy");return t.remove(),!!s}catch{return!1}}function U(){if(K){let e=K;K=null,e()}if(me){let e=me;me=null,e.classList.add("modal-backdrop-exit"),setTimeout(()=>{e.remove()},140)}}function be(e,t){U();let s=document.createElement("div");s.className="modal-backdrop",s.setAttribute("role","presentation"),s.innerHTML=e,document.body.appendChild(s),me=s;let a=s.querySelector(".modal-card"),n=l=>{l.key==="Escape"&&(l.stopPropagation(),U())};window.addEventListener("keydown",n);let r=l=>{l.target===s&&U()};return s.addEventListener("click",r),K=()=>{window.removeEventListener("keydown",n),s.removeEventListener("click",r)},t&&t(s,a),s}function Te({title:e="\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",codes:t=[],archived:s=!1,durationDays:a=null,quantity:n=null,productCode:r=""}){let l=Array.isArray(t)?t:[t].filter(Boolean),c=l.length,p=c===1,i=p?l[0]:"",d=l.join(`
+`),v=[];c>0&&v.push(`${c} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23`),a&&v.push(`\u0E2D\u0E32\u0E22\u0E38\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 ${a} \u0E27\u0E31\u0E19`),r&&v.push(`\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32 ${r}`);let h=v.join(" \xB7 "),w=s?`
+      <div class="modal-notice modal-notice-success">
+        <span class="modal-notice-icon" aria-hidden="true">${rt}</span>
+        <div class="modal-notice-content">
+          <strong>\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E27\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27</strong>
+          <p>\u0E23\u0E2B\u0E31\u0E2A\u0E16\u0E39\u0E01\u0E08\u0E31\u0E14\u0E40\u0E01\u0E47\u0E1A\u0E25\u0E07\u0E43\u0E19\u0E04\u0E25\u0E31\u0E07\u0E02\u0E2D\u0E07\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27 \u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E14\u0E39\u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E0B\u0E49\u0E33\u0E44\u0E14\u0E49\u0E17\u0E35\u0E48\u0E15\u0E32\u0E23\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07</p>
+        </div>
+      </div>
+    `:`
+      <div class="modal-notice modal-notice-warn">
+        <span class="modal-notice-icon" aria-hidden="true">${ot}</span>
+        <div class="modal-notice-content">
+          <strong>\u0E23\u0E2B\u0E31\u0E2A\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E23\u0E35\u0E22\u0E01\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E44\u0E14\u0E49</strong>
+          <p>\u0E01\u0E23\u0E38\u0E13\u0E32\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E41\u0E25\u0E30\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E44\u0E27\u0E49\u0E17\u0E31\u0E19\u0E17\u0E35 \u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E41\u0E2A\u0E14\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E0B\u0E49\u0E33\u0E44\u0E14\u0E49\u0E2D\u0E35\u0E01\u0E2B\u0E25\u0E31\u0E07\u0E08\u0E32\u0E01\u0E1B\u0E34\u0E14\u0E2B\u0E19\u0E49\u0E32\u0E15\u0E48\u0E32\u0E07\u0E19\u0E35\u0E49</p>
+        </div>
+      </div>
+    `,f=p?`
+      <div class="coupon-code-single">
+        <div class="code-header">
+          <span>\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07</span>
+          <span class="code-badge">\u0E04\u0E25\u0E34\u0E01\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01</span>
+        </div>
+        <div class="code-pill-row">
+          <code class="code-text" id="coupon-single-code" tabindex="0" role="button" title="\u0E04\u0E25\u0E34\u0E01\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01">${o(i)}</code>
+          <button type="button" class="button button-ghost button-small copy-single-btn" id="btn-copy-single" aria-label="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A" title="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A">
+            ${pe}
+          </button>
+        </div>
+      </div>
+    `:`
+      <div class="coupon-code-multi">
+        <div class="code-header">
+          <span>\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (${c} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23)</span>
+          <span class="code-badge">1 \u0E1A\u0E23\u0E23\u0E17\u0E31\u0E14\u0E15\u0E48\u0E2D 1 \u0E23\u0E2B\u0E31\u0E2A</span>
+        </div>
+        <textarea class="code-textarea" id="coupon-multi-textarea" readonly rows="${Math.min(8,Math.max(3,c+1))}">${o(d)}</textarea>
+      </div>
+    `,y=`
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="coupon-modal-title">
+      <div class="modal-header">
+        <div class="modal-icon modal-icon-brand" aria-hidden="true">${Ht}</div>
+        <div class="modal-title-group">
+          <h2 class="modal-title" id="coupon-modal-title">${o(e)}</h2>
+          ${h?`<p class="modal-subtitle">${o(h)}</p>`:""}
+        </div>
+        <button type="button" class="modal-close-btn" id="btn-modal-x" aria-label="\u0E1B\u0E34\u0E14">${ve}</button>
+      </div>
+      ${w}
+      ${f}
+      <div class="modal-actions">
+        <button type="button" class="button button-primary" id="btn-copy-all">
+          <span class="btn-icon" aria-hidden="true">${pe}</span>
+          <span class="btn-label">${p?"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A":`\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (${c} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23)`}</span>
+        </button>
+        <button type="button" class="button" id="btn-modal-close">\u0E1B\u0E34\u0E14\u0E2B\u0E19\u0E49\u0E32\u0E15\u0E48\u0E32\u0E07</button>
+      </div>
+    </section>
+  `;be(y,(x,L)=>{let $=L.querySelector("#btn-copy-all"),C=L.querySelector("#btn-modal-close"),m=L.querySelector("#btn-modal-x"),_=L.querySelector("#coupon-single-code"),M=L.querySelector("#btn-copy-single"),A=L.querySelector("#coupon-multi-textarea"),b=async()=>{await oe(d)?(I(`\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07 ${c} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E25\u0E49\u0E27`,"success"),$&&($.classList.add("button-success-solid"),$.innerHTML=`<span class="btn-icon" aria-hidden="true">${Et}</span> <span class="btn-label">\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E40\u0E23\u0E35\u0E22\u0E1A\u0E23\u0E49\u0E2D\u0E22\u0E41\u0E25\u0E49\u0E27</span>`,setTimeout(()=>{$&&document.body.contains($)&&($.classList.remove("button-success-solid"),$.innerHTML=`<span class="btn-icon" aria-hidden="true">${pe}</span> <span class="btn-label">${p?"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A":`\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14 (${c} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23)`}</span>`)},2e3))):(I("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E14\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E41\u0E25\u0E30\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E14\u0E49\u0E27\u0E22\u0E15\u0E19\u0E40\u0E2D\u0E07","error"),A&&A.select())};$&&$.addEventListener("click",b),M&&M.addEventListener("click",b),C&&C.addEventListener("click",U),m&&m.addEventListener("click",U),_&&_.addEventListener("click",()=>{let k=window.getSelection(),H=document.createRange();H.selectNodeContents(_),k.removeAllRanges(),k.addRange(H),b()}),A&&A.addEventListener("click",()=>{A.select()}),$&&$.focus()})}function Me({title:e="\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23",message:t="\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E15\u0E32\u0E21\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48",target:s="",tone:a="danger",confirmText:n="\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19",cancelText:r="\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01"}){return new Promise(l=>{let c=!1,p=L=>{c||(c=!0,U(),l(L))},i=a==="danger",d=a==="success",v=i?It:d?rt:ot,h=i?"modal-icon-danger":d?"modal-icon-success":"modal-icon-warning",w=i?"button-danger-solid":d?"button-success-solid":"button-primary",f=s?`
+        <div class="modal-target-card">
+          <span class="target-label">\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22:</span>
+          <code class="target-value">${o(s)}</code>
+        </div>
+      `:"",y=`
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-header">
+          <div class="modal-icon ${h}" aria-hidden="true">${v}</div>
+          <div class="modal-title-group">
+            <h2 class="modal-title" id="confirm-modal-title">${o(e)}</h2>
+            <p class="modal-subtitle">${o(t)}</p>
+          </div>
+          <button type="button" class="modal-close-btn" id="btn-modal-x" aria-label="\u0E1B\u0E34\u0E14">${ve}</button>
+        </div>
+        ${f}
+        <div class="modal-actions">
+          <button type="button" class="button ${w}" id="btn-confirm">${o(n)}</button>
+          <button type="button" class="button" id="btn-cancel">${o(r)}</button>
+        </div>
+      </section>
+    `;be(y,(L,$)=>{let C=$.querySelector("#btn-confirm"),m=$.querySelector("#btn-cancel"),_=$.querySelector("#btn-modal-x");C&&C.addEventListener("click",()=>p(!0)),m&&m.addEventListener("click",()=>p(!1)),_&&_.addEventListener("click",()=>p(!1)),C&&C.focus()});let x=K;K=()=>{x&&x(),c||(c=!0,l(!1))}})}function it({target:e="",defaultDays:t=30}){return new Promise(s=>{let a=!1,n=p=>{a||(a=!0,U(),s(p))},r=e?`
+        <div class="modal-target-card">
+          <span class="target-label">\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22:</span>
+          <code class="target-value">${o(e)}</code>
+        </div>
+      `:"",l=`
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="extend-modal-title">
+        <div class="modal-header">
+          <div class="modal-icon modal-icon-brand" aria-hidden="true">${Bt}</div>
+          <div class="modal-title-group">
+            <h2 class="modal-title" id="extend-modal-title">\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38 License</h2>
+            <p class="modal-subtitle">\u0E23\u0E30\u0E1A\u0E38\u0E08\u0E33\u0E19\u0E27\u0E19\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E02\u0E22\u0E32\u0E22\u0E23\u0E30\u0E22\u0E30\u0E40\u0E27\u0E25\u0E32\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19</p>
+          </div>
+          <button type="button" class="modal-close-btn" id="btn-modal-x" aria-label="\u0E1B\u0E34\u0E14">${ve}</button>
+        </div>
+        ${r}
+        <form id="extend-license-form" class="stack">
+          <label for="extend-days-input" class="field-label">\u0E08\u0E33\u0E19\u0E27\u0E19\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38</label>
+          <div class="field-with-unit">
+            <input id="extend-days-input" name="days" type="number" min="1" max="3650" value="${t}" required class="modal-input" />
+            <span class="input-unit">\u0E27\u0E31\u0E19</span>
+          </div>
+          <div class="preset-chips" aria-label="\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E08\u0E33\u0E19\u0E27\u0E19\u0E27\u0E31\u0E19\u0E14\u0E48\u0E27\u0E19">
+            <button type="button" class="chip-button ${t===7?"is-active":""}" data-days="7">+7 \u0E27\u0E31\u0E19</button>
+            <button type="button" class="chip-button ${t===15?"is-active":""}" data-days="15">+15 \u0E27\u0E31\u0E19</button>
+            <button type="button" class="chip-button ${t===30?"is-active":""}" data-days="30">+30 \u0E27\u0E31\u0E19</button>
+            <button type="button" class="chip-button ${t===90?"is-active":""}" data-days="90">+90 \u0E27\u0E31\u0E19</button>
+            <button type="button" class="chip-button ${t===365?"is-active":""}" data-days="365">+1 \u0E1B\u0E35 (365)</button>
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="button button-primary" id="btn-submit-extend">\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E15\u0E48\u0E2D\u0E2D\u0E32\u0E22\u0E38</button>
+            <button type="button" class="button" id="btn-cancel-extend">\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01</button>
+          </div>
+        </form>
+      </section>
+    `;be(l,(p,i)=>{let d=i.querySelector("#extend-license-form"),v=i.querySelector("#extend-days-input"),h=i.querySelector("#btn-cancel-extend"),w=i.querySelector("#btn-modal-x"),f=i.querySelectorAll(".chip-button");f.forEach(y=>{y.addEventListener("click",()=>{let x=Number(y.dataset.days);v&&(v.value=String(x),f.forEach(L=>L.classList.toggle("is-active",L===y)),v.focus())})}),v&&(v.addEventListener("input",()=>{let y=Number(v.value);f.forEach(x=>x.classList.toggle("is-active",Number(x.dataset.days)===y))}),setTimeout(()=>{v.focus(),v.select()},50)),d&&d.addEventListener("submit",y=>{y.preventDefault();let x=Number(v.value);Number.isInteger(x)&&x>=1&&n(x)}),h&&h.addEventListener("click",()=>n(null)),w&&w.addEventListener("click",()=>n(null))});let c=K;K=()=>{c&&c(),a||(a=!0,s(null))}})}function lt({title:e="\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A",text:t="",note:s=""}){let a=`
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="copy-modal-title">
+      <div class="modal-header">
+        <div class="modal-icon modal-icon-brand" aria-hidden="true">${pe}</div>
+        <div class="modal-title-group">
+          <h2 class="modal-title" id="copy-modal-title">${o(e)}</h2>
+          <p class="modal-subtitle">${o(s||"\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E2B\u0E23\u0E37\u0E2D\u0E01\u0E14\u0E1B\u0E38\u0E48\u0E21\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21")}</p>
+        </div>
+        <button type="button" class="modal-close-btn" id="btn-modal-x" aria-label="\u0E1B\u0E34\u0E14">${ve}</button>
+      </div>
+      <div class="coupon-code-multi">
+        <textarea class="code-textarea" id="copy-modal-textarea" readonly rows="4">${o(t)}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="button button-primary" id="btn-modal-copy">\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01</button>
+        <button type="button" class="button" id="btn-modal-close">\u0E1B\u0E34\u0E14</button>
+      </div>
+    </section>
+  `;be(a,(n,r)=>{let l=r.querySelector("#copy-modal-textarea"),c=r.querySelector("#btn-modal-copy"),p=r.querySelector("#btn-modal-close"),i=r.querySelector("#btn-modal-x");l&&(setTimeout(()=>l.select(),50),l.addEventListener("click",()=>l.select())),c&&c.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(t),I("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E41\u0E25\u0E49\u0E27","success"),U()}catch{l&&l.select()}}),p&&p.addEventListener("click",U),i&&i.addEventListener("click",U)})}var Rt=5e3,Pt=3e4,dt="neko-control-theme";function Ft(){try{let e=localStorage.getItem(dt);if(e==="light"||e==="dark")return e}catch{}return window.matchMedia?.("(prefers-color-scheme: dark)").matches?"dark":"light"}var ie=Ft();document.documentElement.dataset.theme=ie;function Dt(){ie=ie==="dark"?"light":"dark",document.documentElement.dataset.theme=ie;try{localStorage.setItem(dt,ie)}catch{}}var F=document.querySelector("#app"),u=Ke(),$e="",N=null,Re=null,He=0,Y=!1,ge=null,Ie=!1,fe=null,ye=!1,he=0;function V(){if(!O.authenticated){N=null,_e(),F.innerHTML=at($e);return}F.innerHTML=st(u.state.active,O.viewer);let e=F.querySelector("#content"),t=u.state.data[u.state.active];if(u.state.loading&&t===void 0)e.innerHTML='<div class="dashboard-skeleton" role="status" aria-label="\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25"><div></div><div></div><div></div><div></div><div></div><div></div><section></section></div>';else if(u.state.error&&t===void 0)e.innerHTML=`<div class="panel"><div class="form-error">${o(u.state.error)}</div></div>`;else{let s=u.state.active==="coupons"&&Array.isArray(t)?t.map(r=>({...r,has_archived_codes:Ue(r.id)})):u.state.active==="overview"?{...t||{},liveServerHistory:u.state.liveServerHistory,serverChartRange:u.state.serverChartRange,serverHistory:u.state.serverHistory,_ui:{refreshing:u.state.refreshing,error:u.state.error}}:t,a=u.state.active==="overview"?"":Je({refreshing:u.state.refreshing,error:u.state.error}),n=u.state.tablePages?.[u.state.active]||1;if(e.innerHTML=`${a}${et(u.state.active,s,O.viewer,u.state.actionBusyId,n)}`,u.state.couponFormOpen){let r=F.querySelector("#coupon-form-host");r&&(r.innerHTML=Qe())}}F.insertAdjacentHTML("beforeend",We(N))}async function W(e){return e?.status!==401?!1:(_e(),await O.logout({forceLocal:!0}),!0)}async function xe(e=u.state.serverChartRange,t=!1){if(e==="live"||ye)return;let s=++he;ye=!0,t||u.patch({serverHistory:{...u.state.serverHistory,loading:!0,error:""}});try{let a=await Oe(e);if(s!==he||u.state.serverChartRange!==e)return;u.patch({serverHistory:{range:a.range||e,bucket_seconds:a.bucket_seconds||(e==="1h"?60:e==="24h"?300:1800),available_since:a.available_since||null,points:Array.isArray(a.points)?a.points:[],points_count:a.points_count||(a.points?a.points.length:0),loading:!1,error:"",lastSuccessAt:new Date().toISOString()}})}catch(a){if(s!==he||u.state.serverChartRange!==e||await W(a))return;u.patch({serverHistory:{...u.state.serverHistory,loading:!1,error:a instanceof Error?a.message:"\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E22\u0E49\u0E2D\u0E19\u0E2B\u0E25\u0E31\u0E07\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"}})}finally{s===he&&(ye=!1)}}async function Ot(){!O.authenticated||u.state.active!=="overview"||document.visibilityState!=="visible"||u.state.serverChartRange==="live"||ye||await xe(u.state.serverChartRange,!0)}async function ut(){if(!(!O.authenticated||u.state.active!=="overview"||document.visibilityState!=="visible"||Ie)){Ie=!0;try{let e=await se("overview",{range:u.state.overviewRange});if(u.state.active!=="overview")return;let t=Ne(u.state.liveServerHistory,e.data?.server);u.patch({data:{...u.state.data,overview:e.data},liveServerHistory:t,refreshing:!1,error:""})}catch(e){if(await W(e))return;u.patch({refreshing:!1,error:e instanceof Error?e.message:"\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Real-time \u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"})}finally{Ie=!1}}}function qt(){_e(),ge=setInterval(ut,Rt),fe=setInterval(Ot,Pt)}function _e(){ge&&(clearInterval(ge),ge=null),fe&&(clearInterval(fe),fe=null)}async function Z(e=u.state.active){let t=++He,s=u.state.data[e],a=s!==void 0;u.patch({loading:!a,refreshing:a,error:""});try{let n=await se(e,{range:e==="overview"?u.state.overviewRange:void 0});if(t!==He||e!==u.state.active)return;let r=e==="overview"?Ne(u.state.liveServerHistory,n.data?.server):u.state.liveServerHistory;u.patch({data:{...u.state.data,[e]:n.data},liveServerHistory:r,loading:!1,refreshing:!1}),e==="overview"&&qt()}catch(n){if(t!==He||e!==u.state.active||await W(n))return;u.patch({loading:!1,refreshing:!1,...e==="overview"&&s?.range?{overviewRange:s.range}:{},error:n instanceof Error?n.message:"\u0E42\u0E2B\u0E25\u0E14\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08"})}}async function jt(e,t){if(Y||u.state.actionBusyId)return;let s=(u.state.data[u.state.active]||[]).find(p=>p.id===t||e==="revoke_session"&&p.active_session_id===t);if(e==="generate_recovery_code"){if(!s||s.role!=="customer")return;N={userId:s.id,username:String(s.username||"").trim().toLowerCase(),phase:"confirm",error:"",recoveryCode:"",countdown:"05:00",expiresAt:""},V();return}if(["suspend_user","ban_user","activate_user"].includes(e)){let p={suspend_user:"suspended",ban_user:"banned",activate_user:"active"}[e],d={suspended:{title:"\u0E23\u0E30\u0E07\u0E31\u0E1A\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49",message:"\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E17\u0E38\u0E01\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E44\u0E14\u0E49 \u0E41\u0E25\u0E30 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E08\u0E30\u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E17\u0E31\u0E19\u0E17\u0E35",confirmText:"\u0E23\u0E30\u0E07\u0E31\u0E1A\u0E1A\u0E31\u0E0D\u0E0A\u0E35",tone:"danger"},banned:{title:"\u0E41\u0E1A\u0E19\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49",message:"\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E08\u0E30\u0E16\u0E39\u0E01\u0E41\u0E1A\u0E19 \u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E17\u0E38\u0E01\u0E01\u0E32\u0E23\u0E15\u0E34\u0E14\u0E15\u0E31\u0E49\u0E07\u0E44\u0E14\u0E49 \u0E41\u0E25\u0E30 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E08\u0E30\u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01",confirmText:"\u0E41\u0E1A\u0E19\u0E1A\u0E31\u0E0D\u0E0A\u0E35",tone:"danger"},active:{title:"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E31\u0E0D\u0E0A\u0E35",message:"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E2B\u0E49\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E19\u0E35\u0E49\u0E01\u0E25\u0E31\u0E1A\u0E21\u0E32\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E15\u0E32\u0E21\u0E1B\u0E01\u0E15\u0E34\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07",confirmText:"\u0E40\u0E1B\u0E34\u0E14\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",tone:"success"}}[p],v=s?.username||t;if(!await Me({title:d.title,message:d.message,target:v,tone:d.tone,confirmText:d.confirmText}))return;await Ee({action:"set_user_status",userId:t,status:p},t);return}if(e==="extend_license"){let p=[s?.username,s?.product].filter(Boolean).join(" \xB7 ")||t,i=await it({target:p,defaultDays:30});if(!i||!Number.isInteger(i)||i<1)return;await Ee({action:"extend_license",licenseId:t,days:i},t);return}let a=[s?.username,s?.display_name||s?.device,s?.product||s?.batch].filter(Boolean).join(" / "),r={revoke_license:{title:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License",message:"\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License \u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E14\u0E49\u0E27\u0E22\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E19\u0E35\u0E49\u0E44\u0E14\u0E49\u0E2D\u0E35\u0E01",confirmText:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 License",tone:"danger"},revoke_session:{title:"\u0E22\u0E38\u0E15\u0E34 Launcher Session",message:"\u0E22\u0E38\u0E15\u0E34 Launcher session \u0E1B\u0E31\u0E08\u0E08\u0E38\u0E1A\u0E31\u0E19\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E2D\u0E38\u0E1B\u0E01\u0E23\u0E13\u0E4C\u0E08\u0E30\u0E22\u0E31\u0E07\u0E04\u0E07\u0E16\u0E39\u0E01\u0E08\u0E14\u0E08\u0E33\u0E41\u0E25\u0E30\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E43\u0E2B\u0E21\u0E48\u0E44\u0E14\u0E49",confirmText:"\u0E22\u0E38\u0E15\u0E34 Session",tone:"danger"},revoke_batch:{title:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E31\u0E49\u0E07\u0E0A\u0E38\u0E14",message:"\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E43\u0E19\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E08\u0E30\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E19\u0E33\u0E44\u0E1B\u0E40\u0E1B\u0E34\u0E14\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E44\u0E14\u0E49\u0E2D\u0E35\u0E01",confirmText:"\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E17\u0E31\u0E49\u0E07\u0E0A\u0E38\u0E14",tone:"danger"},delete_batch:{title:"\u0E25\u0E1A\u0E0A\u0E38\u0E14\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E16\u0E32\u0E27\u0E23",message:"\u0E25\u0E1A\u0E0A\u0E38\u0E14\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E19\u0E35\u0E49\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E23\u0E30\u0E1A\u0E1A\u0E16\u0E32\u0E27\u0E23\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48 \u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E22\u0E49\u0E2D\u0E19\u0E01\u0E25\u0E31\u0E1A\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E25\u0E30\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E40\u0E01\u0E47\u0E1A\u0E44\u0E27\u0E49\u0E08\u0E30\u0E16\u0E39\u0E01\u0E25\u0E1A",confirmText:"\u0E25\u0E1A\u0E16\u0E32\u0E27\u0E23",tone:"danger"}}[e]||{title:"\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07",message:"\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07\u0E19\u0E35\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E21\u0E48",confirmText:"\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19",tone:"danger"};if(!await Me({title:r.title,message:r.message,target:a,tone:r.tone,confirmText:r.confirmText}))return;let c={revoke_license:{action:e,licenseId:t},revoke_session:{action:e,sessionId:t},revoke_batch:{action:e,batchId:t},delete_batch:{action:e,batchId:t}}[e];c&&await Ee(c,t)&&e==="delete_batch"&&Ve(t)}function Be(){clearInterval(Re),Re=null,N&&(N.recoveryCode="",N.error=""),N=null,V()}function ct(){if(!N?.expiresAt)return;let e=Math.max(0,Date.parse(N.expiresAt)-Date.now()),t=Math.ceil(e/1e3);N.countdown=`${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`,V()}async function Ut(e){if(!N||N.phase==="submitting")return;let t=new FormData(e),s=String(t.get("confirmUsername")||"").trim().toLowerCase();if(s!==N.username){N.error="Username \u0E17\u0E35\u0E48\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E1A\u0E31\u0E0D\u0E0A\u0E35",V();return}N.phase="submitting",N.error="",V();try{let a=await de({action:"generate_recovery_code",userId:N.userId,confirmUsername:s});if(N.phase="success",N.recoveryCode=String(a.recovery_code||""),N.expiresAt=String(a.expires_at||""),!N.recoveryCode||!Number.isFinite(Date.parse(N.expiresAt)))throw new Error("\u0E40\u0E0B\u0E34\u0E23\u0E4C\u0E1F\u0E40\u0E27\u0E2D\u0E23\u0E4C\u0E44\u0E21\u0E48\u0E2A\u0E48\u0E07 Recovery Code \u0E17\u0E35\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E25\u0E31\u0E1A\u0E21\u0E32");ct(),Re=setInterval(ct,1e3),await Z("users")}catch(a){if(await W(a))return;N.phase="confirm",N.recoveryCode="",N.error=a instanceof Error?a.message:"\u0E2A\u0E23\u0E49\u0E32\u0E07 Recovery Code \u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",V()}}async function Ee(e,t=null){if(Y)return!1;Y=!0,t&&u.patch({actionBusyId:t});try{return await de(e),I("\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","success"),await Z(),!0}catch(s){return await W(s)||I(s instanceof Error?s.message:"\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","error"),!1}finally{Y=!1,t&&u.patch({actionBusyId:null})}}async function Vt(e){let t=Ce(e);if(!t.length){I("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E02\u0E2D\u0E07\u0E0A\u0E38\u0E14\u0E19\u0E35\u0E49\u0E43\u0E19\u0E40\u0E1A\u0E23\u0E32\u0E27\u0E4C\u0E40\u0E0B\u0E2D\u0E23\u0E4C\u0E40\u0E04\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E19\u0E35\u0E49","error");return}let s=t.join(`
+`);await oe(s)?I(`\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07 ${t.length} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E25\u0E49\u0E27`,"success"):Te({title:"\u0E23\u0E2B\u0E31\u0E2A\u0E04\u0E39\u0E1B\u0E2D\u0E07",codes:t,archived:!0,quantity:t.length})}async function Gt(e){if(Y)return;Y=!0;let t=new FormData(e),s=Number(t.get("durationDays")),a=Number(t.get("quantity")),n=String(t.get("productCode")||"");try{let r=await de({action:"generate_coupons",productCode:n,durationDays:s,quantity:a,note:t.get("note")||null});u.patch({couponFormOpen:!1});let l=r.batch?.id,c=je(l,r.codes);I(`\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07 ${r.codes?.length||0} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E25\u0E49\u0E27`,"success"),r.codes?.length&&Te({title:"\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",codes:r.codes,archived:c,durationDays:s,quantity:r.codes.length,productCode:n}),await Z("coupons")}catch(r){if(await W(r))return;I(r instanceof Error?r.message:"\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E04\u0E39\u0E1B\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08","error")}finally{Y=!1}}var O=Ge(()=>{$e="",V()});u.subscribe(V);document.addEventListener("visibilitychange",()=>{document.visibilityState==="visible"&&O.authenticated&&u.state.active==="overview"&&(ut(),u.state.serverChartRange!=="live"&&xe(u.state.serverChartRange,!0))});F.addEventListener("submit",async e=>{if(e.preventDefault(),e.target.id==="login-form"){let t=e.target,s=new FormData(t),a=String(s.get("username")||""),n=String(s.get("password")||""),r=t.querySelector('button[type="submit"]'),l=F.querySelector("#login-error"),c=t.querySelectorAll("input"),p=i=>{for(let d of c)d.disabled=i;r&&(r.disabled=i,r.textContent=i?"\u0E01\u0E33\u0E25\u0E31\u0E07\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u2026":r.dataset.labelIdle||"\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A")};l&&(l.hidden=!0,l.textContent=""),p(!0);try{await O.login(a,n),await Z("overview")}catch(i){$e=i instanceof Error?i.message:"\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08",l?(l.textContent=$e,l.hidden=!1):V()}finally{O.authenticated||(p(!1),F.querySelector("#admin-password")?.focus())}}else e.target.id==="coupon-form"?await Gt(e.target):e.target.id==="recovery-code-form"&&await Ut(e.target)});F.addEventListener("click",async e=>{let t=e.target.closest("[data-toggle-password]");if(t){let r=document.querySelector(t.dataset.togglePassword);if(r){let l=r.type==="password";r.type=l?"text":"password",t.classList.toggle("is-visible",l),t.setAttribute("aria-label",l?"\u0E0B\u0E48\u0E2D\u0E19\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19":"\u0E41\u0E2A\u0E14\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19"),r.focus({preventScroll:!0});let c=String(r.value).length;r.setSelectionRange(c,c)}return}let s=e.target.closest("[data-copy]");if(s){let r=s.dataset.copy;if(r){await oe(r)?I("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E41\u0E25\u0E49\u0E27","success"):lt({title:"\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A",text:r});return}}let a=e.target.closest("[data-section], [data-action]");if(!a)return;if(a.dataset.section){Be(),u.patch({active:a.dataset.section,couponFormOpen:!1,tablePages:{...u.state.tablePages,[a.dataset.section]:1}}),await Z(a.dataset.section);return}let n=a.dataset.action;if(n==="table_prev_page"){let r=u.state.active,l=u.state.tablePages?.[r]||1;if(l>1){u.patch({tablePages:{...u.state.tablePages,[r]:l-1}});let c=F.querySelector(".table-wrap");c&&(c.scrollTop=0)}return}if(n==="table_next_page"){let r=u.state.active,l=u.state.tablePages?.[r]||1;u.patch({tablePages:{...u.state.tablePages,[r]:l+1}});let c=F.querySelector(".table-wrap");c&&(c.scrollTop=0);return}if(n==="table_goto_page"){let r=u.state.active,l=Number(a.dataset.page);if(Number.isInteger(l)&&l>=1){u.patch({tablePages:{...u.state.tablePages,[r]:l}});let c=F.querySelector(".table-wrap");c&&(c.scrollTop=0)}return}if(n==="toggle_theme"){Dt();return}if(n==="refresh_overview"){await Z("overview"),u.state.serverChartRange!=="live"&&xe(u.state.serverChartRange,!0);return}if(n==="set_server_chart_range"){let r=a.dataset.range;if(!["live","1h","24h","7d"].includes(r))return;u.patch({serverChartRange:r}),r!=="live"&&xe(r,!1);return}if(n==="set_range"){let r=a.dataset.range;if(!["24h","7d","14d","30d"].includes(r))return;u.patch({overviewRange:r}),await Z("overview");return}if(n==="logout"){Be(),_e();try{await O.logout()}catch{I("\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07","error")}return}if(n==="close_recovery_code"){Be();return}if(n==="copy_recovery_code"){let r=N?.recoveryCode||"";if(!r)return;await oe(r)?I("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01 Recovery Code \u0E41\u0E25\u0E49\u0E27","success"):I("\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E41\u0E25\u0E30\u0E04\u0E31\u0E14\u0E25\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E14\u0E49\u0E27\u0E22\u0E15\u0E19\u0E40\u0E2D\u0E07","error");return}if(n==="show-coupon-form"){u.patch({couponFormOpen:!0});return}if(n==="hide-coupon-form"){u.patch({couponFormOpen:!1});return}if(n==="copy_coupon_codes"){await Vt(a.dataset.id);return}await jt(n,a.dataset.id)});V();O.restore().then(e=>{e&&Z("overview")});})();
 </script>
   </body>
 </html>

@@ -691,13 +691,13 @@ export function renderOverview(data = {}) {
       <article class="panel ops-summary"><h3>Operational summary</h3><dl><div><dt>สมาชิก Active</dt><dd>${safeCount(stats.userBreakdown?.active)}</dd></div><div><dt>License หมดอายุ</dt><dd>${safeCount(stats.licenseBreakdown?.expired)}</dd></div><div><dt>License ถูกยกเลิก</dt><dd>${safeCount(stats.licenseBreakdown?.revoked)}</dd></div></dl></article>
       <section class="panel">
         <div class="panel-title-row"><h3>กิจกรรมล่าสุด</h3></div>
-        ${table(["รายการ", "รายละเอียด", "เวลา"], recent)}
+        ${table(["รายการ", "รายละเอียด", "เวลา"], recent, "ยังไม่มีข้อมูล", { paginate: false })}
       </section>
     </section>
   `;
 }
 
-export function renderUsers(rows = [], viewer = null) {
+export function renderUsers(rows = [], viewer = null, page = 1) {
   const body = rows.map((row) => {
     const recoveryAction =
       row.role === "customer"
@@ -711,7 +711,7 @@ export function renderUsers(rows = [], viewer = null) {
         : actionButton("activate_user", row.id, "เปิดใช้", "button-success");
     return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.role)}<td>${statusBadge(row.status)}</td>${dateCell(row.updated_at)}<td class="actions">${recoveryAction} ${statusActions}</td></tr>`;
   });
-  return `${heading("สมาชิก", "ข้อมูลบัญชีจาก public.profiles")}${table(["Username", "ชื่อแสดง", "บทบาท", "สถานะ", "แก้ไขล่าสุด", "คำสั่ง"], body)}`;
+  return `${heading("สมาชิก", "ข้อมูลบัญชีจาก public.profiles")}${table(["Username", "ชื่อแสดง", "บทบาท", "สถานะ", "แก้ไขล่าสุด", "คำสั่ง"], body, "ยังไม่มีข้อมูล", { page, pageSize: 10 })}`;
 }
 
 export function renderRecoveryCodeDialog(state) {
@@ -759,23 +759,23 @@ export function renderRecoveryCodeDialog(state) {
   `;
 }
 
-export function renderProducts(rows = []) {
+export function renderProducts(rows = [], page = 1) {
   const body = rows.map(
     (row) =>
       `<tr>${cell(row.code, "primary")}${cell(row.name)}<td>${statusBadge(row.is_active ? "active" : "inactive")}</td>${dateCell(row.created_at)}</tr>`,
   );
-  return `${heading("สินค้า", "บัญชีจดจำได้หลายเครื่อง แต่ใช้งานพร้อมกันได้หนึ่งเครื่อง")}${table(["รหัสสินค้า", "ชื่อ", "สถานะ", "สร้างเมื่อ"], body)}`;
+  return `${heading("สินค้า", "บัญชีจดจำได้หลายเครื่อง แต่ใช้งานพร้อมกันได้หนึ่งเครื่อง")}${table(["รหัสสินค้า", "ชื่อ", "สถานะ", "สร้างเมื่อ"], body, "ยังไม่มีข้อมูล", { page, pageSize: 10 })}`;
 }
 
-export function renderLicenses(rows = []) {
+export function renderLicenses(rows = [], page = 1) {
   const body = rows.map(
     (row) =>
       `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.product_code)}<td>${statusBadge(row.effective_status || row.status)}</td>${dateCell(row.valid_from)}${dateCell(row.valid_until)}<td class="actions">${actionButton("extend_license", row.id, "ต่ออายุ")} ${row.status !== "revoked" ? actionButton("revoke_license", row.id, "ยกเลิก", "button-danger") : ""}</td></tr>`,
   );
-  return `${heading("สิทธิ์ใช้งาน", "ต่ออายุหรือยกเลิก License การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "สินค้า", "รหัสสินค้า", "สถานะ", "เริ่มใช้", "หมดอายุ", "คำสั่ง"], body)}`;
+  return `${heading("สิทธิ์ใช้งาน", "ต่ออายุหรือยกเลิก License การลงชื่อเข้าใช้จากเครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "สินค้า", "รหัสสินค้า", "สถานะ", "เริ่มใช้", "หมดอายุ", "คำสั่ง"], body, "ยังไม่มีข้อมูล", { page, pageSize: 10 })}`;
 }
 
-export function renderCoupons(rows = []) {
+export function renderCoupons(rows = [], page = 1) {
   const body = rows.map((row) => {
     const actions = [
       row.has_archived_codes
@@ -793,7 +793,7 @@ export function renderCoupons(rows = []) {
   return `
     ${heading("คูปอง", "สร้าง ยกเลิก ลบ และคัดลอกรหัสที่บันทึกไว้ในเบราว์เซอร์นี้", `<button class="button button-primary" data-action="show-coupon-form">สร้างคูปอง</button>`)}
     <div id="coupon-form-host"></div>
-    ${table(["ชุด", "สินค้า", "รหัสสินค้า", "วัน", "พร้อมใช้/ทั้งหมด", "ใช้แล้ว", "สถานะ", "หมดอายุ", "สร้างเมื่อ", "คำสั่ง"], body)}
+    ${table(["ชุด", "สินค้า", "รหัสสินค้า", "วัน", "พร้อมใช้/ทั้งหมด", "ใช้แล้ว", "สถานะ", "หมดอายุ", "สร้างเมื่อ", "คำสั่ง"], body, "ยังไม่มีข้อมูล", { page, pageSize: 10 })}
   `;
 }
 
@@ -809,7 +809,7 @@ export function couponForm() {
   `;
 }
 
-export function renderSessions(rows = [], busyId = null, nowMs = Date.now()) {
+export function renderSessions(rows = [], busyId = null, nowMs = Date.now(), page = 1) {
   const body = rows.map((row) => {
     const isRevoked = Boolean(row.revoked_at);
     const lastSeenMs = Date.parse(row.last_seen_at);
@@ -833,10 +833,10 @@ export function renderSessions(rows = [], busyId = null, nowMs = Date.now()) {
 
     return `<tr>${cell(row.username, "primary")}<td>${statusBadge(sessionStatus, sessionLabel)}</td><td>${sessionId}</td><td>${license}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}<td class="actions">${actionCell}</td></tr>`;
   });
-  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "สถานะ", "Session ID", "License", "เริ่มเมื่อ", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มี Launcher session ในระบบ")}`;
+  return `${heading("ประวัติ Launcher session", "แต่ละบัญชีมี session ปัจจุบันได้หนึ่งรายการ รายการก่อนหน้าถูกแทนที่หรือยกเลิกแล้ว")}${table(["สมาชิก", "สถานะ", "Session ID", "License", "เริ่มเมื่อ", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มี Launcher session ในระบบ", { page, pageSize: 10 })}`;
 }
 
-export function renderInstallations(rows = [], busyId = null) {
+export function renderInstallations(rows = [], busyId = null, page = 1) {
   const body = rows.map(
     (row) => {
       const isBusy = busyId === row.active_session_id;
@@ -846,33 +846,33 @@ export function renderInstallations(rows = [], busyId = null) {
       return `<tr>${cell(row.username, "primary")}${cell(row.display_name)}${cell(row.installation_key_hash_masked)}<td>${statusBadge("remembered", "จดจำไว้")}</td><td>${row.owns_active_session ? statusBadge("online", "เครื่องที่กำลังใช้งาน") : statusBadge("inactive", "ประวัติการติดตั้ง")}</td>${dateCell(row.created_at)}${dateCell(row.last_seen_at)}${dateCell(row.active_session_created_at)}${dateCell(row.active_session_last_seen_at)}<td class="actions">${actionCell}</td></tr>`;
     },
   );
-  return `${heading("การติดตั้งที่จดจำไว้", "อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน บัญชีมีเซสชันปัจจุบันได้หนึ่งรายการ และการเข้าใช้เครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มีประวัติการติดตั้ง")}`;
+  return `${heading("การติดตั้งที่จดจำไว้", "อุปกรณ์ที่จดจำไว้ไม่ใช่การเข้าสู่ระบบที่กำลังใช้งาน บัญชีมีเซสชันปัจจุบันได้หนึ่งรายการ และการเข้าใช้เครื่องใหม่จะแทนที่เซสชันเดิม")}${table(["สมาชิก", "ชื่อการติดตั้ง", "Installation hash", "สถานะ", "เซสชันปัจจุบัน", "สร้างเมื่อ", "พบล่าสุด", "เริ่มเซสชัน", "Heartbeat ล่าสุด", "คำสั่ง"], body, "ไม่มีประวัติการติดตั้ง", { page, pageSize: 10 })}`;
 }
 
-export function renderRedemptions(rows = []) {
+export function renderRedemptions(rows = [], page = 1) {
   const body = rows.map(
     (row) =>
       `<tr>${cell(row.username, "primary")}${cell(row.product)}${cell(row.batch)}<td>${statusBadge(row.succeeded ? "success" : "rejected")}</td>${cell(row.error_code)}${dateCell(row.attempted_at)}</tr>`,
   );
-  return `${heading("การใช้คูปอง", "ประวัติความสำเร็จและข้อผิดพลาดในการใช้คูปอง")}${table(["สมาชิก", "สินค้า", "ชุด", "ผลลัพธ์", "ข้อผิดพลาด", "เวลา"], body, "ยังไม่มีประวัติการใช้คูปอง")}`;
+  return `${heading("การใช้คูปอง", "ประวัติความสำเร็จและข้อผิดพลาดในการใช้คูปอง")}${table(["สมาชิก", "สินค้า", "ชุด", "ผลลัพธ์", "ข้อผิดพลาด", "เวลา"], body, "ยังไม่มีประวัติการใช้คูปอง", { page, pageSize: 10 })}`;
 }
 
-export function renderAudit(rows = []) {
+export function renderAudit(rows = [], page = 1) {
   const body = rows.map(
     (row) =>
       `<tr>${cell(row.title, "primary")}${cell(row.username)}${cell(row.detail)}${dateCell(row.time)}</tr>`,
   );
-  return `${heading("ประวัติการใช้งาน", "Audit log ที่คัดเฉพาะ metadata ที่ปลอดภัยและมีประโยชน์")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body, "ยังไม่มีบันทึก Audit event")}`;
+  return `${heading("ประวัติการใช้งาน", "Audit log ที่คัดเฉพาะ metadata ที่ปลอดภัยและมีประโยชน์")}${table(["ประเภท", "ผู้ใช้", "รายละเอียด", "เวลา"], body, "ยังไม่มีบันทึก Audit event", { page, pageSize: 10 })}`;
 }
 
-export function renderSection(section, data, viewer = null, busyId = null) {
-  if (section === "users") return renderUsers(data, viewer);
-  if (section === "products") return renderProducts(data);
-  if (section === "licenses") return renderLicenses(data);
-  if (section === "coupons") return renderCoupons(data);
-  if (section === "redemptions") return renderRedemptions(data);
-  if (section === "installations") return renderInstallations(data, busyId);
-  if (section === "sessions") return renderSessions(data, busyId);
-  if (section === "audit") return renderAudit(data);
+export function renderSection(section, data, viewer = null, busyId = null, page = 1) {
+  if (section === "users") return renderUsers(data, viewer, page);
+  if (section === "products") return renderProducts(data, page);
+  if (section === "licenses") return renderLicenses(data, page);
+  if (section === "coupons") return renderCoupons(data, page);
+  if (section === "redemptions") return renderRedemptions(data, page);
+  if (section === "installations") return renderInstallations(data, busyId, page);
+  if (section === "sessions") return renderSessions(data, busyId, undefined, page);
+  if (section === "audit") return renderAudit(data, page);
   return renderOverview(data);
 }

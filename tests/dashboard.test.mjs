@@ -17,13 +17,14 @@ import {
   formatUptime,
   statusIcon,
 } from "../standalone/src/ui/escape.js";
-import { statusBadge } from "../standalone/src/ui/table.js";
+import { generatePaginationItems, statusBadge, table } from "../standalone/src/ui/table.js";
 import { appendLiveServerSample, MAX_LIVE_SAMPLES, segmentHistoryPoints } from "../standalone/src/state.js";
 import {
   pointsToSmoothPath,
   renderHistoricalServerChart,
   renderLiveServerChart,
   renderOverview,
+  renderRedemptions,
   renderSectionRefreshNotice,
   renderServerChart,
   renderServerHealth,
@@ -669,4 +670,83 @@ test("renderOverview integrates renderServerChart with historical state and serv
   assert.match(html, /ONLINE/);
   assert.match(html, /Historical Network Activity — Last 1 Hour/);
   assert.match(html, /data-range="1h"/);
+});
+
+test("table paginates at 10 items per page and provides navigation controls", () => {
+  const rows = Array.from({ length: 25 }, (_, i) => `<tr><td>User ${i + 1}</td></tr>`);
+
+  // Page 1: 10 items
+  const p1 = table(["User"], rows, "empty", { page: 1, pageSize: 10 });
+  assert.equal((p1.match(/User \d+/g) || []).length, 10);
+  assert.match(p1, /User 1<\/td>/);
+  assert.match(p1, /User 10<\/td>/);
+  assert.doesNotMatch(p1, /User 11<\/td>/);
+  assert.match(p1, /แสดง <span class="pagination-range">1–10<\/span> จากทั้งหมด <span class="pagination-total">25<\/span> รายการ/);
+  assert.match(p1, /data-action="table_prev_page"\s+disabled/);
+  assert.doesNotMatch(p1, /data-action="table_next_page"\s+disabled/);
+
+  // Page 2: 10 items
+  const p2 = table(["User"], rows, "empty", { page: 2, pageSize: 10 });
+  assert.equal((p2.match(/User \d+/g) || []).length, 10);
+  assert.match(p2, /User 11<\/td>/);
+  assert.match(p2, /User 20<\/td>/);
+  assert.match(p2, /แสดง <span class="pagination-range">11–20<\/span>/);
+
+  // Page 3: remaining 5 items
+  const p3 = table(["User"], rows, "empty", { page: 3, pageSize: 10 });
+  assert.equal((p3.match(/User \d+/g) || []).length, 5);
+  assert.match(p3, /User 21<\/td>/);
+  assert.match(p3, /User 25<\/td>/);
+  assert.match(p3, /แสดง <span class="pagination-range">21–25<\/span>/);
+  assert.match(p3, /data-action="table_next_page"\s+disabled/);
+});
+
+test("table handles <= 10 items as single page without prev/next controls", () => {
+  const rows = Array.from({ length: 8 }, (_, i) => `<tr><td>Item ${i + 1}</td></tr>`);
+  const html = table(["Item"], rows, "empty");
+  assert.equal((html.match(/Item \d+/g) || []).length, 8);
+  assert.match(html, /ทั้งหมด <span class="pagination-total">8<\/span> รายการ/);
+  assert.doesNotMatch(html, /data-action="table_prev_page"/);
+});
+
+test("generatePaginationItems creates correct page list with ellipsis", () => {
+  assert.deepEqual(generatePaginationItems(1, 5), [1, 2, 3, 4, 5]);
+  assert.deepEqual(generatePaginationItems(1, 10), [1, 2, 3, "...", 10]);
+  assert.deepEqual(generatePaginationItems(5, 10), [1, "...", 4, 5, 6, "...", 10]);
+  assert.deepEqual(generatePaginationItems(10, 10), [1, "...", 8, 9, 10]);
+});
+
+test("renderRedemptions supports 10-item pagination for coupon attempts", () => {
+  const attempts = Array.from({ length: 15 }, (_, i) => ({
+    id: `attempt-${i + 1}`,
+    user_id: `user-${i + 1}`,
+    username: `user_${i + 1}`,
+    product: "Neko Family Proxy",
+    batch: "batch-1",
+    succeeded: i % 2 === 0,
+    error_code: i % 2 === 0 ? null : "invalid_coupon",
+    attempted_at: "2026-09-18T10:00:00.000Z",
+  }));
+
+  const page1 = renderRedemptions(attempts, 1);
+  assert.equal((page1.match(/class="primary"/g) || []).length, 10);
+  assert.match(page1, /user_1<\/td>/);
+  assert.match(page1, /user_10<\/td>/);
+  assert.doesNotMatch(page1, /user_11<\/td>/);
+  assert.match(page1, /แสดง <span class="pagination-range">1–10<\/span> จากทั้งหมด <span class="pagination-total">15<\/span> รายการ/);
+
+  const page2 = renderRedemptions(attempts, 2);
+  assert.equal((page2.match(/class="primary"/g) || []).length, 5);
+  assert.match(page2, /user_11<\/td>/);
+  assert.match(page2, /user_15<\/td>/);
+  assert.match(page2, /แสดง <span class="pagination-range">11–15<\/span>/);
+});
+
+test("standalone compiled HTML contains print page-break for 10 rows", async () => {
+  const html = await readFile(
+    new URL("../standalone/dist/neko-control.html", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /tbody\s+tr:nth-child\(10n\)/);
+  assert.match(html, /break-after:\s*page/);
 });

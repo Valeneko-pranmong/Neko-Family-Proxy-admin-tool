@@ -87,6 +87,7 @@ export function createStore() {
     couponFormOpen: false,
     liveServerHistory: [],
     actionBusyId: null,
+    tablePages: {},
   };
   const listeners = new Set();
   return {

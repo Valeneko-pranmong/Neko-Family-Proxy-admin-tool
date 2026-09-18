@@ -16,6 +16,13 @@ import {
 import { loginView, shellView } from "./ui/layout.js";
 import { escapeHtml } from "./ui/escape.js";
 import { toast } from "./ui/toast.js";
+import {
+  showCouponModal,
+  showConfirmModal,
+  showExtendLicenseModal,
+  showCopyModal,
+  copyTextToClipboard,
+} from "./ui/dialog.js";
 
 const POLL_CADENCE_MS = 5000;
 const HISTORY_POLL_CADENCE_MS = 30000;
@@ -93,11 +100,13 @@ function render() {
           refreshing: store.state.refreshing,
           error: store.state.error,
         });
+    const currentPage = store.state.tablePages?.[store.state.active] || 1;
     content.innerHTML = `${refreshNotice}${renderSection(
       store.state.active,
       renderedData,
       session.viewer,
       store.state.actionBusyId,
+      currentPage,
     )}`;
     if (store.state.couponFormOpen) {
       const host = root.querySelector("#coupon-form-host");
@@ -297,21 +306,46 @@ async function action(name, id) {
       ban_user: "banned",
       activate_user: "active",
     }[name];
-    const confirmation = {
-      suspended:
-        "ระงับบัญชีนี้หรือไม่ บัญชีจะใช้ทุกการติดตั้งไม่ได้และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
-      banned:
-        "แบนบัญชีนี้หรือไม่ บัญชีจะใช้ทุกการติดตั้งไม่ได้และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
-      active: "เปิดใช้บัญชีนี้อีกครั้งหรือไม่",
-    }[nextStatus];
+    const configs = {
+      suspended: {
+        title: "ระงับบัญชีผู้ใช้",
+        message: "บัญชีจะไม่สามารถใช้งานทุกการติดตั้งได้ และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิกทันที",
+        confirmText: "ระงับบัญชี",
+        tone: "danger",
+      },
+      banned: {
+        title: "แบนบัญชีผู้ใช้",
+        message: "บัญชีจะถูกแบน ไม่สามารถใช้งานทุกการติดตั้งได้ และ Launcher session ปัจจุบันทั้งหมดจะถูกยกเลิก",
+        confirmText: "แบนบัญชี",
+        tone: "danger",
+      },
+      active: {
+        title: "เปิดใช้งานบัญชี",
+        message: "เปิดให้บัญชีนี้กลับมาใช้งานตามปกติอีกครั้ง",
+        confirmText: "เปิดใช้งาน",
+        tone: "success",
+      },
+    };
+    const cfg = configs[nextStatus];
     const targetIdentity = row?.username || id;
-    if (!window.confirm(`${confirmation}\nเป้าหมาย: ${targetIdentity}`)) return;
+    const confirmed = await showConfirmModal({
+      title: cfg.title,
+      message: cfg.message,
+      target: targetIdentity,
+      tone: cfg.tone,
+      confirmText: cfg.confirmText,
+    });
+    if (!confirmed) return;
     await run({ action: "set_user_status", userId: id, status: nextStatus }, id);
     return;
   }
   if (name === "extend_license") {
-    const days = Number(window.prompt("ต้องการต่ออายุกี่วัน", "30"));
-    if (!Number.isInteger(days) || days < 1) return;
+    const targetLabel = [row?.username, row?.product].filter(Boolean).join(" · ") || id;
+    const days = await showExtendLicenseModal({
+      target: targetLabel,
+      defaultDays: 30,
+    });
+    if (!days || !Number.isInteger(days) || days < 1) return;
     await run({ action: "extend_license", licenseId: id, days }, id);
     return;
   }
@@ -320,15 +354,46 @@ async function action(name, id) {
     row?.display_name || row?.device,
     row?.product || row?.batch,
   ].filter(Boolean).join(" / ");
-  const labels = {
-    revoke_license: "ยกเลิก License นี้หรือไม่",
-    revoke_session: "ยุติ Launcher session ปัจจุบันนี้หรือไม่ อุปกรณ์จะยังคงถูกจดจำและสามารถเข้าสู่ระบบใหม่ได้",
-    revoke_batch: "ยกเลิกคูปองทั้งชุดนี้หรือไม่",
-    delete_batch: "ลบชุดคูปองนี้ถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้",
+  const actionConfigs = {
+    revoke_license: {
+      title: "ยกเลิก License",
+      message: "ต้องการยกเลิก License นี้หรือไม่ ผู้ใช้จะไม่สามารถเชื่อมต่อด้วยสิทธิ์นี้ได้อีก",
+      confirmText: "ยกเลิก License",
+      tone: "danger",
+    },
+    revoke_session: {
+      title: "ยุติ Launcher Session",
+      message: "ยุติ Launcher session ปัจจุบันนี้หรือไม่ อุปกรณ์จะยังคงถูกจดจำและสามารถเข้าสู่ระบบใหม่ได้",
+      confirmText: "ยุติ Session",
+      tone: "danger",
+    },
+    revoke_batch: {
+      title: "ยกเลิกคูปองทั้งชุด",
+      message: "ต้องการยกเลิกคูปองทั้งหมดในชุดนี้หรือไม่ คูปองที่ยังไม่ถูกใช้จะไม่สามารถนำไปเปิดสิทธิ์ได้อีก",
+      confirmText: "ยกเลิกทั้งชุด",
+      tone: "danger",
+    },
+    delete_batch: {
+      title: "ลบชุดคูปองถาวร",
+      message: "ลบชุดคูปองนี้ออกจากระบบถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้และรหัสคูปองที่เก็บไว้จะถูกลบ",
+      confirmText: "ลบถาวร",
+      tone: "danger",
+    },
   };
-  const confirmation = `${labels[name] || "ยืนยันคำสั่งนี้หรือไม่"}${targetLabel ? `
-เป้าหมาย: ${targetLabel}` : ""}`;
-  if (!window.confirm(confirmation)) return;
+  const cfg = actionConfigs[name] || {
+    title: "ยืนยันคำสั่ง",
+    message: "ต้องการดำเนินการคำสั่งนี้หรือไม่",
+    confirmText: "ยืนยัน",
+    tone: "danger",
+  };
+  const confirmed = await showConfirmModal({
+    title: cfg.title,
+    message: cfg.message,
+    target: targetLabel,
+    tone: cfg.tone,
+    confirmText: cfg.confirmText,
+  });
+  if (!confirmed) return;
   const payload = {
     revoke_license: { action: name, licenseId: id },
     revoke_session: { action: name, sessionId: id },
@@ -425,11 +490,16 @@ async function copyArchivedCoupons(batchId) {
     return;
   }
   const text = codes.join("\n");
-  try {
-    await navigator.clipboard.writeText(text);
+  const ok = await copyTextToClipboard(text);
+  if (ok) {
     toast(`คัดลอกรหัสคูปอง ${codes.length} รายการแล้ว`, "success");
-  } catch {
-    window.prompt("คัดลอกรหัสคูปอง", text);
+  } else {
+    showCouponModal({
+      title: "รหัสคูปอง",
+      codes,
+      archived: true,
+      quantity: codes.length,
+    });
   }
 }
 
@@ -437,12 +507,15 @@ async function submitCoupon(form) {
   if (actionInFlight) return;
   actionInFlight = true;
   const formData = new FormData(form);
+  const durationDays = Number(formData.get("durationDays"));
+  const quantity = Number(formData.get("quantity"));
+  const productCode = String(formData.get("productCode") || "");
   try {
     const result = await api.runAction({
       action: "generate_coupons",
-      productCode: formData.get("productCode"),
-      durationDays: Number(formData.get("durationDays")),
-      quantity: Number(formData.get("quantity")),
+      productCode,
+      durationDays,
+      quantity,
       note: formData.get("note") || null,
     });
     store.patch({ couponFormOpen: false });
@@ -450,12 +523,14 @@ async function submitCoupon(form) {
     const archived = saveCouponCodes(batchId, result.codes);
     toast(`สร้างคูปอง ${result.codes?.length || 0} รายการแล้ว`, "success");
     if (result.codes?.length) {
-      window.prompt(
-        archived
-          ? "คัดลอกคูปองชุดนี้ (บันทึกไว้ในเบราว์เซอร์นี้แล้ว)"
-          : "คัดลอกคูปองชุดนี้และเก็บไว้ รหัสไม่สามารถเรียกย้อนหลังได้",
-        result.codes.join("\n"),
-      );
+      showCouponModal({
+        title: "สร้างคูปองสำเร็จ",
+        codes: result.codes,
+        archived,
+        durationDays,
+        quantity: result.codes.length,
+        productCode,
+      });
     }
     await load("coupons");
   } catch (error) {
@@ -552,11 +627,14 @@ root.addEventListener("click", async (event) => {
   if (copyTarget) {
     const textToCopy = copyTarget.dataset.copy;
     if (textToCopy) {
-      try {
-        await navigator.clipboard.writeText(textToCopy);
+      const ok = await copyTextToClipboard(textToCopy);
+      if (ok) {
         toast("คัดลอกรหัสแล้ว", "success");
-      } catch {
-        window.prompt("คัดลอกรหัส", textToCopy);
+      } else {
+        showCopyModal({
+          title: "คัดลอกรหัส",
+          text: textToCopy,
+        });
       }
       return;
     }
@@ -566,11 +644,58 @@ root.addEventListener("click", async (event) => {
   if (!target) return;
   if (target.dataset.section) {
     closeRecoveryCodeDialog();
-    store.patch({ active: target.dataset.section, couponFormOpen: false });
+    store.patch({
+      active: target.dataset.section,
+      couponFormOpen: false,
+      tablePages: { ...store.state.tablePages, [target.dataset.section]: 1 },
+    });
     await load(target.dataset.section);
     return;
   }
   const name = target.dataset.action;
+  if (name === "table_prev_page") {
+    const activeSection = store.state.active;
+    const current = store.state.tablePages?.[activeSection] || 1;
+    if (current > 1) {
+      store.patch({
+        tablePages: {
+          ...store.state.tablePages,
+          [activeSection]: current - 1,
+        },
+      });
+      const tableWrap = root.querySelector(".table-wrap");
+      if (tableWrap) tableWrap.scrollTop = 0;
+    }
+    return;
+  }
+  if (name === "table_next_page") {
+    const activeSection = store.state.active;
+    const current = store.state.tablePages?.[activeSection] || 1;
+    store.patch({
+      tablePages: {
+        ...store.state.tablePages,
+        [activeSection]: current + 1,
+      },
+    });
+    const tableWrap = root.querySelector(".table-wrap");
+    if (tableWrap) tableWrap.scrollTop = 0;
+    return;
+  }
+  if (name === "table_goto_page") {
+    const activeSection = store.state.active;
+    const targetPage = Number(target.dataset.page);
+    if (Number.isInteger(targetPage) && targetPage >= 1) {
+      store.patch({
+        tablePages: {
+          ...store.state.tablePages,
+          [activeSection]: targetPage,
+        },
+      });
+      const tableWrap = root.querySelector(".table-wrap");
+      if (tableWrap) tableWrap.scrollTop = 0;
+    }
+    return;
+  }
   if (name === "toggle_theme") {
     toggleTheme();
     return;
@@ -615,10 +740,10 @@ root.addEventListener("click", async (event) => {
   if (name === "copy_recovery_code") {
     const code = recoveryCodeDialog?.recoveryCode || "";
     if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
+    const ok = await copyTextToClipboard(code);
+    if (ok) {
       toast("คัดลอก Recovery Code แล้ว", "success");
-    } catch {
+    } else {
       toast("คัดลอกอัตโนมัติไม่สำเร็จ กรุณาเลือกและคัดลอกรหัสด้วยตนเอง", "error");
     }
     return;

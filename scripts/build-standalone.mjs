@@ -41,8 +41,8 @@ for (const [match, fontFile] of [...normalizedCss.matchAll(fontUrlPattern)]) {
 }
 
 const html = normalizedTemplate
-  .replace("</head>", `<style>${inlinedCss}</style></head>`)
-  .replace(scriptMarker, `<script>${script}</script>`);
+  .replace("</head>", () => `<style>${inlinedCss}</style></head>`)
+  .replace(scriptMarker, () => `<script>${script}</script>`);
 if (html.includes(scriptMarker) || !html.includes(script) || !html.includes(inlinedCss)) {
   throw new Error("Standalone build output is incomplete");
 }
