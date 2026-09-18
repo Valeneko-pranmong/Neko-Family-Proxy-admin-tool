@@ -20,6 +20,7 @@ import {
 import { statusBadge } from "../standalone/src/ui/table.js";
 import { appendLiveServerSample, MAX_LIVE_SAMPLES, segmentHistoryPoints } from "../standalone/src/state.js";
 import {
+  pointsToSmoothPath,
   renderHistoricalServerChart,
   renderLiveServerChart,
   renderOverview,
@@ -424,19 +425,40 @@ test("renderLiveServerChart renders empty state without fabricating historical d
   assert.match(html, /Live — Since Dashboard Opened/);
   assert.match(html, /ยังไม่มีข้อมูล Live Network Activity ในเซสชันนี้/);
   assert.match(html, /ไม่สร้างประวัติย้อนหลังจำลอง/);
-  assert.doesNotMatch(html, /<polyline/);
+  assert.doesNotMatch(html, /class="chart-curve/);
 });
 
-test("renderLiveServerChart renders live polylines and points when fresh samples exist", () => {
+test("renderLiveServerChart renders live curves and points when fresh samples exist", () => {
   const history = [
     { observedAt: "2026-08-18T10:00:00.000Z", rxBps: 10000000, txBps: 5000000, pingMs: 12.0 },
     { observedAt: "2026-08-18T10:00:05.000Z", rxBps: 20000000, txBps: 15000000, pingMs: 12.2 },
   ];
   const html = renderLiveServerChart(history, { host_status: "ONLINE", is_stale: false });
   assert.match(html, /Live Network Activity/);
-  assert.match(html, /<polyline/);
+  assert.match(html, /class="chart-curve/);
   assert.match(html, /10.00 Mbps/);
   assert.match(html, /20.00 Mbps/);
+});
+
+test("pointsToSmoothPath generates valid monotone cubic bezier curves and area paths", () => {
+  assert.equal(pointsToSmoothPath([]).line, "");
+  assert.equal(pointsToSmoothPath([{ x: 10, y: 20 }]).line, "M 10.0,20.0");
+  assert.equal(pointsToSmoothPath([{ x: 10, y: 20 }, { x: 30, y: 40 }]).line, "M 10.0,20.0 L 30.0,40.0");
+
+  const multiPoints = [
+    { x: 0, y: 100 },
+    { x: 50, y: 100 },
+    { x: 100, y: 50 },
+    { x: 150, y: 50 },
+    { x: 200, y: 120 },
+  ];
+  const { line, area } = pointsToSmoothPath(multiPoints);
+  assert.match(line, /^M 0\.0,100\.0 C/);
+  assert.doesNotMatch(line, /NaN/);
+  assert.doesNotMatch(line, /Infinity/);
+
+  const areaStr = area(200);
+  assert.match(areaStr, /L 200\.0,200 L 0\.0,200 Z$/);
 });
 
 test("renderSessions enforces Online <=120s, Offline >120s, Revoked, and does not invent Idle", () => {
@@ -583,7 +605,7 @@ test("renderHistoricalServerChart renders empty state without fabricating fake z
   const html = renderHistoricalServerChart("1h", { points: [] });
   assert.match(html, /ยังไม่มีข้อมูลประวัติย้อนหลังในช่วงเวลานี้/);
   assert.match(html, /ระบบจะไม่สร้างข้อมูลจำลองหรือเส้นศูนย์แทนข้อมูลจริง/);
-  assert.doesNotMatch(html, /<polyline/);
+  assert.doesNotMatch(html, /class="chart-curve/);
 });
 
 test("segmentHistoryPoints splits continuous points across gaps (>1.5x bucket_seconds)", () => {
@@ -601,7 +623,7 @@ test("segmentHistoryPoints splits continuous points across gaps (>1.5x bucket_se
   assert.equal(segments[1].length, 2);
 });
 
-test("renderHistoricalServerChart renders separate polylines across time gaps", () => {
+test("renderHistoricalServerChart renders separate curves across time gaps", () => {
   const points = [
     { bucket_start: "2026-08-18T11:00:00.000Z", rx_bps_avg: 1000000, tx_bps_avg: 500000, sample_count: 12 },
     { bucket_start: "2026-08-18T11:01:00.000Z", rx_bps_avg: 2000000, tx_bps_avg: 1000000, sample_count: 12 },
@@ -610,9 +632,9 @@ test("renderHistoricalServerChart renders separate polylines across time gaps", 
     { bucket_start: "2026-08-18T11:12:00.000Z", rx_bps_avg: 4000000, tx_bps_avg: 2000000, sample_count: 12 },
   ];
   const html = renderHistoricalServerChart("1h", { points, bucket_seconds: 60 });
-  // There should be 2 rx polylines and 2 tx polylines (total 4 polylines)
-  const polylineMatches = html.match(/<polyline/g) || [];
-  assert.equal(polylineMatches.length, 4);
+  // There should be 2 rx curves and 2 tx curves (total 4 curves)
+  const curveMatches = html.match(/class="chart-curve/g) || [];
+  assert.equal(curveMatches.length, 4);
 });
 
 test("renderHistoricalServerChart renders service failure markers when degradation occurs", () => {

@@ -143,6 +143,77 @@ export function renderServerHealth(server = {}, stats = {}) {
   `;
 }
 
+export function pointsToSmoothPath(points) {
+  if (!Array.isArray(points) || points.length === 0) return { line: "", area: () => "" };
+  if (points.length === 1) {
+    const p = points[0];
+    const x = Number(p.x) || 0;
+    const y = Number(p.y) || 0;
+    return {
+      line: `M ${x.toFixed(1)},${y.toFixed(1)}`,
+      area: (baseY) => `M ${x.toFixed(1)},${y.toFixed(1)} L ${x.toFixed(1)},${Number(baseY) || y} Z`,
+    };
+  }
+  if (points.length === 2) {
+    const p0 = points[0];
+    const p1 = points[1];
+    const x0 = (Number(p0.x) || 0).toFixed(1);
+    const y0 = (Number(p0.y) || 0).toFixed(1);
+    const x1 = (Number(p1.x) || 0).toFixed(1);
+    const y1 = (Number(p1.y) || 0).toFixed(1);
+    const line = `M ${x0},${y0} L ${x1},${y1}`;
+    return {
+      line,
+      area: (baseY) => `${line} L ${x1},${Number(baseY) || y1} L ${x0},${Number(baseY) || y0} Z`,
+    };
+  }
+
+  const n = points.length;
+  const dx = new Array(n - 1);
+  const dy = new Array(n - 1);
+  const slope = new Array(n - 1);
+
+  for (let i = 0; i < n - 1; i++) {
+    const dX = (Number(points[i + 1].x) || 0) - (Number(points[i].x) || 0);
+    const dY = (Number(points[i + 1].y) || 0) - (Number(points[i].y) || 0);
+    dx[i] = dX;
+    dy[i] = dY;
+    slope[i] = dX === 0 ? 0 : dY / dX;
+  }
+
+  const m = new Array(n).fill(0);
+  m[0] = slope[0];
+  for (let i = 1; i < n - 1; i++) {
+    if (slope[i - 1] * slope[i] <= 0) {
+      m[i] = 0;
+    } else {
+      const common = dx[i - 1] + dx[i];
+      m[i] = common === 0 ? 0 : (3 * common) / ((common + dx[i]) / slope[i - 1] + (common + dx[i - 1]) / slope[i]);
+    }
+  }
+  m[n - 1] = slope[n - 2];
+
+  let line = `M ${(Number(points[0].x) || 0).toFixed(1)},${(Number(points[0].y) || 0).toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const dXi = dx[i];
+    const cp1x = (Number(points[i].x) || 0) + dXi / 3;
+    const cp1y = (Number(points[i].y) || 0) + (m[i] * dXi) / 3;
+    const cp2x = (Number(points[i + 1].x) || 0) - dXi / 3;
+    const cp2y = (Number(points[i + 1].y) || 0) - (m[i + 1] * dXi) / 3;
+    const xNext = (Number(points[i + 1].x) || 0).toFixed(1);
+    const yNext = (Number(points[i + 1].y) || 0).toFixed(1);
+    line += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${xNext},${yNext}`;
+  }
+
+  const firstX = (Number(points[0].x) || 0).toFixed(1);
+  const lastX = (Number(points[n - 1].x) || 0).toFixed(1);
+
+  return {
+    line,
+    area: (baseY) => `${line} L ${lastX},${Number(baseY) || 0} L ${firstX},${Number(baseY) || 0} Z`,
+  };
+}
+
 export function renderLiveServerChart(history = [], server = {}, rangeControls = "") {
   const points = Array.isArray(history) ? history : [];
   const latestPoint = points.length > 0 ? points[points.length - 1] : null;
@@ -175,17 +246,28 @@ export function renderLiveServerChart(history = [], server = {}, rangeControls =
     const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, points.length - 1);
     const y = (value) => height - pad.bottom - ((Number(value) || 0) * (height - pad.top - pad.bottom)) / maxVal;
 
-    const rxPolyline = points.map((p, i) => `${x(i)},${y(p.rxBps)}`).join(" ");
-    const txPolyline = points.map((p, i) => `${x(i)},${y(p.txBps)}`).join(" ");
+    const rxPts = points.map((p, i) => ({ x: x(i), y: y(p.rxBps) }));
+    const txPts = points.map((p, i) => ({ x: x(i), y: y(p.txBps) }));
+    const rxPath = pointsToSmoothPath(rxPts);
+    const txPath = pointsToSmoothPath(txPts);
+    const baseY = height - pad.bottom;
 
     const rxDots = points.map((p, i) => {
+      const isLatest = i === points.length - 1;
       const title = `${formatTime(p.observedAt)} · VPS Download: ${formatBps(p.rxBps)}`;
-      return `<circle tabindex="0" cx="${x(i)}" cy="${y(p.rxBps)}" r="3.5" fill="#3f76b7" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+      const pulse = isLatest
+        ? `<circle cx="${x(i)}" cy="${y(p.rxBps)}" r="8" fill="#3b82f6" opacity="0.3" class="chart-dot-pulse" />`
+        : "";
+      return `${pulse}<circle tabindex="0" cx="${x(i)}" cy="${y(p.rxBps)}" r="${isLatest ? 4.5 : 3}" fill="#3b82f6" class="chart-dot${isLatest ? " chart-dot-latest" : ""}" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
     }).join("");
 
     const txDots = points.map((p, i) => {
+      const isLatest = i === points.length - 1;
       const title = `${formatTime(p.observedAt)} · VPS Upload: ${formatBps(p.txBps)}`;
-      return `<circle tabindex="0" cx="${x(i)}" cy="${y(p.txBps)}" r="3.5" fill="#287b5b" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
+      const pulse = isLatest
+        ? `<circle cx="${x(i)}" cy="${y(p.txBps)}" r="8" fill="#10b981" opacity="0.3" class="chart-dot-pulse" />`
+        : "";
+      return `${pulse}<circle tabindex="0" cx="${x(i)}" cy="${y(p.txBps)}" r="${isLatest ? 4.5 : 3}" fill="#10b981" class="chart-dot${isLatest ? " chart-dot-latest" : ""}" aria-label="${escapeHtml(title)}"><title>${escapeHtml(title)}</title></circle>`;
     }).join("");
 
     const timeLabels = points.map((p, i) => {
@@ -197,14 +279,26 @@ export function renderLiveServerChart(history = [], server = {}, rangeControls =
     chartBody = `
       <div class="chart-wrap" role="img" aria-label="กราฟ Live Network Activity">
         <svg class="activity-chart live-network-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <defs>
+            <linearGradient id="live-rx-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
+              <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
+            </linearGradient>
+            <linearGradient id="live-tx-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#10b981" stop-opacity="0.20" />
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0.0" />
+            </linearGradient>
+          </defs>
           <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
           <line x1="${pad.left}" y1="${y(maxVal / 2)}" x2="${width - pad.right}" y2="${y(maxVal / 2)}" class="chart-grid" />
           <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
           <text x="8" y="${pad.top + 5}" class="chart-max">${escapeHtml(formatBps(maxVal))}</text>
           <text x="8" y="${y(maxVal / 2) + 4}" class="chart-max">${escapeHtml(formatBps(maxVal / 2))}</text>
           <text x="36" y="${height - pad.bottom + 4}" class="chart-max">0 bps</text>
-          <polyline points="${rxPolyline}" fill="none" stroke="#3f76b7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <polyline points="${txPolyline}" fill="none" stroke="#287b5b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="chart-area chart-area-rx" d="${rxPath.area(baseY)}" fill="url(#live-rx-grad)" />
+          <path class="chart-area chart-area-tx" d="${txPath.area(baseY)}" fill="url(#live-tx-grad)" />
+          <path class="chart-curve chart-curve-rx" d="${rxPath.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="chart-curve chart-curve-tx" d="${txPath.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
           ${rxDots}
           ${txDots}
           ${timeLabels}
@@ -354,16 +448,23 @@ export function renderHistoricalServerChart(range = "1h", history = {}, server =
 
     const segments = segmentHistoryPoints(points, bucketSeconds, 1.5);
 
-    let polylinesHtml = "";
+    let curvesHtml = "";
     let currentIndex = 0;
+    const baseY = height - pad.bottom;
     for (const seg of segments) {
       const segIndices = seg.map((_, i) => currentIndex + i);
       currentIndex += seg.length;
       if (seg.length > 1) {
-        const rxPoly = seg.map((p, i) => `${x(segIndices[i])},${y(p.rx_bps_avg)}`).join(" ");
-        const txPoly = seg.map((p, i) => `${x(segIndices[i])},${y(p.tx_bps_avg)}`).join(" ");
-        polylinesHtml += `<polyline points="${rxPoly}" fill="none" stroke="#3f76b7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
-        polylinesHtml += `<polyline points="${txPoly}" fill="none" stroke="#287b5b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+        const rxPts = seg.map((p, i) => ({ x: x(segIndices[i]), y: y(p.rx_bps_avg) }));
+        const txPts = seg.map((p, i) => ({ x: x(segIndices[i]), y: y(p.tx_bps_avg) }));
+        const rxPath = pointsToSmoothPath(rxPts);
+        const txPath = pointsToSmoothPath(txPts);
+        curvesHtml += `
+          <path class="chart-area chart-area-rx" d="${rxPath.area(baseY)}" fill="url(#hist-rx-grad)" />
+          <path class="chart-area chart-area-tx" d="${txPath.area(baseY)}" fill="url(#hist-tx-grad)" />
+          <path class="chart-curve chart-curve-rx" d="${rxPath.line}" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="chart-curve chart-curve-tx" d="${txPath.line}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        `;
       }
     }
 
@@ -399,13 +500,23 @@ export function renderHistoricalServerChart(range = "1h", history = {}, server =
       ${staleAlert}
       <div class="chart-wrap" role="img" aria-label="กราฟ ${escapeHtml(config.title)}">
         <svg class="activity-chart historical-network-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <defs>
+            <linearGradient id="hist-rx-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
+              <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
+            </linearGradient>
+            <linearGradient id="hist-tx-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#10b981" stop-opacity="0.20" />
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0.0" />
+            </linearGradient>
+          </defs>
           <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
           <line x1="${pad.left}" y1="${y(maxVal / 2)}" x2="${width - pad.right}" y2="${y(maxVal / 2)}" class="chart-grid" />
           <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
           <text x="8" y="${pad.top + 5}" class="chart-max">${escapeHtml(formatBps(maxVal))}</text>
           <text x="8" y="${y(maxVal / 2) + 4}" class="chart-max">${escapeHtml(formatBps(maxVal / 2))}</text>
           <text x="36" y="${height - pad.bottom + 4}" class="chart-max">0 bps</text>
-          ${polylinesHtml}
+          ${curvesHtml}
           ${dots}
           ${timeLabels}
         </svg>
@@ -486,14 +597,20 @@ export function renderOverview(data = {}) {
   const pad = { left: 46, right: 18, top: 18, bottom: 42 };
   const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, trend.length - 1);
   const y = (value) => height - pad.bottom - (value * (height - pad.top - pad.bottom)) / maxValue;
-  const series = (field, color, label) => {
-    const points = trend.map((point, index) => `${x(index)},${y(safeCount(point[field]))}`).join(" ");
+  const series = (field, color, gradId, label) => {
+    const pts = trend.map((point, index) => ({ x: x(index), y: y(safeCount(point[field])) }));
+    const path = pointsToSmoothPath(pts);
+    const baseY = height - pad.bottom;
     const dots = trend.map((point, index) => {
       const count = safeCount(point[field]);
       const context = `${formatDate(point.bucket)} · ${label} ${count}`;
       return `<circle tabindex="0" cx="${x(index)}" cy="${y(count)}" r="4" fill="${color}" aria-label="${escapeHtml(context)}"><title>${escapeHtml(context)}</title></circle>`;
     }).join("");
-    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />${dots}`;
+    return `
+      <path class="chart-area" d="${path.area(baseY)}" fill="url(#${gradId})" />
+      <path class="chart-curve" d="${path.line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      ${dots}
+    `;
   };
   const labels = trend.map((point, index) => {
     const every = Math.max(1, Math.ceil(trend.length / 7));
@@ -503,14 +620,24 @@ export function renderOverview(data = {}) {
   const graph = trend.length
     ? `<div class="chart-wrap" role="img" aria-label="กราฟ Launcher activity">
         <svg class="activity-chart" viewBox="0 0 ${width} ${height}" aria-hidden="false">
+          <defs>
+            <linearGradient id="trend-sessions-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#d83e80" stop-opacity="0.20" />
+              <stop offset="100%" stop-color="#d83e80" stop-opacity="0.0" />
+            </linearGradient>
+            <linearGradient id="trend-redemptions-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#287b5b" stop-opacity="0.18" />
+              <stop offset="100%" stop-color="#287b5b" stop-opacity="0.0" />
+            </linearGradient>
+          </defs>
           <line x1="${pad.left}" y1="${pad.top}" x2="${width - pad.right}" y2="${pad.top}" class="chart-grid" />
           <line x1="${pad.left}" y1="${y(maxValue / 2)}" x2="${width - pad.right}" y2="${y(maxValue / 2)}" class="chart-grid" />
           <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="chart-axis" />
           <text x="8" y="${pad.top + 6}" class="chart-max">${maxValue}</text>
           <text x="8" y="${y(maxValue / 2) + 4}" class="chart-max">${Math.round(maxValue / 2)}</text>
           <text x="28" y="${height - pad.bottom + 4}" class="chart-max">0</text>
-          ${series("sessions", "#d83e80", "Session เริ่มใหม่")}
-          ${series("redemptions", "#287b5b", "ใช้คูปองสำเร็จ")}
+          ${series("sessions", "#d83e80", "trend-sessions-grad", "Session เริ่มใหม่")}
+          ${series("redemptions", "#287b5b", "trend-redemptions-grad", "ใช้คูปองสำเร็จ")}
           ${labels}
         </svg>
       </div>`

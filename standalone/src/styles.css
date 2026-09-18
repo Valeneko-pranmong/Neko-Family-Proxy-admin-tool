@@ -623,6 +623,21 @@ html[data-theme="dark"] .deployment-chip { border-color: #064e3b; color: #34d399
 .activity-chart text { fill: var(--muted); font-size: 10px; font-family: "Inter", sans-serif; }
 .activity-chart circle { cursor: help; stroke: var(--panel); stroke-width: 2; transition: r 0.1s ease; }
 .activity-chart circle:hover, .activity-chart circle:focus { r: 6; }
+.activity-chart .chart-dot-pulse {
+  pointer-events: none;
+  stroke: none;
+  animation: chartPulseAnim 2.4s infinite ease-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes chartPulseAnim {
+  0% { r: 4px; opacity: 0.5; }
+  50% { r: 9px; opacity: 0.15; }
+  100% { r: 12px; opacity: 0; }
+}
+.chart-area { pointer-events: none; }
+.chart-curve { pointer-events: stroke; transition: stroke-width var(--t-fast); }
+.chart-curve:hover { stroke-width: 3.5; }
 .chart-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.8; }
 .chart-axis { stroke: var(--line); stroke-width: 1; }
 .chart-max { font-weight: 600; }
